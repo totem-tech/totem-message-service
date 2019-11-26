@@ -1,0 +1,184 @@
+.validator-balances {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: stretch;
+  align-content: flex-start;
+  display: flex;
+}
+
+.validator-balance {
+  margin: 6px;
+  padding: 12px;
+  width: 150px;
+  background: #fcfcfc;
+  border-radius: 8px;
+}
+
+.validator {
+  float: left;
+}
+
+.AccountId {
+  clear: both;
+  font-family: "Courier New", Courier, monospace;
+}
+
+.paren {
+  font-size: small;
+  color: #666;
+}
+
+.value {
+  font-weight: bold;
+}
+
+.ui.basic.label {
+  background: none #ffffff !important;
+}
+
+
+/*
+ * New styles
+ */
+#app, #app > div {
+  height: 100%;
+}
+.mobile .pusher.main-content {
+  margin: 0 !important;
+  overflow: auto !important;
+}
+/* Fixes the dimmer height being limited due to the use of scrollbar */ 
+.mobile.sidebar-visible .main-content.pusher.container:after {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+}
+.ui.visible.sidebar.left {
+  transition: all 0.5s ease;
+}
+.ui.left.visible.sidebar > a {
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* Main content width and positioning when sidebar is collapsed (icon-only mode) */
+#app > :not(.mobile) .ui.visible.left.sidebar.very.thin ~ .pusher.main-content {
+  -webkit-transform: translate3d(60px, 0, 0);
+  transform: translate3d(60px, 0, 0);
+  max-width: calc(100% - 60px) !important;
+  margin-left: 0 !important;
+  overflow: auto !important;
+}
+#app > :not(.mobile) .ui.visible.left.sidebar:not(.thin) ~ .pusher.main-content {
+  -webkit-transform: translate3d(300px, 0, 0);
+  transform: translate3d(235px, 0, 0);
+  max-width: calc(100% - 235px) !important;
+  margin-left: 0 !important;
+  overflow: auto !important;
+}
+#app > :not(.mobile) .ui.black.inverted.vertical.ui.left.wide.visible.sidebar.menu {
+  width: 235px !important;
+}
+
+/* Mobile sidebar */
+.mobile .ui.sidebar.left.menu {
+  width: 62% !important;
+  height: 100%;
+}
+.mobile .ui.visible.left.sidebar:not(.thin) ~ .pusher.main-content {
+  transform: 'none' !important;
+  max-width: 100%;
+}
+
+.no-margin {
+  margin: 0 !important;
+}
+.no-padding, .ui.menu .item .notification-service.menu.left.visible .item.no-padding {
+  padding: 0 !important;
+}
+.ui.menu .ui.dropdown .notification-service.menu > .item > .message i:not(.close) {
+  float: left;
+  font-size: 40px !important;
+  margin-right: 5px !important;
+}
+
+i.icon:not(.no-margin) {
+  /*font-size: 1em  !important;*/
+  margin-right: 1rem  !important;
+  margin-left: 0.25rem  !important;
+}
+
+
+.ui.header>.icon {
+  font-size: 1.2em !important;
+}
+
+
+div.ui.padded.segment {
+  padding-top: 0em !important;
+}
+
+.angle.left.icon {
+  margin-right: 0rem  !important;
+}
+ 
+.dropdown.icon {
+  margin-right: -1rem  !important;
+  margin-left: 0rem  !important;
+}
+
+.ui.sidebar.left a span {
+  font-weight: normal;
+}
+
+/* Chat Message Customisation */
+.rcw-conversation-container .rcw-title {
+  font-size: 20px !important;
+  padding: 5px 0px !important;
+}
+
+.rcw-conversation-container .rcw-header {
+  background-color:#17537d  !important;
+}
+
+.rcw-conversation-container .rcw-header span {
+  padding: 0px 50px  !important;
+}
+
+
+.rcw-full-screen .rcw-close-button {
+  background-color:#17537d  !important;
+}
+
+.rcw-conversation-container .rcw-close-button {
+  background-color:#17537d  !important;
+}
+
+.rcw-launcher {
+  background-color:#17537d  !important;
+}
+
+.rcw-client {
+  background-color:#177d2440  !important;
+}
+
+.rcw-widget-container {
+  transition: all 0.5s ease;
+}
+/* pushes chat launcher icon up when bottom status bar is visible */
+#app .sidebar-collapsed .rcw-widget-container {
+  margin-bottom: 73px;
+}
+
+/* hide when mobile sidebar is open */
+.mobile.sidebar-visible .rcw-widget-container {
+  display: none;
+}
+
+/* allow new lines in the chat subheader */
+.rcw-header > h4 + span {
+  white-space: pre-line;
+}
