@@ -1,68 +1,79 @@
+/*
+ * Chat & data server running on https
+ */
 import express from 'express'
 import fs from 'fs'
-import { initChatServer } from './chatServer'
-let app = express()
+import https from 'https'
+import socketIO from 'socket.io'
+import { handleCompany, handleCompanySearch } from './companies'
+import { handleCountries } from './countries'
+import { handleFaucetRequest } from './faucetRequests'
+import {
+    handleProject,
+    handleProjectStatus,
+    handleProjectTimeKeepingBan,
+    handleProjects,
+    handleProjectsByHashes,
+    handleProjectsSearch
+} from './projects'
+import {
+    handleTimeKeepingEntry,
+    handleTimeKeepingEntryApproval,
+    handleTimeKeepingEntrySearch,
+    handleTimeKeepingInvitations,
+} from './timeKeeping'
+import {
+    handleDisconnect,
+    handleIdExists,
+    handleLogin,
+    handleMessage,
+    handleRegister,
+} from './users'
+import { handleNotify } from './notify'
 
-// Reverse Proxy config
-// HTTPS_PORT _must not_ be 443 if it is behind a reverse proxy
-// for 
-const SUBDOMAIN = process.env.SUBDOMAIN
+const expressApp = express()
+const cert = fs.readFileSync(process.env.CertPath)
+const key = fs.readFileSync(process.env.KeyPath)
+const PORT = process.env.PORT || 3001
+const server = https.createServer({ cert, key }, expressApp)
+const socket = socketIO.listen(server)
 
-// CHAT_SERVER_PORT _must not_ conflict with competing services running on same server
-const CHAT_SERVER_PORT = process.env.CHAT_SERVER_PORT || 3001
+// Setup websocket event handlers
+socket.on('connection', client => {
+    // User related handlers
+    client.on('disconnect', handleDisconnect.bind(client))
+    client.on('message', handleMessage.bind(client))
+    client.on('id-exists', handleIdExists.bind(client))
+    client.on('register', handleRegister.bind(client))
+    client.on('login', handleLogin.bind(client))
 
-const EXECUTION_MODE = process.env.EXECUTION_MODE || 'dev'
+    // Company related handlers
+    client.on('company', handleCompany.bind(client))
+    client.on('company-search', handleCompanySearch.bind(client))
 
-// Uncomment this block if you are not using a reverse proxy
-// This is commented as we are running a dev nodejs instance on the same server as a production instance (for testing)
-// We require a reverse proxy to certificate issues hence this is not needed.
+    // Countries related handlers
+    client.on('countries', handleCountries.bind(client))
 
-// ******************** //
-// const HTTP_PORT = process.env.HTTP_PORT || 80
-// // set up plain http server and have it listen on port 80 to redirect to https 
-// http.createServer(function (req, res) {
-// 	res.writeHead(307, { "Location": "https://" + req.headers['host'] + req.url });
-// 	res.end();
-// }).listen(HTTP_PORT, () => console.log('\nApp http to https redirection listening on port ', HTTP_PORT));
-// ******************* //
+    // Faucet request
+    client.on('faucet-request', handleFaucetRequest.bind(client))
 
+    // Notification handler
+    client.on('notify', handleNotify.bind(client))
 
-// The following code is a workaround for webpack mode which is currently broken
-// Webpack mode would determine the development or production execution.
-// Instead we are having to interrogate the execution script to determine which was called
-let environment = JSON.parse(process.env.npm_config_argv)
-const isRunningInDevMode = environment.original[1] === EXECUTION_MODE
+    // Project related handlers
+    client.on('project', handleProject.bind(client))
+    client.on('project-status', handleProjectStatus.bind(client))
+    client.on('project-time-keeping-ban', handleProjectTimeKeepingBan.bind(client))
+    client.on('projects', handleProjects.bind(client))
+    client.on('projects-by-hashes', handleProjectsByHashes.bind(client))
+    client.on('projects-search', handleProjectsSearch.bind(client))
 
-isRunningInDevMode ? console.log('Totem UI starting in Development Mode') : console.log('Totem UI starting in Production Mode')
+    // Time keeping handlers
+    client.on('time-keeping-entry', handleTimeKeepingEntry.bind(client))
+    client.on('time-keeping-entry-approval', handleTimeKeepingEntryApproval.bind(client))
+    client.on('time-keeping-entry-search', handleTimeKeepingEntrySearch.bind(client))
+    client.on('time-keeping-invitations', handleTimeKeepingInvitations.bind(client))
+})
 
-// Handle https certificate and key
-const certFileName = 'fullchain.pem'
-const keyFileName = 'privkey.pem'
-
-const devModeCertBasePath = './sslcert/'
-
-let subDomainDot
-// in case there is a subDomain
-SUBDOMAIN ? (subDomainDot = SUBDOMAIN + '.') : (subDomainDot = '')
-
-// Todo make this dynamic for the host
-const prodModeCertBasePath = '/etc/letsencrypt/live/' + subDomainDot + 'totem.live/'
-
-let certPath = devModeCertBasePath
-let keyPath = devModeCertBasePath
-
-if (!isRunningInDevMode) {
-	certPath = prodModeCertBasePath
-	keyPath = prodModeCertBasePath
-}
-
-certPath = certPath + certFileName
-keyPath = keyPath + keyFileName
-
-const options = {
-	cert: fs.readFileSync(certPath),
-	key: fs.readFileSync(keyPath)
-}
-
-// Start chat & data server
-initChatServer(options, app, CHAT_SERVER_PORT)
+// Start listening
+server.listen(PORT, () => console.log('\nChat app https Websocket listening on port ', PORT))

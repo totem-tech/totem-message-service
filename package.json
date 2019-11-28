@@ -21,7 +21,9 @@
     "polkadot",
     "substrate",
     "ui"
-  ],"contributors": [{
+  ],
+  "contributors": [
+    {
       "name": "Chris DCosta",
       "email": "chris.dcosta@totemaccounting.com"
     },
@@ -30,7 +32,6 @@
       "email": "mahbubur.tuhin@gmail.com"
     }
   ],
-
   "license": "ISC",
   "devDependencies": {
     "babel-cli": "^6.26.0",
@@ -60,7 +61,10 @@
     "oo7-substrate": "^0.8.0",
     "pbkdf2": "^3.0.17",
     "polkadot-identicon": "^1.1.32",
+    "react-dom": "^16.12.0",
+    "semantic-ui-react": "^0.88.1",
     "socket.io": "^2.2.0",
+    "tweetnacl-util": "^0.15.0",
     "uuid": "^3.3.2",
     "uws": "^10.148.1",
     "xxhashjs": "^0.2.2"
