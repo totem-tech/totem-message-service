@@ -1,13 +1,10 @@
 import express from 'express'
-import http from 'http'
-import https from 'https'
 import fs from 'fs'
 import { initChatServer } from './chatServer'
 let app = express()
 
 // Reverse Proxy config
 // HTTPS_PORT _must not_ be 443 if it is behind a reverse proxy
-const HTTPS_PORT = process.env.HTTPS_PORT || 443
 // for 
 const SUBDOMAIN = process.env.SUBDOMAIN
 
@@ -29,7 +26,6 @@ const EXECUTION_MODE = process.env.EXECUTION_MODE || 'dev'
 // }).listen(HTTP_PORT, () => console.log('\nApp http to https redirection listening on port ', HTTP_PORT));
 // ******************* //
 
-app.use(express.static('dist'))
 
 // The following code is a workaround for webpack mode which is currently broken
 // Webpack mode would determine the development or production execution.
@@ -67,9 +63,6 @@ const options = {
 	cert: fs.readFileSync(certPath),
 	key: fs.readFileSync(keyPath)
 }
-
-// create main https app server 
-// https.createServer(options, app).listen(HTTPS_PORT, () => console.log('\nApp https web server listening on port ', HTTPS_PORT))
 
 // Start chat & data server
 initChatServer(options, app, CHAT_SERVER_PORT)

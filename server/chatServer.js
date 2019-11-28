@@ -29,7 +29,6 @@ import {
 } from './users'
 import { handleNotify } from './notify'
 
-// export const PORT = 3001 
 
 let server, socket
 export const initChatServer = (httpsOptions, expressApp, PORT) => {
