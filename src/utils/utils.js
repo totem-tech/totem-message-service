@@ -1,8 +1,6 @@
-import React from 'react'
-import { Icon, Message, Responsive } from 'semantic-ui-react'
 import { Bond } from 'oo7'
 import createHash from 'create-hash/browser'
-import { bytesToHex } from './convert'
+import { hashToStr } from './convert'
 
 /*
  * Copies supplied string to system clipboard
@@ -31,7 +29,7 @@ export const generateHash = (seed, algo, asBytes) => {
 	hash.write('write to it as a stream')
 	hash.end()
 	const bytesArr = hash.read()
-	return asBytes ? bytesArr : '0x' + bytesToHex(bytesArr)
+	return asBytes ? bytesArr : hashToStr(bytesArr)
 }
 
 /*
@@ -48,7 +46,9 @@ export const isObj = x => x !== null && !isArr(x) && typeof x === 'object'
 export const isObjArr = x => !isArr(x) ? false : !x.reduce((no, item) => no || !isObj(item), false)
 // Checks if argument is an Map of Objects. Each element type must be object, otherwise will return false.
 export const isObjMap = x => !isMap(x) ? false : !Array.from(x).reduce((no, item) => no || !isObj(item[1]), false)
+export const isPromise = x => x instanceof Promise
 export const isStr = x => typeof x === 'string'
+export const isUint8Arr = arr => arr instanceof Uint8Array
 export const isValidNumber = x => typeof x == 'number' && !isNaN(x) && isFinite(x)
 export const hasValue = x => {
 	if (!isDefined(x)) return false
@@ -65,10 +65,24 @@ export const hasValue = x => {
 			// already defined
 			return true
 	}
-	// (isValidNumber(x) || (isStr(x) && !!x.trim()) || isBool(x))
 }
-export const isMobile = () => window.innerWidth <= Responsive.onlyMobile.maxWidth
 
+// forceClearCachedData removes any cached data from localStorage
+export const forceClearCachedData = () => {
+	const keys = ['totem__cache_', 'totem__static']
+	Object.keys(localStorage).forEach(key => keys.includes(key) && localStorage.removeItem(key))
+	forceRefreshPage()
+}
+// force refresh page from server
+export const forceRefreshPage = () => window.location.reload(true)
+
+// randomInt generates random number within a range
+//
+// Params:
+// @min		number
+// @max		number
+// 
+// returns number
 export const randomInt = (min, max) => parseInt(Math.random() * (max - min) + min)
 
 // getKeys returns an array of keys or indexes depending on object type
@@ -285,6 +299,12 @@ export const mapFindByKey = (map, key, value, matchExact) => {
 	}
 }
 
+// mapJoin joins (and overrides) key-value pairs from @source to @dest
+export const mapJoin = (source = new Map(), dest = new Map()) => {
+	Array.from(source).forEach(([key, value]) => dest.set(key, value))
+	return dest
+}
+
 // mapSearch search for objects by key-value pairs
 //
 // Params:
@@ -333,6 +353,40 @@ export const search = (data, keywords, keys) => {
 		return obj
 	}, {})
 	return fn(data, keyValues, false, false, true, false)
+}
+
+// Semantic UI Dropdown search defaults to only "text" option property.
+// This enables search by any option property (`searchKeys`).
+//
+// Params:
+// @searchKeys	array of strings
+//
+// Returns function: a callback function
+// 					Callback params:
+//					@options 		array of objects
+//					@searchQuery	string
+//					returns array of objects
+export const searchRanked = (searchKeys = ['text']) => (options, searchQuery) => {
+	if (!options || options.length === 0) return []
+	const uniqueValues = {}
+	searchQuery = (searchQuery || '').toLowerCase().trim()
+	if (!searchQuery) return options
+	const search = key => {
+		const matches = options.map((option, i) => {
+			try {
+				// catches errors caused by the use of some special characters with .match() below
+				let x = (option[key] || '').toLowerCase().match(searchQuery)
+				if (!x || uniqueValues[options[i].value]) return
+				const matchIndex = x.index
+				uniqueValues[options[i].value] = 1
+				return { index: i, matchIndex }
+			} catch (e) {
+				console.log(e)
+			}
+		}).filter(r => !!r)
+		return arrSort(matches, 'matchIndex').map(x => options[x.index])
+	}
+	return searchKeys.reduce((result, key) => result.concat(search(key)), [])
 }
 
 // Sort Array or Map
@@ -437,7 +491,7 @@ export const textEllipsis = (text, maxLen, numDots, split = true) => {
 	const isEven = textLen % 2 === 0
 	const arr = text.split('')
 	const dots = new Array(numDots).fill('.').join('')
-	const left = arr.slice(0, split ? partLen : partLen * 2).join('')
+	const left = arr.slice(0, split ? partLen : maxLen).join('')
 	const right = !split ? '' : arr.slice(text.length - (isEven ? partLen : partLen + 1)).join('')
 	return left + dots + right
 }
@@ -449,71 +503,4 @@ export const icons = {
 	info: 'info',
 	success: 'check circle outline',
 	warning: 'lightning'
-}
-
-// valid statuses: error, info, loading, warning, success
-export const newMessage = message => {
-	if (!isObj(message) || (!message.content && !message.list && !message.header)) return
-	let { icon, showIcon, status, style } = message
-	status = status
-	icon = React.isValidElement(icon) ? icon.props : icon
-	if (showIcon) {
-		icon = icons[status]
-	}
-
-	if (isStr(icon)) {
-		icon = { name: icon }
-	}
-
-	return (
-		<Message
-			{...(objWithoutKeys(message, ['showIcon']))}
-			error={status === 'error'}
-			icon={icon && <Icon {...icon} style={objCopy({ width: 42 }, icon.style, true)} />}
-			info={status === 'info'}
-			style={objCopy(!icon && { textAlign: 'center', width: '100%' }, style)}
-			success={status === 'success'}
-			visible={!!status}
-			warning={['warning', 'loading'].indexOf(status) >= 0}
-		/>
-	)
-}
-
-/*
- * Functional Components
- */
-export function IfFn(props) {
-	const content = props.condition ? props.then : props.else
-	return (isFn(content) ? content(props.condition) : content) || ''
-}
-
-// IfMobile component can be used to switch between content when on mobile and/or not
-export function IfMobile(props) {
-	return (
-		<React.Fragment>
-			{props.then && (
-				<Responsive
-					maxWidth={Responsive.onlyMobile.maxWidth}
-					onUpdate={props.onUpdate}
-					className={props.thenClassName}
-				>
-					<IfFn {...{ condition: true, then: props.then }} />
-				</Responsive>
-			)}
-
-			{props.else && (
-				<Responsive
-					minWidth={Responsive.onlyMobile.maxWidth}
-					onUpdate={props.then ? undefined : props.onUpdate}
-					className={props.elseClassName}
-				>
-					<IfFn {...{ condition: false, else: props.else }} />
-				</Responsive>
-			)}
-		</React.Fragment>
-	)
-}
-
-export function IfNotMobile(props) {
-	return <IfMobile else={props.then} elseClassName={props.thenClassName} onUpdate={props.onUpdate} />
 }
