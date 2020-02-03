@@ -11,4 +11,4 @@
 # CertPath="./sslcert/fullchain.pem" \
 # KeyPath="./sslcert/privkey.pem" \
 # PORT="int 3001" \
-# yarn run dev
+# yarn run server
