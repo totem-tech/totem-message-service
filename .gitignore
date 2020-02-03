@@ -4,8 +4,9 @@ node_modules
 yarn-error.log
 
 # data files
-server/data/*
+server/data
 server/local-storage
+data
 
 # scripts
 start.sh

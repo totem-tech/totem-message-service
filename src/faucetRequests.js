@@ -1,8 +1,8 @@
 
 import ioClient from 'socket.io-client'
-import { encrypt, encryptionKeypair, signingKeyPair, newNonce, newSignature, verifySignature, keyInfoFromKeyData } from '../src/utils/naclHelper'
-import { isFn, isStr } from '../src/utils/utils'
-import DataStorage from '../src/utils/DataStorage'
+import { encrypt, encryptionKeypair, signingKeyPair, newNonce, newSignature, verifySignature, keyInfoFromKeyData } from './utils/naclHelper'
+import { isFn, isStr } from './utils/utils'
+import DataStorage from './utils/DataStorage'
 import { getUserByClientId } from './users'
 const faucetRequests = new DataStorage('faucet-requests.json', true)
 // Maximum number of requests within @TIME_LIMIT

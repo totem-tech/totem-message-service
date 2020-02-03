@@ -1,5 +1,5 @@
-import DataStorage from '../src/utils/DataStorage'
-import { isFn, isObj, hasValue, objClean } from '../src/utils/utils'
+import DataStorage from './utils/DataStorage'
+import { isFn, isObj, hasValue, objClean } from './utils/utils'
 import { isCountryCode } from './countries'
 
 const companies = new DataStorage('companies.json', true) // disable caching
