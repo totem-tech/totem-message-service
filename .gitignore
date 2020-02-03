@@ -1,13 +1,16 @@
 .DS_Store
 node_modules/.bin/*
-node_modules/*
+node_modules
 yarn-error.log
 
 # data files
-server/data/*
+server/data
+server/local-storage
+data
 
 # scripts
 start.sh
+ui-start.sh
 
 # bundled JS file
 docs/bundle.js
@@ -18,7 +21,4 @@ docs/bundle.js
 *privkey.*
 sslcert/*.csr
 sslcert/*.key
-
-# Node server localStorage directory
-server/local-storage
-server/start.sh
+sslcert/*.pem
