@@ -60,5 +60,12 @@ Please be aware that it is not good practice to store your certificates in the `
 
 You can also get help on the use of the environmental variables from the Faucet repo [ReadMe](https://gitlab.com/totem-tech/faucet/blob/master/ReadMe.md)
 
+## Execution
+Once configured you can store the start script in the root of the server, and execute like this: 
 
+```shell 
+./start.sh 
+```
+
+You might also want to consider adding an `@reboot` command to `crontab` in case of server failure.
 
