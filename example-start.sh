@@ -11,4 +11,5 @@
 # CertPath="./sslcert/fullchain.pem" \
 # KeyPath="./sslcert/privkey.pem" \
 # PORT="int 3001" \
-# yarn run server
+# BuildMode="string: TRUE" \ #indicates whether to allow frontend to be able to grab all error messages at once
+# yarn run dev

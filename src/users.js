@@ -1,23 +1,25 @@
 import DataStorage from './utils/DataStorage'
 import { arrUnique, isArr, isFn, isStr, arrReadOnly } from './utils/utils'
+import { setTexts } from './language'
 
 const users = new DataStorage('users.json', false) // false => enables caching entire user list
 export const clients = new Map()
 export const userClientIds = new Map()
 const isValidId = id => /^[a-z][a-z0-9]+$/.test(id)
 const idMaxLength = 16
-const msgMaxLength = 160
 const idMinLength = 3
+const msgMaxLength = 160
 // Error messages
-const messages = {
+const messages = setTexts({
     idInvalid: `Only alpha-numeric characters allowed and must start with an alphabet`,
-    idLength: `Must be between ${idMinLength} to ${idMaxLength} characters`,
+    idLengthMax: 'Maximum number of characters allowed',
+    idLengthMin: 'Minimum number of characters required',
     idExists: 'User ID already taken',
     invalidSecret: 'Secret must be a valid string',
-    msgLengthExceeds: `Maximum ${msgMaxLength} characters allowed`,
+    msgLengthExceeds: 'Maximum characters allowed',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required'
-}
+})
 // User IDs reserved for Totem
 const RESERVED_IDS = arrReadOnly([
     'admin',
@@ -137,7 +139,7 @@ export function handleDisconnect() {
 export function handleMessage(msg, callback) {
     const client = this
     if (!isStr(msg) || !isFn(callback)) return
-    if (msg.length > msgMaxLength) return callback(messages.msgLengthExceeds)
+    if (msg.length > msgMaxLength) return callback(`${messages.msgLengthExceeds}: ${msgMaxLength}`)
 
     const sender = getUserByClientId(client.id)
     // Ignore message from logged out users
@@ -155,7 +157,8 @@ export function handleRegister(userId, secret, callback) {
     if (!isFn(callback)) return
     if (users.get(userId)) return callback(messages.idExists)
     if (!isValidId(userId)) return callback(messages.idInvalid)
-    if (userId.length > idMaxLength || userId.length < idMinLength) return callback(messages.idLength)
+    if (userId.length > idMaxLength) return callback(`${messages.idLengthMax}: ${idMaxLength}`)
+    if (userId.length < idMinLength) return callback(`${messages.idLengthMin}: ${idMinLength}`)
     if (!isStr(secret) || !secret) return callback(messages.invalidSecret)
     const newUser = {
         id: userId,

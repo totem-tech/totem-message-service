@@ -4,24 +4,26 @@ import { encrypt, encryptionKeypair, signingKeyPair, newNonce, newSignature, ver
 import { isFn, isStr } from './utils/utils'
 import DataStorage from './utils/DataStorage'
 import { getUserByClientId } from './users'
+import { setTexts } from './language'
+
 const faucetRequests = new DataStorage('faucet-requests.json', true)
 // Maximum number of requests within @TIME_LIMIT
 const REQUEST_LIMIT = 5
 const TIME_LIMIT = 24 * 60 * 60 * 1000 // 1 day in milliseconds
 // Duration to disallow user from creating a new faucet request if there is already one in progress (neither success nor error).
 // After timeout, assume something went wrong and allow user to create a new request
-const TIMEOUT_DURATION = 15 * 60 * 1000 // 15 minutes in milliseconds
+const TIMEOUT_DURATION = 15 * 60 * 1000 // 15 minutes in milliseconds. if changed make sure toupdate `errMsgs.faucetTransferInProgress`
 // Environment variables
 const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:3002'
 
 let keyData, walletAddress, secretKey, signPublicKey, signSecretKey, encryption_keypair, signature_keypair, serverName, external_publicKey, external_serverName, printSensitiveData
 
 // Error messages
-const errMsgs = {
-    fauceRequestLimitReached: `Maximum ${REQUEST_LIMIT} requests allowed within 24 hour period`,
+const errMsgs = setTexts({
+    fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period:',
     loginOrRegister: 'Login/registration required',
-    faucetTransferInProgress: `You already have a faucet request in-progress. Please wait until it is finished or times out in ${TIMEOUT_DURATION / 60 / 1000} minutes from request time.`
-}
+    faucetTransferInProgress: 'You already have a faucet request in-progress. Please wait until it is finished or wait at least 15 minutes from previous previous request time.'
+})
 
 // Reads environment variables and generate keys if needed
 const setVariables = () => {
@@ -100,7 +102,7 @@ export function handleFaucetRequest(address, callback) {
         fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
         if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
             // prevents adding more than maximum number of requests within the given duration
-            return callback(errMsgs.fauceRequestLimitReached)
+            return callback(`${errMsgs.fauceRequestLimitReached}: ${REQUEST_LIMIT}`)
         }
         const request = {
             address,

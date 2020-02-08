@@ -1,6 +1,8 @@
 import DataStorage from './utils/DataStorage'
 import { isArr, isDefined, isFn, isObj, objClean } from './utils/utils'
+import { setTexts } from './language'
 import { getUserByClientId } from './users'
+
 const projects = new DataStorage('projects.json', true)
 // Must-have properties
 const requiredKeys = ['name', 'ownerAddress', 'description']
@@ -8,7 +10,7 @@ const requiredKeys = ['name', 'ownerAddress', 'description']
 const validKeys = [...requiredKeys]
 // Internally managed keys : ['tsCreated']
 const descMaxLen = 160
-const messages = {
+const messages = setTexts({
     accessDenied: 'Access denied',
     arrayRequired: 'Array required',
     exists: 'Activity already exists. Please use a different combination of owner address, name and description.',
@@ -16,7 +18,7 @@ const messages = {
     loginRequired: 'You must be logged in to perform this action',
     projectInvalidKeys: `Activity must contain all of the following properties: ${requiredKeys.join()} and an unique hash`,
     projectNotFound: 'Activity not found',
-}
+})
 
 // Create/get/update project
 export function handleProject(hash, project, create, callback) {
