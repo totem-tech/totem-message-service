@@ -1,16 +1,20 @@
 import DataStorage from './utils/DataStorage'
-import { generateHash, isStr, isFn } from './utils/utils'
+import { clearClutter, generateHash, isStr, isFn } from './utils/utils'
 
 const translations = new DataStorage('translations.json', true)
 const hashes = new Map()
-const texts = {
+const buildMode = process.env.BuildMode === 'TRUE'
+const build = { enList: [] }
+const texts = setTexts({
     invalidLang: 'Invalid/unsupported language code'
-}
+})
 // store a hash of all texts for each language
 // the hash will be used to determine whether client already has the latest version of translation
 Array.from(translations.getAll()).forEach(([langCode, texts]) => {
     hashes.set(langCode, generateHash(texts))
 })
+
+export const handleErrorMessages = callback => isFn(callback) && callback(null, build.enList)
 
 // handleTranslations handles translated text requests
 //
@@ -30,4 +34,18 @@ export const handleTranslations = (langCode, hash, callback) => {
 
     // return the latest version of translated texts in an array
     callback(null, translated)
+}
+
+
+export function setTexts(texts = {}) {
+    // attempt to build a single list of english texts for translation
+    if (!buildMode) {
+        build.enList = build.enList || []
+        Object.values(texts).forEach(text => {
+            text = clearClutter(text)
+            build.enList.indexOf(text) === -1 && build.enList.push(text)
+        })
+        build.enList = build.enList.sort()
+    }
+    return texts
 }

@@ -1,6 +1,7 @@
 import DataStorage from './utils/DataStorage'
 import uuid from 'uuid'
 import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr } from './utils/utils'
+import { setTexts } from './language'
 import { emitToUsers, getUserByClientId, idExists, isUserOnline, onUserLogin } from './users'
 
 export const EVENT_NAME = 'notify'
@@ -9,14 +10,14 @@ const notifications = new DataStorage('notifications.json', true)
 const userNotificationIds = new DataStorage('notification-receivers.json', false)
 const REQUIRED = true
 const NOT_REQUIRED = false
-const messages = {
+const messages = setTexts({
     notifySelf: 'You cannot notify yourself!',
     invalidParams: 'Invalid/missing required parameter(s)',
     invalidUserId: 'Invalid User ID supplied',
     loginRequired: 'You need to complete the Getting Started module, and create a messaging User ID',
     runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
     introducingUserIdConflict: 'Introducing user cannot not be a recipient',
-}
+})
 
 // @validate function: callback function to be executed before adding a notification.
 //                      Must return error string if any error occurs or notification should be void.

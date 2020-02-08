@@ -1,20 +1,21 @@
 import DataStorage from './utils/DataStorage'
 import { isFn, isObj, hasValue, objClean } from './utils/utils'
 import { isCountryCode } from './countries'
+import { setTexts } from './language'
 
 const companies = new DataStorage('companies.json', true) // disable caching
 // Must-have properties
 const requiredKeys = ['country', 'name', 'registrationNumber', 'walletAddress']
 // Searchable properties
 const searchKeys = ['name', 'walletAddress', 'registrationNumber', 'country']
-const messages = {
+const messages = setTexts({
     exists: 'Company already exists',
     invalidKeys: 'Company must be a valid object and contain the following: ' + requiredKeys.join(),
     invalidCountry: 'Invalid country code supplied',
     notFound: 'Company not found',
     walletAlreadyAssociated: 'Wallet address is already associated with a company',
     requiredSearchKeys: 'Please supply one or more of the following keys: ' + searchKeys.join()
-}
+})
 
 // Create company or get company by @walletAddress
 //

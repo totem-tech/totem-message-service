@@ -8,7 +8,7 @@ import socketIO from 'socket.io'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleTranslations } from './language'
+import { handleErrorMessages, handleTranslations } from './language'
 import {
     handleProject,
     handleProjectsByHashes,
@@ -48,6 +48,7 @@ const handlers = [
 
     // Language
     { name: 'translations', handler: handleTranslations },
+    { name: 'error-messages', handler: handleErrorMessages },
 
     // Notification
     { name: 'notify', handler: handleNotify },
