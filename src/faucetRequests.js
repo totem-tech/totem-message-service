@@ -20,7 +20,7 @@ let keyData, walletAddress, secretKey, signPublicKey, signSecretKey, encryption_
 
 // Error messages
 const errMsgs = setTexts({
-    fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period:',
+    fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period',
     loginOrRegister: 'Login/registration required',
     faucetTransferInProgress: 'You already have a faucet request in-progress. Please wait until it is finished or wait at least 15 minutes from previous previous request time.'
 })
