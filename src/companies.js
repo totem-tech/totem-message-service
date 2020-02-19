@@ -23,7 +23,7 @@ const RESULT_LIMIT = 100
 const messages = setTexts({
     exists: 'Company already exists',
     identityAlreadyAssociated: 'Identity is already associated with a company',
-    invalidKeys: 'Company must be a valid object and contain the following: ' + requiredKeys.join(),
+    invalidKeys: 'Missing one or more of the following properties',
     invalidCountry: 'Invalid country code supplied',
     invalidIdentity: 'Invalid identity supplied',
     invalidQuery: 'Invalid query',
@@ -59,7 +59,7 @@ export function handleCompany(identity, company, callback) {
     const { country, name, registrationNumber } = company
     // make sure all the required keys are supplied
     if (requiredKeys.reduce((invalid, key) => invalid || !hasValue(company[key]), false)) {
-        return callback(messages.invalidKeys)
+        return callback(`${messages.invalidKeys}: ${requiredKeys.join()}`)
     }
 
     // validate country code

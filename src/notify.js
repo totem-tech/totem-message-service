@@ -15,7 +15,6 @@ const messages = setTexts({
     invalidParams: 'Invalid/missing required parameter(s)',
     invalidUserId: 'Invalid User ID supplied',
     loginRequired: 'You need to complete the Getting Started module, and create a messaging User ID',
-    runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
     introducingUserIdConflict: 'Introducing user cannot not be a recipient',
 })
 
@@ -120,59 +119,54 @@ onUserLogin(_notifyUser)
 export function handleNotify(toUserIds = [], type = '', childType = '', message = '', data = {}, callback) {
     if (!isFn(callback)) return
     const client = this
-    try {
-        const user = getUserByClientId(client.id)
-        if (!user) return callback(messages.loginRequired)
-        if (!isArr(toUserIds) || toUserIds.length === 0) return callback(messages.invalidParams + ': to')
-        // prevent user sending notification to themselves
-        if (toUserIds.indexOf(user.id) >= 0) return callback(messages.notifySelf)
-        toUserIds = arrUnique(toUserIds)
+    const user = getUserByClientId(client.id)
+    if (!user) return callback(messages.loginRequired)
+    if (!isArr(toUserIds) || toUserIds.length === 0) return callback(messages.invalidParams + ': to')
+    // prevent user sending notification to themselves
+    if (toUserIds.indexOf(user.id) >= 0) return callback(messages.notifySelf)
+    toUserIds = arrUnique(toUserIds)
 
-        // check if all receipient user id are valid
-        const invalid = toUserIds.reduce((invalid, userId) => invalid || !idExists(userId), false)
-        if (invalid) return callback(messages.invalidUserId)
+    // check if all receipient user id are valid
+    const invalid = toUserIds.reduce((invalid, userId) => invalid || !idExists(userId), false)
+    if (invalid) return callback(messages.invalidUserId)
 
-        const typeObj = VALID_TYPES[type]
-        if (!isObj(typeObj)) return callback(messages.invalidParams + ': type')
+    const typeObj = VALID_TYPES[type]
+    if (!isObj(typeObj)) return callback(messages.invalidParams + ': type')
 
-        const childTypeObj = typeObj[childType]
-        if (childType && !isObj(childTypeObj)) return callback(messages.invalidParams + ': childType')
+    const childTypeObj = typeObj[childType]
+    if (childType && !isObj(childTypeObj)) return callback(messages.invalidParams + ': childType')
 
-        const config = childType ? childTypeObj : typeObj
+    const config = childType ? childTypeObj : typeObj
 
-        if (config.dataRequired && !objHasKeys(data, config.dataFields, true)) {
-            return callback(`${messages.invalidParams}: data { ${config.dataFields.join()} }`)
-        }
-        if (config.messageRequired && (!isStr(message) || !message.trim())) {
-            return callback(messages.invalidParams + ': message')
-        }
-
-        // if notification type has a handler function execute it
-        const from = user.id
-        const id = uuid.v1()
-        const err = isFn(config.validate) && config.validate.bind(client)(id, from, toUserIds, data, message)
-        if (err) return callback(err)
-        notifications.set(id, {
-            from,
-            to: toUserIds,
-            type,
-            childType,
-            message,
-            data,
-            tsCreated: new Date(),
-        })
-
-        // add user id and notification id to a list for faster processing
-        toUserIds.forEach(userId => {
-            const ids = userNotificationIds.get(userId) || []
-            ids.push(id)
-            userNotificationIds.set(userId, arrUnique(ids))
-            // notify the user if online
-            _notifyUser(userId)
-        })
-        callback()
-    } catch (e) {
-        console.log('Runtime error occured: ', e)
-        callback(messages.runtimeError)
+    if (config.dataRequired && !objHasKeys(data, config.dataFields, true)) {
+        return callback(`${messages.invalidParams}: data { ${config.dataFields.join()} }`)
     }
+    if (config.messageRequired && (!isStr(message) || !message.trim())) {
+        return callback(messages.invalidParams + ': message')
+    }
+
+    // if notification type has a handler function execute it
+    const from = user.id
+    const id = uuid.v1()
+    const err = isFn(config.validate) && config.validate.bind(client)(id, from, toUserIds, data, message)
+    if (err) return callback(err)
+    notifications.set(id, {
+        from,
+        to: toUserIds,
+        type,
+        childType,
+        message,
+        data,
+        tsCreated: new Date(),
+    })
+
+    // add user id and notification id to a list for faster processing
+    toUserIds.forEach(userId => {
+        const ids = userNotificationIds.get(userId) || []
+        ids.push(id)
+        userNotificationIds.set(userId, arrUnique(ids))
+        // notify the user if online
+        _notifyUser(userId)
+    })
+    callback()
 }

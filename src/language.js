@@ -36,7 +36,6 @@ export const handleTranslations = (langCode, hash, callback) => {
     callback(null, translated)
 }
 
-
 export function setTexts(texts = {}) {
     // attempt to build a single list of english texts for translation
     if (!buildMode) {

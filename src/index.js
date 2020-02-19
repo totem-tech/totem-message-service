@@ -8,7 +8,7 @@ import socketIO from 'socket.io'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleErrorMessages, handleTranslations } from './language'
+import { handleErrorMessages, handleTranslations, setTexts } from './language'
 import {
     handleProject,
     handleProjectsByHashes,
@@ -29,6 +29,9 @@ const key = fs.readFileSync(process.env.KeyPath)
 const PORT = process.env.PORT || 3001
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO.listen(server)
+const texts = setTexts({
+    runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
+})
 const handlers = [
     // User & connection
     { name: 'disconnect', handler: handleDisconnect },
@@ -66,7 +69,7 @@ const interceptHandlerCb = (client, { handler, name }) => function () {
         handler.apply(client, args)
     } catch (err) {
         const callback = args[args.length - 1]
-        isFn(callback) && callback(err)
+        isFn(callback) && callback(texts.runtimeError)
         console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
         // ToDo: use an error reporting service or bot for automatic error alerts
     }

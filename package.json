@@ -4,7 +4,7 @@
   "description": "Totem Internal Message Server",
   "main": "index.js",
   "scripts": {
-    "server": "nodemon --watch src/ --ignore ./data --verbose --exec ./node_modules/.bin/babel-node ./src/index.js --ext js --presets env"
+    "server": "nodemon --watch src/ --ignore src/data --verbose --exec ./node_modules/.bin/babel-node ./src/index.js --ext js --presets env"
   },
   "babel": {
     "plugins": [
