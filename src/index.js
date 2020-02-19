@@ -21,6 +21,7 @@ import {
     handleRegister,
 } from './users'
 import { handleNotify } from './notify'
+import { isFn } from './utils/utils'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -56,10 +57,26 @@ const handlers = [
     // Project
     { name: 'project', handler: handleProject },
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
-]
+].filter(x => isFn(x.handler)) // ignore if handler is not a function
 
+// intercepts all event callbacks and attaches a try-catch to catch any uncaught errors
+const interceptHandlerCb = (client, { handler, name }) => function () {
+    const args = arguments
+    try {
+        handler.apply(client, args)
+    } catch (err) {
+        const callback = args[args.length - 1]
+        isFn(callback) && callback(err)
+        console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
+        // ToDo: use an error reporting service or bot for automatic error alerts
+    }
+}
 // Setup websocket event handlers
-socket.on('connection', client => handlers.forEach(({ name, handler }) => client.on(name, handler.bind(client))))
+socket.on('connection', client =>
+    handlers.forEach(x =>
+        client.on(x.name, interceptHandlerCb(client, x))
+    )
+)
 
 // Start listening
 server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
