@@ -16,7 +16,7 @@ const requiredKeys = [
 const validKeys = [
     ...requiredKeys,
     'addedBy',              // user who added the company
-    'parentIdentity',       // parent company identity
+    'parentCompany',       // parent company identity
 ]
 // maximum number of items to return as search result
 const RESULT_LIMIT = 100
