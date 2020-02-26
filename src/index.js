@@ -22,6 +22,7 @@ import {
 } from './users'
 import { handleNotify } from './notify'
 import { isFn } from './utils/utils'
+import getInstance from './utils/MongoStorage'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -81,5 +82,19 @@ socket.on('connection', client =>
     )
 )
 
-// Start listening
-server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
+getInstance('testdb', 'testCollection', 'mongodb://localhost:27017')
+    .then(testCollection => {
+        // Start listening
+        server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
+        // testCollection.set(1, { desc: 'this is one', title: 'one' }).then(() => console.log('success'), err => console.log({ err }))
+        // testCollection.set(2, { desc: 'this is two', title: 'two' }).then(() => console.log('success'), err => console.log({ err }))
+        // testCollection.set(3, { desc: 'this is three', title: 'three' }).then(() => console.log('success'), err => console.log({ err }))
+
+        // testCollection.delete({ title: 'this is one' }).then(result => {}, err => console.log({ err }))
+        testCollection.search({
+            desc: 'this is one',
+            // title: 'one',
+        }, false, false, true)
+            .then(result => console.log({ result }), console.log)
+        // testCollection.getAll().then(result => console.log({ result }), err => console.log({ err }))
+    }, console.log)
