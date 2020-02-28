@@ -19,10 +19,14 @@ const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:30
 let keyData, walletAddress, secretKey, signPublicKey, signSecretKey, encryption_keypair, signature_keypair, serverName, external_publicKey, external_serverName, printSensitiveData
 
 // Error messages
-const errMsgs = setTexts({
-    fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period:',
+const texts = setTexts({
+    fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period',
     loginOrRegister: 'Login/registration required',
-    faucetTransferInProgress: 'You already have a faucet request in-progress. Please wait until it is finished or wait at least 15 minutes from previous previous request time.'
+    faucetTransferInProgress: `
+    You already have a faucet request in-progress. 
+    Please wait until it is finished or wait at least 15 minutes from previous previous request time.
+    `,
+    invalidSignature: 'Signature pre-verification failed',
 })
 
 // Reads environment variables and generate keys if needed
@@ -81,78 +85,71 @@ if (err) throw new Error(err)
 const faucetClient = ioClient(FAUCET_SERVER_URL, { secure: true, rejectUnauthorized: false })
 
 export function handleFaucetRequest(address, callback) {
+    if (!isFn(callback)) return
     const client = this
-    try {
-        console.log('faucetClient.connected', faucetClient.connected)
-        if (!isFn(callback)) return
-        const err = setVariables()
-        if (err) return callback(err) | console.log(err)
+    console.log('faucetClient.connected', faucetClient.connected)
+    const err = setVariables()
+    if (err) throw err
 
-        const user = getUserByClientId(client.id)
-        if (!user) return callback(errMsgs.loginOrRegister)
-        let userRequests = faucetRequests.get(user.id) || []
-        const last = userRequests[userRequests.length - 1]
-        if (last && last.inProgress) {
-            const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
-            // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
-            if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(errMsgs.faucetTransferInProgress)
-        }
-        const numReqs = userRequests.length
-        let fifthTS = (userRequests[numReqs - 5] || {}).timestamp
-        fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
-        if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
-            // prevents adding more than maximum number of requests within the given duration
-            return callback(`${errMsgs.fauceRequestLimitReached}: ${REQUEST_LIMIT}`)
-        }
-        const request = {
-            address,
-            timestamp: new Date(),
-            funded: false
-        }
-        userRequests.push(request)
-
-        if (numReqs >= REQUEST_LIMIT) {
-            // remove older requests ???
-            userRequests = userRequests.slice(numReqs - REQUEST_LIMIT)
-        }
-
-        const index = userRequests.length - 1
-        const data = JSON.stringify(request)
-        const minLength = 9
-        // Length of stringified data
-        let lenStr = JSON.stringify(data.length)
-        // Make sure to have fixed length
-        lenStr = lenStr.padStart(minLength)
-
-        // Generate new signature
-        const signature = newSignature(data, signSecretKey)
-        printSensitiveData && console.log('\n\n\nsignSecretKey:\n', signSecretKey)
-        printSensitiveData && console.log('\n\n\nSignature:\n', signature)
-        const valid = verifySignature(data, signature, signPublicKey)
-        if (!valid) return callback('Signature pre-verification failed')
-
-        const nonce = newNonce()
-        const message = lenStr + external_serverName + data + signature
-        const encryptedMsg = encrypt(
-            message,
-            nonce,
-            external_publicKey,
-            secretKey
-        )
-        userRequests[index].inProgress = true
-        // save request data
-        faucetRequests.set(user.id, userRequests)
-        faucetClient.emit('faucet', encryptedMsg, nonce, (err, hash) => {
-            userRequests[index].funded = !err
-            userRequests[index].hash = hash
-            userRequests[index].inProgress = false
-            // update request data
-            faucetRequests.set(user.id, userRequests)
-            callback(err, hash)
-        })
-
-    } catch (err) {
-        console.log('Faucet request failed. Error:', err)
-        callback('Faucet request failed. Please try again later.')
+    const user = getUserByClientId(client.id)
+    if (!user) return callback(texts.loginOrRegister)
+    let userRequests = faucetRequests.get(user.id) || []
+    const last = userRequests[userRequests.length - 1]
+    if (last && last.inProgress) {
+        const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
+        // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
+        if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
     }
+    const numReqs = userRequests.length
+    let fifthTS = (userRequests[numReqs - 5] || {}).timestamp
+    fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
+    if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
+        // prevents adding more than maximum number of requests within the given duration
+        return callback(`${texts.fauceRequestLimitReached}: ${REQUEST_LIMIT}`)
+    }
+    const request = {
+        address,
+        timestamp: new Date(),
+        funded: false
+    }
+    userRequests.push(request)
+
+    if (numReqs >= REQUEST_LIMIT) {
+        // remove older requests ???
+        userRequests = userRequests.slice(numReqs - REQUEST_LIMIT)
+    }
+
+    const index = userRequests.length - 1
+    const data = JSON.stringify(request)
+    const minLength = 9
+    // Length of stringified data
+    let lenStr = JSON.stringify(data.length)
+    // Make sure to have fixed length
+    lenStr = lenStr.padStart(minLength)
+
+    // Generate new signature
+    const signature = newSignature(data, signSecretKey)
+    printSensitiveData && console.log('signSecretKey:\n', signSecretKey, '\nSignature:\n', signature)
+    const valid = verifySignature(data, signature, signPublicKey)
+    if (!valid) return callback(texts.invalidSignature)
+
+    const nonce = newNonce()
+    const message = lenStr + external_serverName + data + signature
+    const encryptedMsg = encrypt(
+        message,
+        nonce,
+        external_publicKey,
+        secretKey
+    )
+    userRequests[index].inProgress = true
+    // save request data
+    faucetRequests.set(user.id, userRequests)
+    faucetClient.emit('faucet', encryptedMsg, nonce, (err, hash) => {
+        userRequests[index].funded = !err
+        userRequests[index].hash = hash
+        userRequests[index].inProgress = false
+        // update request data
+        faucetRequests.set(user.id, userRequests)
+        callback(err, hash)
+    })
 }
