@@ -22,7 +22,7 @@ import {
 } from './users'
 import { handleNotify } from './notify'
 import { isFn } from './utils/utils'
-import getInstance from './utils/MongoStorage'
+import CouchDBStorage from './CouchDBStorage'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -81,20 +81,10 @@ socket.on('connection', client =>
         client.on(x.name, interceptHandlerCb(client, x))
     )
 )
+// Start listening
+server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
 
-getInstance('testdb', 'testCollection', 'mongodb://localhost:27017')
-    .then(testCollection => {
-        // Start listening
-        server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
-        // testCollection.set(1, { desc: 'this is one', title: 'one' }).then(() => console.log('success'), err => console.log({ err }))
-        // testCollection.set(2, { desc: 'this is two', title: 'two' }).then(() => console.log('success'), err => console.log({ err }))
-        // testCollection.set(3, { desc: 'this is three', title: 'three' }).then(() => console.log('success'), err => console.log({ err }))
-
-        // testCollection.delete({ title: 'this is one' }).then(result => {}, err => console.log({ err }))
-        testCollection.search({
-            desc: 'this is one',
-            // title: 'one',
-        }, false, false, true)
-            .then(result => console.log({ result }), console.log)
-        // testCollection.getAll().then(result => console.log({ result }), err => console.log({ err }))
-    }, console.log)
+// const storage = new CouchDBStorage('http://admin:123456@127.0.0.1:5984', 'test1')
+// const items = new Array(10).fill(0).map((_, i) => ({ _id: `${i}`, value: `${i}` }))
+// storage.setAll(items).then(result => console.log({ result }), console.log)
+// storage.getAll(['1', '2']).then(result => console.log({ result, total: result.total_rows }))
