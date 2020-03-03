@@ -24,7 +24,6 @@ const messages = setTexts({
 const RESERVED_IDS = arrReadOnly([
     'admin',
     'administrator',
-    'chris',
     'live',
     'accounting',
     'support',
