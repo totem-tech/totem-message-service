@@ -1,6 +1,6 @@
 import nano from 'nano'
 import uuid from 'uuid'
-import { isObj, isStr } from './utils/utils'
+import { isObj, isStr, isArr, arrUnique, isMap } from './utils/utils'
 
 let connection
 // for maintaining a single connection
@@ -14,6 +14,10 @@ export default class CouchDBStorage {
         this.dbName = dbName
         this.connection = isStr(connectionOrUrl) ? nano(connectionOrUrl) : connectionOrUrl
         this.dbPromise = this.getDB()
+        // clear dbPromise
+        this.dbPromise.then(null, error => {
+            console.log('CouchDB: connection failed.', error)
+        }).finally(() => this.dbPromise = null)
     }
 
     async getDB() {
@@ -39,28 +43,88 @@ export default class CouchDBStorage {
         return con.use(this.dbName)
     }
 
-    async delete() { }
+    // delete removes one or more documents
+    //
+    // Params:
+    // @ids     string/array of strings
+    async delete(ids = []) {
+        if (!isArr(ids)) {
+            // invalid id supplied => ignore.
+            if (!isStr(ids)) return
+            // @ids is a string => convert to array
+            ids = [ids]
+        }
+        ids = arrUnique(ids.filter(id => isStr(id)))
 
+        let documents = (await this.getAll(ids, false))
+            // exclude already deleted or not found documents
+            .filter(x => x && !x._deleted)
+            // add `_deleted` flag to mark the document for deletion
+            .map(d => ({ ...d, _deleted: true }))
+        return documents.length === 0 ? [] : await this.setAll(documents)
+    }
 
-    async find() { }
+    // find the first item matching criteria
+    async find(keyValues, matchExact, matchAll, ignoreCase) {
+        const docs = await this.search(keyValues, matchExact, matchAll, ignoreCase, 1, 0, false)
+        console.log('find', { docs })
+        return docs[0]
+    }
 
     async get(id) {
         const db = await this.getDB()
         try {
             return await db.get(id)
         } catch (e) {
+            // prevents throwing an error when document not found.
+            // instead returns undefined.
             return
         }
     }
 
-    async getAll(ids = []) {
+    // get all or specific documents from a database
+    async getAll(ids = [], asMap = true) {
         const db = await this.getDB()
         // if ids supplied only retrieve only those otherwise, retrieve all
-        if (ids.length > 0) return await db.fetch({ keys: ids })
-        return await db.list()
+        const documents = await (ids.length > 0 ? db.fetch({ keys: ids }) : db.list())
+        if (!asMap) return documents.rows.map(x => x.doc)
+        return new Map(documents.rows.map(x => [x.doc._id, x.doc]))
     }
 
-    async search() { }
+    // search documents within the database
+    async search(keyValues = {}, matchExact, matchAll, ignoreCase, limit = 0, skip = 0, asMap = true) {
+        if (!isObj(keyValues) || Object.keys(keyValues).length === 0) return asMap ? new Map() : []
+
+        // assumes no operator is used in @keyValues
+        !matchExact && Object.keys(keyValues).forEach(key => {
+            keyValues[key] = { $regex: `${ignoreCase ? '(?i)' : ''}${keyValues[key]}` }
+        })
+        // if !matchAll, add $or operator to include documents matching one or more fields
+        keyValues = matchAll ? keyValues : {
+            $or: Object.keys(keyValues).map(key => {
+                const keyQ = {}
+                keyQ[key] = keyValues[key]
+                return keyQ
+            })
+        }
+        const result = await this.searchRaw(keyValues, limit, skip)
+        return !asMap ? result.docs : new Map(result.docs.map(doc => [doc._id, doc]))
+    }
+
+    //
+    // Params:
+    // @selector    string/object   
+    //https://docs.couchdb.org/en/stable/api/database/find.html#find-selectors
+    async searchRaw(selector = {}, limit = 0, skip = 0, extraProps = {}) {
+        const db = await this.getDB()
+        const query = {
+            ...extraProps,
+            selector,
+            limit: limit === 0 ? undefined : limit,
+            skip,
+        }
+        return await db.find(query)
+    }
 
     // create or update document
     // 
@@ -78,19 +142,33 @@ export default class CouchDBStorage {
         return await db.insert(value, id)
     }
 
-    // add or update items in bulk
-    async setAll(items) {
-        if (items.length === 0) return
-        const db = await this.getDB()
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i]
-            if (!item._id) return
-            const existing = await this.get(item._id)
-            if (existing) {
-                // attach `_rev` to prevent conflicts when updateing existing items
-                item._rev = existing._rev
-            }
+    // setAll adds or updates one or more documents in single request
+    //
+    // Params:
+    // @docs            array/map
+    // @ignoreExisting  boolean: whether to ignore existing documents
+    //
+    // Returns
+    async setAll(docs, ignoreIfExists = false) {
+        if (isMap(docs)) {
+            // convert map to array
+            docs = Array.from(docs).map(([_id, item]) => ({ ...item, _id }))
         }
-        return await db.bulk({ docs: items })
+        if (docs.length === 0) return
+        const db = await this.getDB()
+        for (let i = 0; i < docs.length; i++) {
+            const item = docs[i]
+            if (!item._id || item._rev) continue
+
+            const existing = await this.get(item._id)
+            if (!existing) continue
+            if (ignoreIfExists) {
+                docs[i] = null
+                continue
+            }
+            // attach `_rev` to prevent conflicts when updating existing items
+            item._rev = existing._rev
+        }
+        return await db.bulk({ docs: docs.filter(Boolean) })
     }
 }

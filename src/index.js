@@ -22,7 +22,7 @@ import {
 } from './users'
 import { handleNotify } from './notify'
 import { isFn } from './utils/utils'
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage, { getConnection } from './CouchDBStorage'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -84,7 +84,17 @@ socket.on('connection', client =>
 // Start listening
 server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
 
-// const storage = new CouchDBStorage('http://admin:123456@127.0.0.1:5984', 'test1')
-// const items = new Array(10).fill(0).map((_, i) => ({ _id: `${i}`, value: `${i}` }))
-// storage.setAll(items).then(result => console.log({ result }), console.log)
-// storage.getAll(['1', '2']).then(result => console.log({ result, total: result.total_rows }))
+// // CouchDB storage usage example
+// handleCountries(async (_, countries) => {
+//     const con = getConnection('http://admin:123456@127.0.0.1:5984')
+//     const storage = new CouchDBStorage(con, 'countries')
+//     const keywords = 'ad'
+//     const searchResult = await storage.search({
+//         name: keywords,
+//         code: keywords
+//     })
+//     console.log({ searchResult, total: searchResult.size })
+//
+//     const findResult = await storage.search({ code: 'ad' }, 0, 0, true)
+//     console.log({ findResult })
+// })
