@@ -2,7 +2,7 @@
  * Chat & data server running on https
  */
 import express from 'express'
-import fs from 'fs'
+import fs, { exists } from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
 import { handleCompany, handleCompanySearch } from './companies'
@@ -23,6 +23,13 @@ import {
 import { handleNotify } from './notify'
 import { isFn } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
+// attempt to establish a connection to database and exit application if fails
+try {
+    getConnection('http://admin:123456@127.0.0.1:5984')
+} catch (e) {
+    console.log('CouchDB: connection failed. Error:\n', e)
+    process.exit(1)
+}
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -84,17 +91,19 @@ socket.on('connection', client =>
 // Start listening
 server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
 
-// // CouchDB storage usage example
+// CouchDB storage usage example
 // handleCountries(async (_, countries) => {
-//     const con = getConnection('http://admin:123456@127.0.0.1:5984')
-//     const storage = new CouchDBStorage(con, 'countries')
-//     const keywords = 'ad'
-//     const searchResult = await storage.search({
-//         name: keywords,
-//         code: keywords
-//     })
-//     console.log({ searchResult, total: searchResult.size })
-//
-//     const findResult = await storage.search({ code: 'ad' }, 0, 0, true)
-//     console.log({ findResult })
+//     try {
+//         const storage = new CouchDBStorage(con, 'countries')
+//         await storage.setAll(countries)
+//         const keywords = 'ad'
+//         const searchResult = await storage.search({
+//             name: keywords,
+//             code: keywords
+//         })
+//         console.log({ searchResult, total: searchResult.size })
+
+//         const findResult = await storage.find({ code: keywords }, 0, 0, true)
+//         console.log({ findResult })
+//     } catch (e) { console.log({ e }) }
 // })

@@ -3,21 +3,26 @@ import uuid from 'uuid'
 import { isObj, isStr, isArr, arrUnique, isMap } from './utils/utils'
 
 let connection
-// for maintaining a single connection
-export const getConnection = url => {
+// getConnection returns existing connection, if available.
+// Otherwise, creates a new connection using the supplied URL.
+//
+// Params:
+// @url     string
+//
+// Returns  object
+export const getConnection = (url) => {
     connection = connection || nano(url)
     return connection
 }
 
 export default class CouchDBStorage {
     constructor(connectionOrUrl, dbName) {
+        const c = connectionOrUrl
         this.dbName = dbName
-        this.connection = isStr(connectionOrUrl) ? nano(connectionOrUrl) : connectionOrUrl
+        this.connection = c && isStr(c) ? nano(c) : c || connection
         this.dbPromise = this.getDB()
         // clear dbPromise
-        this.dbPromise.then(null, error => {
-            console.log('CouchDB: connection failed.', error)
-        }).finally(() => this.dbPromise = null)
+        this.dbPromise.finally(() => this.dbPromise = null)
     }
 
     async getDB() {
@@ -39,7 +44,7 @@ export default class CouchDBStorage {
 
         // database doesn't exist, create it
         await con.db.create(this.dbName)
-        console.log('CouchDB: new database created. Name:', this.dbName, data)
+        console.log('CouchDB: new database created. Name:', this.dbName)
         return con.use(this.dbName)
     }
 
@@ -67,19 +72,16 @@ export default class CouchDBStorage {
     // find the first item matching criteria
     async find(keyValues, matchExact, matchAll, ignoreCase) {
         const docs = await this.search(keyValues, matchExact, matchAll, ignoreCase, 1, 0, false)
-        console.log('find', { docs })
         return docs[0]
     }
 
     async get(id) {
         const db = await this.getDB()
+        // prevents throwing an error when document not found.
+        // instead returns undefined.
         try {
             return await db.get(id)
-        } catch (e) {
-            // prevents throwing an error when document not found.
-            // instead returns undefined.
-            return
-        }
+        } catch (e) { }
     }
 
     // get all or specific documents from a database
