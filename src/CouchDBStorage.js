@@ -17,35 +17,37 @@ export const getConnection = (url) => {
 
 export default class CouchDBStorage {
     constructor(connectionOrUrl, dbName) {
-        const c = connectionOrUrl
+        this.connectionOrUrl = connectionOrUrl
+        this.db = null
         this.dbName = dbName
-        this.connection = c && isStr(c) ? nano(c) : c || connection
-        this.dbPromise = this.getDB()
-        // clear dbPromise
-        this.dbPromise.finally(() => this.dbPromise = null)
     }
 
     async getDB() {
         if (this.dbPromise) {
             // if initialization is already in progress wait for it
-            await this.dbPromise
+            return await this.dbPromise
         }
         if (this.db) return this.db
 
-        const con = this.connection
-        // database already initialized
-        if (!isObj(con)) throw new Error('CouchDB: invalid connection')
-        if (!this.dbName) throw new Error('CouchDB: missing database name')
+        this.dbPromise = (async () => {
+            const c = this.connectionOrUrl
+            const con = c && isStr(c) ? nano(c) : c || connection
+            // database already initialized
+            if (!isObj(con)) throw new Error('CouchDB: invalid connection')
+            if (!this.dbName) throw new Error('CouchDB: missing database name')
 
-        // retrieve a list of all database names
-        const dbNames = await con.db.list()
-        // database already exists, use it
-        if (dbNames.includes(this.dbName)) return con.use(this.dbName)
+            // retrieve a list of all database names
+            const dbNames = await con.db.list()
+            // database already exists, use it
+            if (dbNames.includes(this.dbName)) return con.use(this.dbName)
 
-        // database doesn't exist, create it
-        await con.db.create(this.dbName)
-        console.log('CouchDB: new database created. Name:', this.dbName)
-        return con.use(this.dbName)
+            // database doesn't exist, create it
+            await con.db.create(this.dbName)
+            console.log('CouchDB: new database created. Name:', this.dbName)
+            this.dbPromise = null
+            return con.use(this.dbName)
+        })()
+        return await this.dbPromise
     }
 
     // delete removes one or more documents
