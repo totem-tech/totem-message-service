@@ -1,12 +1,12 @@
 
+import CouchDBStorage from './CouchDBStorage'
 import ioClient from 'socket.io-client'
 import { encrypt, encryptionKeypair, signingKeyPair, newNonce, newSignature, verifySignature, keyInfoFromKeyData } from './utils/naclHelper'
 import { isFn, isStr } from './utils/utils'
-import DataStorage from './utils/DataStorage'
 import { getUserByClientId } from './users'
 import { setTexts } from './language'
 
-const faucetRequests = new DataStorage('faucet-requests.json', true)
+const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
 // Maximum number of requests within @TIME_LIMIT
 const REQUEST_LIMIT = 5
 const TIME_LIMIT = 24 * 60 * 60 * 1000 // 1 day in milliseconds
@@ -84,24 +84,25 @@ if (err) throw new Error(err)
 // connect to faucet server
 const faucetClient = ioClient(FAUCET_SERVER_URL, { secure: true, rejectUnauthorized: false })
 
-export function handleFaucetRequest(address, callback) {
+export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
     const client = this
     console.log('faucetClient.connected', faucetClient.connected)
     const err = setVariables()
     if (err) throw err
 
-    const user = getUserByClientId(client.id)
+    const user = await getUserByClientId(client.id)
     if (!user) return callback(texts.loginOrRegister)
-    let userRequests = faucetRequests.get(user.id) || []
-    const last = userRequests[userRequests.length - 1]
+    let { requests } = (await faucetRequests.get(user.id)) || {}
+    requests = requests || []
+    const last = requests[requests.length - 1]
     if (last && last.inProgress) {
         const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
         // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
         if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
     }
-    const numReqs = userRequests.length
-    let fifthTS = (userRequests[numReqs - 5] || {}).timestamp
+    const numReqs = requests.length
+    let fifthTS = (requests[numReqs - 5] || {}).timestamp
     fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
     if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
         // prevents adding more than maximum number of requests within the given duration
@@ -109,17 +110,17 @@ export function handleFaucetRequest(address, callback) {
     }
     const request = {
         address,
-        timestamp: new Date(),
+        timestamp: (new Date()).toISOString(),
         funded: false
     }
-    userRequests.push(request)
+    requests.push(request)
 
     if (numReqs >= REQUEST_LIMIT) {
         // remove older requests ???
-        userRequests = userRequests.slice(numReqs - REQUEST_LIMIT)
+        requests = requests.slice(numReqs - REQUEST_LIMIT)
     }
 
-    const index = userRequests.length - 1
+    const index = requests.length - 1
     const data = JSON.stringify(request)
     const minLength = 9
     // Length of stringified data
@@ -141,15 +142,15 @@ export function handleFaucetRequest(address, callback) {
         external_publicKey,
         secretKey
     )
-    userRequests[index].inProgress = true
+    requests[index].inProgress = true
     // save request data
-    faucetRequests.set(user.id, userRequests)
-    faucetClient.emit('faucet', encryptedMsg, nonce, (err, hash) => {
-        userRequests[index].funded = !err
-        userRequests[index].hash = hash
-        userRequests[index].inProgress = false
+    await faucetRequests.set(user.id, { requests })
+    faucetClient.emit('faucet', encryptedMsg, nonce, async (err, hash) => {
+        requests[index].funded = !err
+        requests[index].hash = hash
+        requests[index].inProgress = false
         // update request data
-        faucetRequests.set(user.id, userRequests)
+        await faucetRequests.set(user.id, { requests })
         callback(err, hash)
     })
 }

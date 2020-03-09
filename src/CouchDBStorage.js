@@ -28,14 +28,13 @@ export default class CouchDBStorage {
             return await this.dbPromise
         }
         if (this.db) return this.db
+        const c = this.connectionOrUrl
+        const con = c && isStr(c) ? nano(c) : c || connection
+        // database already initialized
+        if (!isObj(con)) throw new Error('CouchDB: invalid connection')
+        if (!this.dbName) throw new Error('CouchDB: missing database name')
 
         this.dbPromise = (async () => {
-            const c = this.connectionOrUrl
-            const con = c && isStr(c) ? nano(c) : c || connection
-            // database already initialized
-            if (!isObj(con)) throw new Error('CouchDB: invalid connection')
-            if (!this.dbName) throw new Error('CouchDB: missing database name')
-
             // retrieve a list of all database names
             const dbNames = await con.db.list()
             // database already exists, use it
@@ -90,9 +89,17 @@ export default class CouchDBStorage {
     async getAll(ids = [], asMap = true) {
         const db = await this.getDB()
         // if ids supplied only retrieve only those otherwise, retrieve all
-        const documents = await (ids.length > 0 ? db.fetch({ keys: ids }) : db.list())
-        if (!asMap) return documents.rows.map(x => x.doc)
-        return new Map(documents.rows.map(x => [x.doc._id, x.doc]))
+        let rows
+        if (ids.length === 0) {
+            rows = (await this.searchRaw({})).docs
+        } else {
+            rows = (await db.fetch({ keys: ids }))
+                .rows.map(x => x.doc)
+                // ignore not found documents
+                .filter(Boolean)
+        }
+        if (!asMap) return rows
+        return new Map(rows.map(x => [x._id, x]))
     }
 
     // search documents within the database
@@ -138,7 +145,7 @@ export default class CouchDBStorage {
     async set(id, value) {
         id = isStr(id) ? id : uuid.v1()
         const db = await this.getDB()
-        const existing = await db.get(id)
+        const existing = await this.get(id)
         if (existing) {
             // attach `_rev` to execute an update operation
             value._rev = existing._rev

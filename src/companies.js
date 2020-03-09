@@ -1,11 +1,11 @@
-import DataStorage from './utils/DataStorage'
+import CouchDBStorage from './CouchDBStorage'
 import { isFn, isObj, hasValue, objClean, isStr } from './utils/utils'
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'
 import { setTexts } from './language'
 import { getUserByClientId } from './users'
 
-const companies = new DataStorage('companies.json', true) // disable caching
+const companies = new CouchDBStorage(null, 'companies') // disable caching
 // Must-have properties
 const requiredKeys = [
     'country',              // 2 letter country code
@@ -38,41 +38,38 @@ const messages = setTexts({
 // @identity    string: company identity/wallet address
 // @company     object: if non-object supplied will return existing company, if available
 // @callback    function: callback function
-export function handleCompany(identity, company, callback) {
+export async function handleCompany(identity, company, callback) {
     if (!isFn(callback)) return
     const client = this
-    const user = getUserByClientId(client.id)
+    const user = await getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
 
     if (!addressToStr(identity)) return callback(messages.invalidIdentity) || console.log({ identity: addressToStr(identity) })
     if (!isObj(company)) {
-        company = companies.get(identity)
+        company = await companies.get(identity)
         // ToDo: return company object on second parameter
         return callback(!company ? messages.notFound : null, company)
     }
 
     // Check if company with identity already exists
-    if (!!companies.get(identity)) {
-        return callback(messages.identityAlreadyAssociated)
-    }
+    if (!!(await companies.get(identity))) return callback(messages.identityAlreadyAssociated)
 
     const { country, name, registrationNumber } = company
     // make sure all the required keys are supplied
-    if (requiredKeys.reduce((invalid, key) => invalid || !hasValue(company[key]), false)) {
-        return callback(`${messages.invalidKeys}: ${requiredKeys.join()}`)
-    }
+    const invalid = requiredKeys.reduce((invalid, key) => invalid || !hasValue(company[key]), false)
+    if (invalid) return callback(`${messages.invalidKeys}: ${requiredKeys.join(', ')}`)
 
     // validate country code
     if (!isCountryCode(country)) return callback(messages.invalidCountry)
 
     // check if company with combination of name, registration number and country already exists
     // PS: same company name can have different registration number in different countries
-    if (companies.search({ name, registrationNumber, country }, true, true, true).size > 0) {
-        return callback(messages.exists)
-    }
+    const existing = await companies.find({ name, registrationNumber, country }, true, true, true)
+    if (existing) return callback(messages.exists)
+
     company.addedBy = user.id
+    await companies.set(identity, objClean(company, validKeys))
     console.log('Company created: ', JSON.stringify(company))
-    companies.set(identity, objClean(company, validKeys))
     callback()
 }
 
@@ -86,12 +83,12 @@ export function handleCompany(identity, company, callback) {
 // @matchExact  boolean: whether to fulltext search or partial search. Only applies to (2) & (3) above.
 // @ignoreCase  boolean: only applies to (2) & (3) above 
 // @callback    function: callback function.
-export const handleCompanySearch = (query, matchExact, matchAll, ignoreCase, callback) => {
+export const handleCompanySearch = async (query, matchExact, matchAll, ignoreCase, callback) => {
     if (!isFn(callback)) return
     let keyValues = {}
     if (isStr(query)) {
         // string supplied
-        const company = companies.get(query)
+        const company = await companies.get(query)
         // query string is a valid address, return company if exists otherwise return error message
         if (company) return callback(null, new Map([[query, company]]))
         // convert string to object for search by all keys
@@ -105,5 +102,6 @@ export const handleCompanySearch = (query, matchExact, matchAll, ignoreCase, cal
         const hasValidkeys = Object.keys(keyValues).length > 0
         if (hasValidkeys) return callback(`${messages.requiredSearchKeys}: ${validKeys.join()}`)
     }
-    callback(null, companies.search(keyValues, matchExact, matchAll, ignoreCase, RESULT_LIMIT))
+    const result = await companies.search(keyValues, matchExact, matchAll, ignoreCase, RESULT_LIMIT)
+    callback(null, result)
 }

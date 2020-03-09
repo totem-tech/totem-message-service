@@ -2,7 +2,7 @@
  * Chat & data server running on https
  */
 import express from 'express'
-import fs, { exists } from 'fs'
+import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
 import { handleCompany, handleCompanySearch } from './companies'
@@ -21,20 +21,17 @@ import {
     handleRegister,
 } from './users'
 import { handleNotify } from './notify'
-import { isFn } from './utils/utils'
+import { isFn, isArr } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
-// attempt to establish a connection to database and exit application if fails
-try {
-    getConnection('http://admin:123456@127.0.0.1:5984')
-} catch (e) {
-    console.log('CouchDB: connection failed. Error:\n', e)
-    process.exit(1)
-}
+import DataStorage from './utils/DataStorage'
+
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
 const PORT = process.env.PORT || 3001
+const couchDBUrl = process.env.CouchDB_URL
+const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO.listen(server)
 const texts = setTexts({
@@ -71,10 +68,10 @@ const handlers = [
 ].filter(x => isFn(x.handler)) // ignore if handler is not a function
 
 // intercepts all event callbacks and attaches a try-catch to catch any uncaught errors
-const interceptHandlerCb = (client, { handler, name }) => function () {
+const interceptHandlerCb = (client, { handler, name }) => async function () {
     const args = arguments
     try {
-        handler.apply(client, args)
+        await handler.apply(client, args)
     } catch (err) {
         const callback = args[args.length - 1]
         isFn(callback) && callback(texts.runtimeError)
@@ -82,28 +79,72 @@ const interceptHandlerCb = (client, { handler, name }) => function () {
         // ToDo: use an error reporting service or bot for automatic error alerts
     }
 }
+
+// attempt to establish a connection to database and exit application if fails
+try {
+    getConnection(couchDBUrl)
+    console.log('Connected to CouchDB')
+} catch (e) {
+    console.log('CouchDB: connection failed. Error:\n', e)
+    process.exit(1)
+}
+if (!!migrateFiles) {
+    setTimeout(() => migrate(migrateFiles), 1000)
+}
 // Setup websocket event handlers
 socket.on('connection', client =>
-    handlers.forEach(x =>
-        client.on(x.name, interceptHandlerCb(client, x))
-    )
+    handlers.forEach(x => client.on(x.name, interceptHandlerCb(client, x)))
 )
 // Start listening
 server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
 
-// CouchDB storage usage example
-// handleCountries(async (_, countries) => {
-//     try {
-//         const storage = new CouchDBStorage(con, 'countries')
-//         await storage.setAll(countries)
-//         const keywords = 'ad'
-//         const searchResult = await storage.search({
-//             name: keywords,
-//             code: keywords
-//         })
-//         console.log({ searchResult, total: searchResult.size })
 
-//         const findResult = await storage.find({ code: keywords }, 0, 0, true)
-//         console.log({ findResult })
-//     } catch (e) { console.log({ e }) }
-// })
+// Migrate JSON file storage to CouchDB.
+// Existing entries will be ignored and will remain in the JSON file.
+// Successfully stored entries will be removed from JSON file.
+async function migrate(fileNames) {
+    const filesAr = fileNames.split(',')
+        // only include json file names
+        .filter(x => x.endsWith('.json'))
+        .map(x => x.trim())
+    if (filesAr.length === 0) return console.log('')
+    console.log('Migrating JSON files:', filesAr)
+    for (let i = 0; i < filesAr.length; i++) {
+        const file = filesAr[i]
+        const dbName = (file.split('.json')[0])
+        if (!dbName) continue
+        const jsonStorage = new DataStorage(file, true)
+        const data = jsonStorage.getAll()
+        const total = data.size
+        if (total === 0) {
+            console.log('\nIgnoring empty file:', file)
+            continue
+        }
+        console.log(`\nMigrating ${file}: ${data.size} entries`)
+        const db = new CouchDBStorage(getConnection(), dbName.replace(' ', '_'))
+        const arrKeys = {
+            'faucet-requests': 'requests',
+            'translations': 'texts',
+        }
+        if (!!arrKeys[dbName]) {
+            // wrap array value in an object as required by couchdb
+            Array.from(data).forEach(([id, arr]) => {
+                if (!isArr(arr)) return
+                const value = {}
+                value[arrKeys[dbName] || 'array'] = arr
+                data.set(id, value)
+            })
+        }
+
+        const result = await db.setAll(data, true)
+        let count = 0
+        result.forEach(({ ok, id }) => {
+            if (!ok) retrun
+            data.delete(id)
+            count++
+        })
+        // update JSON file to remove migrated entries
+        jsonStorage.setAll(data)
+        console.log(`${file}: added ${count} entries. Ignored ${total - count} existing etries`)
+    }
+}

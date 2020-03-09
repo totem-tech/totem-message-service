@@ -1,9 +1,9 @@
-import DataStorage from './utils/DataStorage'
+import CouchDBStorage from './CouchDBStorage'
 import { isArr, isDefined, isFn, isObj, objClean } from './utils/utils'
 import { setTexts } from './language'
 import { getUserByClientId } from './users'
 
-const projects = new DataStorage('projects.json', true)
+const projects = new CouchDBStorage(null, 'projects')
 // Must-have properties
 const requiredKeys = ['name', 'ownerAddress', 'description']
 // All the acceptable properties
@@ -21,13 +21,11 @@ const messages = setTexts({
 })
 
 // Create/get/update project
-export function handleProject(hash, project, create, callback) {
+export async function handleProject(hash, project, create, callback) {
     const client = this
     if (!isFn(callback)) return;
-    const existingProject = projects.get(hash)
-    if (create && !!existingProject) {
-        return callback(messages.exists)
-    }
+    const existingProject = await projects.get(hash)
+    if (create && !!existingProject) return callback(messages.exists)
 
     // return existing project
     if (!isObj(project)) return callback(
@@ -37,7 +35,7 @@ export function handleProject(hash, project, create, callback) {
 
     // check if user is logged in
     // getUserByClientId will return a user only when a user is logged in with client ID
-    const user = getUserByClientId(client.id)
+    const user = await getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
     // makes sure only the project owner can execute the update operation
     const { userId } = existingProject || {}
@@ -49,12 +47,13 @@ export function handleProject(hash, project, create, callback) {
     if (project.description.length > descMaxLen) return callback(messages.invalidDescMaxLen)
     // exclude any unwanted data and only update the properties that's supplied
     project = { ...existingProject, ...objClean(project, validKeys) }
-    project.tsCreated = project.createdAt || new Date()
-    project.tsUpdated = new Date()
+    project.tsCreated = project.createdAt || (new Date()).toISOString()
+    project.tsUpdated = (new Date()).toISOString()
     project.userId = create ? user.id : project.userId
 
     // Add/update project
-    projects.set(hash, project)
+    console.log('saving project')
+    await projects.set(hash, project)
     callback(null)
     console.log(`Activity ${create ? 'created' : 'updated'}: ${hash} `)
 }
@@ -66,15 +65,10 @@ export function handleProject(hash, project, create, callback) {
 //						Params:
 //						@err	string, 
 //						@result map, 
-export const handleProjectsByHashes = (hashArr, callback) => {
+export const handleProjectsByHashes = async (hashArr, callback) => {
     if (!isFn(callback)) return;
     if (!isArr(hashArr) || hashArr.length === 0) return callback(messages.arrayRequired)
-    const hashesNotFound = new Array()
-    // Find all projects by supplied hash and return Map
-    const result = hashArr.reduce((res, hash) => {
-        const project = projects.get(hash)
-        !!project ? res.set(hash, project) : hashesNotFound.push(hash)
-        return res
-    }, new Map())
+    let result = await projects.getAll(hashArr)
+    const hashesNotFound = hashArr.filter(hash => !result.get(hash))
     callback(null, result, hashesNotFound)
 }

@@ -1,8 +1,9 @@
-import DataStorage from './utils/DataStorage'
-import { arrUnique, isArr, isFn, isStr, arrReadOnly } from './utils/utils'
+import CouchDBStorage from './CouchDBStorage'
+import { arrUnique, isArr, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 
-const users = new DataStorage('users.json', false) // false => enables caching entire user list
+const users = new CouchDBStorage(null, 'users')
+
 export const clients = new Map()
 export const userClientIds = new Map()
 const isValidId = id => /^[a-z][a-z0-9]+$/.test(id)
@@ -16,56 +17,59 @@ const messages = setTexts({
     idLengthMin: 'Minimum number of characters required',
     idExists: 'User ID already taken',
     invalidSecret: 'Secret must be a valid string',
-    msgLengthExceeds: 'Maximum characters allowed',
     loginFailed: 'Credentials do not match',
-    loginOrRegister: 'Login/registration required'
+    loginOrRegister: 'Login/registration required',
+    msgLengthExceeds: 'Maximum characters allowed',
+    reservedIdLogin: 'Cannot login with a reserved User ID',
 })
+// User IDs for use by the application ONLY.
+const SYSTEM_IDS = Object.freeze([
+    'everyone',
+    'here',
+    'me'
+])
 // User IDs reserved for Totem
-const RESERVED_IDS = arrReadOnly([
+const RESERVED_IDS = Object.freeze([
+    ...SYSTEM_IDS,
     'admin',
     'administrator',
-    'chris',
     'live',
     'accounting',
     'support',
     'totem',
-], true, true)
-// User IDs for use by the application ONLY.
-const SYSTEM_IDS = arrReadOnly([
-    'everyone',
-    'here',
-    'me'
-], true, true)
-// Save reserved ids without password (secret) if not already exists
-RESERVED_IDS.forEach(id => !users.get(id) && users.set(id, { id }))
-// Save system IDs without any password (secret) so that nobody can login with these
-SYSTEM_IDS.forEach(id => users.set(id, { id }))
+])
 const onUserLoginCallbacks = []
 const _execOnUserLogin = userId => setTimeout(() => onUserLoginCallbacks.forEach(fn => fn(userId)))
 
-/*
- *
- * Utility functions
- * 
- */
 // findUserByClientId seeks out user ID by connected client ID
 //
 // Params:
 // @clientId    string
 //
 // returns object
-export const getUserByClientId = clientId => Array.from(userClientIds)
-    .filter(([_, clientIds]) => clientIds.indexOf(clientId) >= 0)
-    .map(([userId]) => users.get(userId))[0]
+export const getUserByClientId = async (clientId) => {
+    const userId = Array.from(userClientIds)
+        .filter(([_, clientIds]) => clientIds.indexOf(clientId) >= 0)
+        .map(([userId]) => userId)[0]
+
+    if (!userId) return
+    return await users.get(userId)
+}
 
 // idExists
-export const idExists = userId => !!users.get(userId)
+export const idExists = async (userId) => {
+    if (RESERVED_IDS.includes(userId)) return true
+    return await users.get(userId)
+}
 
 // isUserOnline checks if user is online
 //
 // Params:
 // @userId  string
-export const isUserOnline = userId => (userClientIds.get(userId) || []).length > 0
+export const isUserOnline = async (userId) => {
+    const clientIds = await userClientIds.get(userId)
+    return (clientIds || []).length > 0
+}
 
 // onUserLogin registers callbacks to be executed on any user login occurs
 //
@@ -117,15 +121,16 @@ export const broadcast = (ignoreClientIds, eventName, params) => {
         .filter(id => ignoreClientIds.indexOf(id) === -1)
     emitToClients(clientIds, eventName, params)
 }
-// /*
-//  *
-//  * event handlers
-//  * 
-//  */
-export function handleDisconnect() {
+
+/*
+ *
+ * event handlers
+ * 
+ */
+export async function handleDisconnect() {
     const client = this
     clients.delete(client.id)
-    const user = getUserByClientId(client.id)
+    const user = await getUserByClientId(client.id)
     if (!user) return;
 
     const clientIds = userClientIds.get(user.id) || []
@@ -136,46 +141,26 @@ export function handleDisconnect() {
     console.info('Client disconnected: ', client.id, ' userId: ', user.id)
 }
 
-export function handleMessage(msg, callback) {
+export async function handleMessage(msg, callback) {
     const client = this
     if (!isStr(msg) || !isFn(callback)) return
     if (msg.length > msgMaxLength) return callback(`${messages.msgLengthExceeds}: ${msgMaxLength}`)
 
-    const sender = getUserByClientId(client.id)
+    const sender = await getUserByClientId(client.id)
     // Ignore message from logged out users
     if (!sender) return callback(messages.loginOrRegister);
     broadcast(client.id, 'message', [msg, sender.id])
     callback()
 }
 
-export const handleIdExists = (userId, callback) => isFn(callback) && callback(idExists(userId), userId)
+export const handleIdExists = async (userId, callback) => isFn(callback) && callback(await idExists(userId), userId)
 
-export function handleRegister(userId, secret, callback) {
-    const client = this
-    userId = (userId || '').toLowerCase()
-    secret = (secret || '').trim()
-    if (!isFn(callback)) return
-    if (users.get(userId)) return callback(messages.idExists)
-    if (!isValidId(userId)) return callback(messages.idInvalid)
-    if (userId.length > idMaxLength) return callback(`${messages.idLengthMax}: ${idMaxLength}`)
-    if (userId.length < idMinLength) return callback(`${messages.idLengthMin}: ${idMinLength}`)
-    if (!isStr(secret) || !secret) return callback(messages.invalidSecret)
-    const newUser = {
-        id: userId,
-        secret: secret,
-    }
-    users.set(userId, newUser)
-    clients.set(client.id, client)
-    userClientIds.set(userId, [client.id])
-    console.info('New User registered:', userId)
-    callback()
-    _execOnUserLogin(userId)
-}
-
-export function handleLogin(userId, secret, callback) {
+export async function handleLogin(userId, secret, callback) {
     const client = this
     if (!isFn(callback)) return
-    const user = users.get(userId)
+    // prevent login with a reserved id
+    if (RESERVED_IDS.includes(userId)) return callback(texts.reservedId)
+    const user = await users.get(userId)
     const valid = user && user.secret === secret
     if (valid) {
         const clientIds = userClientIds.get(user.id) || []
@@ -186,5 +171,29 @@ export function handleLogin(userId, secret, callback) {
 
     console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
     callback(valid ? null : messages.loginFailed)
+    _execOnUserLogin(userId)
+}
+
+export async function handleRegister(userId, secret, callback) {
+    if (!isFn(callback)) return
+    const client = this
+    userId = (userId || '').toLowerCase()
+    secret = (secret || '').trim()
+    // prevent registration with a reserved id
+    if (RESERVED_IDS.includes(userId)) return callback(texts.reservedId)
+    if (await users.get(userId)) return callback(messages.idExists)
+    if (!isValidId(userId)) return callback(messages.idInvalid)
+    if (userId.length > idMaxLength) return callback(`${messages.idLengthMax}: ${idMaxLength}`)
+    if (userId.length < idMinLength) return callback(`${messages.idLengthMin}: ${idMinLength}`)
+    if (!isStr(secret) || !secret) return callback(messages.invalidSecret)
+    const newUser = {
+        id: userId,
+        secret: secret,
+    }
+    await users.set(userId, newUser)
+    clients.set(client.id, client)
+    userClientIds.set(userId, [client.id])
+    console.info('New User registered:', userId)
+    callback()
     _execOnUserLogin(userId)
 }
