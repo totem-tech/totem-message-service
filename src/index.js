@@ -65,20 +65,29 @@ const handlers = [
     // Project
     { name: 'project', handler: handleProject },
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
-].filter(x => isFn(x.handler)) // ignore if handler is not a function
+]
+    .filter(x => isFn(x.handler)) // ignore if handler is not a function
+    .map(x => ({
+        ...x,
+        handler: async function interceptHandler() {
+            const args = arguments
+            const client = this
+            const { name, handler } = x
+            try {
+                await handler.apply(client, args)
+            } catch (err) {
+                const callback = args[args.length - 1]
+                isFn(callback) && callback(texts.runtimeError)
+                console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
+                // ToDo: use an error reporting service or bot for automatic error alerts
+            }
+        }
+    }))
 
-// intercepts all event callbacks and attaches a try-catch to catch any uncaught errors
-const interceptHandlerCb = (client, { handler, name }) => async function () {
-    const args = arguments
-    try {
-        await handler.apply(client, args)
-    } catch (err) {
-        const callback = args[args.length - 1]
-        isFn(callback) && callback(texts.runtimeError)
-        console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
-        // ToDo: use an error reporting service or bot for automatic error alerts
-    }
-}
+// Setup websocket event handlers
+socket.on('connection', client => handlers.forEach(x => client.on(x.name, x.handler)))
+// Start listening
+server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
 
 // attempt to establish a connection to database and exit application if fails
 try {
@@ -88,15 +97,7 @@ try {
     console.log('CouchDB: connection failed. Error:\n', e)
     process.exit(1)
 }
-if (!!migrateFiles) {
-    setTimeout(() => migrate(migrateFiles), 1000)
-}
-// Setup websocket event handlers
-socket.on('connection', client =>
-    handlers.forEach(x => client.on(x.name, interceptHandlerCb(client, x)))
-)
-// Start listening
-server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
+if (!!migrateFiles) setTimeout(() => migrate(migrateFiles), 1000)
 
 
 // Migrate JSON file storage to CouchDB.
