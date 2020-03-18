@@ -39,7 +39,7 @@ export async function handleProject(hash, project, create, callback) {
     if (!user) return callback(messages.loginRequired)
     // makes sure only the project owner can execute the update operation
     const { userId } = existingProject || {}
-    if (!create && isDefined(userId) && user.id !== userId) return (messages.accessDenied)
+    if (!create && isDefined(userId) && user.id !== userId) return callback(messages.accessDenied)
 
     // check if project contains all the required properties
     const invalid = !hash || !project || requiredKeys.reduce((invalid, key) => invalid || !project[key], false)
@@ -49,12 +49,11 @@ export async function handleProject(hash, project, create, callback) {
     project = { ...existingProject, ...objClean(project, validKeys) }
     project.tsCreated = project.createdAt || (new Date()).toISOString()
     project.tsUpdated = (new Date()).toISOString()
-    project.userId = create ? user.id : project.userId
+    project.userId = project.userId || user.id
 
     // Add/update project
-    console.log('saving project')
     await projects.set(hash, project)
-    callback(null)
+    callback(null, project)
     console.log(`Activity ${create ? 'created' : 'updated'}: ${hash} `)
 }
 
