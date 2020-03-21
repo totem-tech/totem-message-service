@@ -108,7 +108,19 @@ async function migrate(fileNames) {
         // only include json file names
         .filter(x => x.endsWith('.json'))
         .map(x => x.trim())
-    if (filesAr.length === 0) return console.log('')
+    // list of files:databases where value is an array rather than an object
+    const arrKeys = {
+        'faucet-requests': 'requests', // store the value array under the property called 'requests'
+        'translations': 'texts', // store the value array under the property called 'texts'
+    }
+    // databases where update of documents is allowed
+    const allowUpdates = [
+        'translations', // for easier access to updating translated texts
+    ]
+
+    // nothing to migrate 
+    if (filesAr.length === 0) return
+
     console.log('Migrating JSON files:', filesAr)
     for (let i = 0; i < filesAr.length; i++) {
         const file = filesAr[i]
@@ -121,23 +133,22 @@ async function migrate(fileNames) {
             console.log('\nIgnoring empty file:', file)
             continue
         }
-        console.log(`\nMigrating ${file}: ${data.size} entries`)
-        const db = new CouchDBStorage(getConnection(), dbName.replace(' ', '_'))
-        const arrKeys = {
-            'faucet-requests': 'requests',
-            'translations': 'texts',
-        }
-        if (!!arrKeys[dbName]) {
-            // wrap array value in an object as required by couchdb
-            Array.from(data).forEach(([id, arr]) => {
-                if (!isArr(arr)) return
-                const value = {}
-                value[arrKeys[dbName] || 'array'] = arr
-                data.set(id, value)
-            })
-        }
 
-        const result = await db.setAll(data, true)
+        console.log(`\nMigrating ${file}: ${data.size} entries`)
+        const db = new CouchDBStorage(
+            getConnection(), // get the global connection created above
+            dbName.replace(' ', '_'),
+        )
+
+        // wrap array value in an object as required by couchdb
+        if (!!arrKeys[dbName]) Array.from(data).forEach(([id, arr]) => {
+            if (!isArr(arr)) return
+            const value = {}
+            value[arrKeys[dbName] || 'array'] = arr
+            data.set(id, value)
+        })
+
+        const result = await db.setAll(data, allowUpdates.includes(dbName))
         let count = 0
         result.forEach(({ ok, id }) => {
             if (!ok) retrun
