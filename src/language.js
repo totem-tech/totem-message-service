@@ -24,14 +24,15 @@ export const handleErrorMessages = callback => isFn(callback) && callback(null, 
 // @callback    function: arguments =>
 //              @error  string/null: error message, if any. Null indicates no error.
 //              @list   array/null: list of translated texts. Null indicates no update required.
-export const handleTranslations = async (langCode, hash, callback) => {
+export async function handleTranslations(langCode, hash, callback) {
     if (!isFn(callback)) return
+
     if (!isStr(langCode)) return callback(texts.invalidLang)
-    const { texts } = (await translations.get(langCode.toUpperCase())) || {}
-    if (!texts) return callback(texts.invalidLang)
+    const { texts: translatedTexts } = (await translations.get(langCode.toUpperCase())) || {}
+    if (!translatedTexts) return callback(texts.invalidLang)
     // client hash the latest version of translations. return empty null to indicate no update required
     if (hash && hashes.get(langCode) === hash) return callback(null, null)
-    callback(null, texts)
+    callback(null, translatedTexts)
 }
 
 export function setTexts(texts = {}) {
