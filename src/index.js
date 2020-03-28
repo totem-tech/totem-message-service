@@ -25,7 +25,6 @@ import { isFn, isArr } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 
-
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
@@ -55,8 +54,8 @@ const handlers = [
     // Faucet request
     { name: 'faucet-request', handler: handleFaucetRequest },
 
-    // Language
     { name: 'translations', handler: handleTranslations },
+    // Language
     { name: 'error-messages', handler: handleErrorMessages },
 
     // Notification
