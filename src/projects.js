@@ -64,7 +64,7 @@ export async function handleProject(hash, project, create, callback) {
     const valid = await authorizeData(hash, project)
     if (!valid) return callback(messages.bonsaiAuthFailed)
 
-    project.tsCreated = existingProject.createdAt || (new Date()).toISOString()
+    project.tsCreated = (existingProject || {}).createdAt || (new Date()).toISOString()
     project.tsUpdated = new Date().toISOString()
 
     // store user information
