@@ -14,7 +14,7 @@ sudo apt-get install libcap2-bin
 sudo setcap cap_net_bind_service=+ep `readlink -f \`which node\``
 ```
 
-# Start server with CouchDB:
+# Start server with CouchDB in a Docker container:
 
 1. Install docker (follow instructions on docker website)
 
