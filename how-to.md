@@ -5,8 +5,21 @@ Creating a self-signed Certificate
 ```shell
     cd sslcert
 
-    # Use 'localhost' for the 'Common name'
-    openssl req -new -x509 -sha256 -nodes -newkey rsa:4096 -days 365 -keyout privkey.pem -out fullchain.pem
+    # Use 'localhost' for the 'Common name' CN and for DNS 
+    openssl req \
+    -new \
+    -x509 \
+    -sha256 \
+    -nodes \
+    -newkey rsa:4096 \
+    -days 365 \
+    -subj /CN=localhost \
+    -reqexts SAN \
+    -extensions SAN \
+    -config <(cat /etc/ssl/openssl.cnf \
+        <(printf '[SAN]\nsubjectAltName=DNS:localhost,IP:127.0.0.1')) \
+    -keyout privkey.pem \
+    -out fullchain.pem
 
     # Add the cert to your keychain
     open fullchain.pem
