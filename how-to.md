@@ -62,6 +62,23 @@ docker pull couchdb:3.0.0
 
 - For **Mac OS** users: change `--net=host` with `-p 5984:5984` if you get an error because of host networking.
 
+Upon initial startup if using a single node, you must silence warnings from the log, by creating a couple of dummy databases:
+
+```shell
+    # check to see if your database is running
+    
+    curl localhost:5984
+
+    # add the following databases changing to your admin name and password.
+    
+    curl -X PUT http://admin:password@localhost:5984/_users
+    
+    curl -X PUT http://admin:password@localhost:5984/_replicator
+    
+    curl -X PUT http://admin:password@localhost:5984/_global_changes
+
+```
+
 4. Create/update `start.sh` to include two more environment variables (see `example-start.sh` for a full list of accepted/required variables):
 
     a. CouchDB URL and credentials (as set in the step 3):
