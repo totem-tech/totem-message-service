@@ -15,18 +15,19 @@ let nodes = [
 // connect to blockchain
 //
 // Retuns object
-export const getConnection = async () => {
+export const getConnection = async (nodeUrl = nodes[0]) => {
     if (connection.api && connection.api._isConnected.value) return connection
     if (connectionPromsie) {
         await connectionPromsie
         return connection
     }
-    const nodeUrl = nodes[0]
+    
     console.log('Polkadot: connecting to', nodeUrl)
     connectionPromsie = connect(nodeUrl, types, true)
-    const { api, provider } = await connectionPromsie
+    const { api, keyring, provider } = await connectionPromsie
     console.log('Polkadot: connected')
     connection.api = api
+    connection.keyring = keyring
     connection.provider = provider
     connectionPromsie = null
     return connection
