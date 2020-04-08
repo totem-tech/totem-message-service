@@ -12,6 +12,7 @@ mongodb
 # scripts
 start.sh
 ui-start.sh
+tools/importCompanies.sh
 
 # bundled JS file
 docs/bundle.js
