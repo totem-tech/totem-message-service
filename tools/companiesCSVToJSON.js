@@ -1,22 +1,23 @@
 import csv from 'csvtojson'
-import { objClean, deferred } from '../src/utils/utils'
+import uuid from 'uuid'
+import { objClean, deferred, generateHash, textCapitalize } from '../src/utils/utils'
 import readline from 'readline'
 import fs from 'fs'
-import CouchDBStorage from '../src/CouchDBStorage'
-import { keyring } from '../src/utils/polkadotHelper'
+import CouchDBStorage, { getConnection as getDBConnection } from '../src/CouchDBStorage'
+import { keyring as kr } from '../src/utils/polkadotHelper'
 import { getConnection } from '../src/blockchain'
+import { handleCountries } from '../src/countries'
+import DataStorage from '../../totem-ui/src/utils/DataStorage'
 
-const couchdb = new CouchDBStorage(process.env.CouchDB_URL, process.env.DBName)
+const url = process.env.CouchDB_URL
+const dbConnection = getDBConnection(url)
+const couchdb = new CouchDBStorage(dbConnection, process.env.DBName)
 const filepath = process.env.filepath
-const startingNumber = eval(process.env.startingNumber) || 1
-const seed = process.env.seed || '//Alice'
+const startingNumber = eval(process.env.startingNumber) || 0
+let seed = process.env.seed || '//Alice'
+seed = seed + (seed.endsWith('/') ? '' : '/')
 const bulkSize = eval(process.env.CouchDB_BulkSize) || 100 // group items and send them in bulk
 let pendingItems = new Map()
-const emptyKeys = [
-    'salesTaxCode',
-    'countryCode',
-    'partnerAddress',
-]
 const validKeys = [
     'name',
     'registrationNumber',
@@ -29,81 +30,152 @@ const validKeys = [
     'accounts',
     'limitedPartnershipsNumGenPartners',
     'limitedPartnershipsNumLimPartners',
-    'URI',
-    ...emptyKeys
+    // 
+    'salesTaxCode',
+    'countryCode',
+    'partnerAddress',
 ]
-// override columnname
-// '___' implies unused column and also replaced '.' to reduce processing time to generate an object
+// override column names // ignore fields by setting to empty string
 const columnNames = [
     'name', // companyName
     'registrationNumber',// companyNumber
-    'regAddress.CareOf',
-    'regAddress.POBox',
-    'regAddress.AddressLine1',
-    'regAddress.AddressLine2',
-    'regAddress.PostTown',
-    'regAddress.County',
-    'regAddress.Country',
-    'regAddress.PostCode',
+    "regAddress.careOf",
+    "regAddress.POBox",
+    "regAddress.addressLine1",
+    "regAddress.addressLine2",
+    "regAddress.postTown",
+    "regAddress.county",
+    "regAddress.country",
+    "regAddress.postCode",
     'companyCategory',
     'companyStatus',
     'countryOfOrigin',
     'dissolutionDate',
     'incorporationDate',
-    'accounts.AccountRefDay',
-    'accounts.AccountRefMonth',
-    'accounts___NextDueDate',
-    'accounts____LastMadeUpDate',
-    'accounts____AccountCategory',
-    'returns.NextDueDate',
-    'returns.LastMadeUpDate',
-    'mortgages___NumMortCharges',
-    'mortgages___NumMortOutstanding',
-    'mortgages___NumMortPartSatisfied',
-    'mortgages__NumMortSatisfied',
-    'SICCode___SicText_1',
-    'SICCode___SicText_2',
-    'SICCode___SicText_3',
-    'SICCode___SicText_4',
-    'limitedPartnerships.NumGenPartners',
-    'limitedPartnerships.NumLimPartners',
-    'URI',
-    'previousName_1___CONDATE',
-    'previousName_1___CompanyName',
-    'previousName_2___CONDATE',
-    'previousName_2___CompanyName',
-    'previousName_3___CONDATE',
-    'previousName_3___CompanyName',
-    'previousName_4___CONDATE',
-    'previousName_4___CompanyName',
-    'previousName_5___CONDATE',
-    'previousName_5___CompanyName',
-    'previousName_6___CONDATE',
-    'previousName_6___CompanyName',
-    'previousName_7___CONDATE',
-    'previousName_7___CompanyName',
-    'previousName_8___CONDATE',
-    'previousName_8___CompanyName',
-    'previousName_9___CONDATE',
-    'previousName_9___CompanyName',
-    'previousName_10___CONDATE',
-    'previousName_10___CompanyName',
-    'confStmtNextDueDate',
-    'confStmtLastMadeUpDate'
+    'accounts.accountRefDay',
+    'accounts.accountRefMonth',
+    '', //'accounts.NextDueDate',
+    '', //'accounts.LastMadeUpDate',
+    '', //'accounts.AccountCategory',
+    '', //'returns.NextDueDate',
+    '', //'returns.LastMadeUpDate',
+    '', //'mortgages.NumMortCharges',
+    '', //'mortgages.NumMortOutstanding',
+    '', //'mortgages.NumMortPartSatisfied',
+    '', //'mortgages.NumMortSatisfied',
+    '', //'SICCode.SicText_1',
+    '', //'SICCode.SicText_2',
+    '', //'SICCode.SicText_3',
+    '', //'SICCode.SicText_4',
+    'limitedPartnerships.numGenPartners',
+    'limitedPartnerships.numLimPartners',
+    // 'URI',
+    // 'previousName_1.CONDATE',
+    // 'previousName_1.CompanyName',
+    // 'previousName_2.CONDATE',
+    // 'previousName_2.CompanyName',
+    // 'previousName_3.CONDATE',
+    // 'previousName_3.CompanyName',
+    // 'previousName_4.CONDATE',
+    // 'previousName_4.CompanyName',
+    // 'previousName_5.CONDATE',
+    // 'previousName_5.CompanyName',
+    // 'previousName_6.CONDATE',
+    // 'previousName_6.CompanyName',
+    // 'previousName_7.CONDATE',
+    // 'previousName_7.CompanyName',
+    // 'previousName_8.CONDATE',
+    // 'previousName_8.CompanyName',
+    // 'previousName_9.CONDATE',
+    // 'previousName_9.CompanyName',
+    // 'previousName_10.CONDATE',
+    // 'previousName_10.CompanyName',
+    // 'confStmtNextDueDate',
+    // 'confStmtLastMadeUpDate'
   ]
+const countryCodeExceptions = {
+    'United Kingdom': 'GB',
+    'Great Britain': 'GB',
+    'UK': 'GB',
+    'England And Wales': 'GB',
+    'England & Wales': 'GB',
+    'England': 'GB',
+    'Channel Islands': 'GB',
+    'Northern Ireland': 'GB',
+    'Wales': 'GB',
+
+    'West Germany': 'DE',
+    'United States': 'US',
+    'Virgin Islands': 'VI', // US Virgin Islands
+    'Virgin Is-us': 'VI',
+    'British Virgin Islands': 'VG',
+    'Virgin Islands, British': 'VG',
+    'Russia': 'RU',
+    'Ussr': 'RU', // Union of Soviet Socialist Republics
+    'South Korea': 'KR', // Korea (Republic of)
+    'Iran': 'IR',
+    'Tanzania': 'TZ',
+    'Ivory Coast': 'CI',    // => Côte d'Ivoire????? 
+    
+    'Irish Rep': 'IE', // Ireland
+    'Ireland Rep': 'IE',
+    'Republic Of Ireland': 'IE',
+    'Roi': 'IE', // ???? IRELAND???
+
+    'Yugoslavia': 'YU',       //Macedonia (the former Yugoslav Republic of)
+    'Holland': 'NL', // Netherland
+    
+    'Czechoslovakia': 'SK', // => Slovakia ??
+    'Slovak Republic': 'SK',
+    
+    'Turks & Caicos Islands': 'TC',
+    'St Kitts-nevis': 'KN',
+    'St Lucia': 'LCA',
+    'Venezuela': 'VE',
+    'Belarus': 'BY',
+    'Faroe Is': 'FO', // Faroe Islands
+    'Vietnam': 'VN', // Viet Nam !!!
+    'Moldova': 'MD',
+    'Georgia': 'GE',
+    'Angola': 'AO',
+    'Bosnia Herzegovina': 'BA',
+    'Turkey': 'TR',
+    'Tadjikistan': 'TJ', //Tajikistan 
+    'Kosovo': 'XK',
+    'Serbia And Montenegro': 'RS',
+    'Panama': 'PA',
+    'Brunei': 'BN',
+    'Republic Of Nigeria': 'NG',
+    'South-west Africa': 'ZA', // South Africa
+    'St Vincent': 'VC',
+    'Yemen Arab Republic': 'YE',
+
+    // No longer a country since 2010
+    // separated into Curaçao (CW), Sint Maarten (SX) and combined Bonaire, Sint Eustatius & Saba (BQ)
+    'Netherlands Antilles': 'NL', // Which one should be used???
+}
+const getCountryCode = (countryStorage, name) => {
+    if (!name) return ''
+    if (countryCodeExceptions[name]) return countryCodeExceptions[name]
+    let country = countryStorage.find( { name }, true, false, true ) //code: name, code3: name, 
+    return country && country.code || ''
+}
 // save and clear pending items
-const saveNClear = (logtxt) => {
-	console.log(logtxt)
-	couchdb.setAll(pendingItems, true)
-	pendingItems = new Map()
+const saveNClear = async (logtxt) => {
+    console.log(logtxt)
+    const tmp = pendingItems
+    pendingItems = new Map()
+	await couchdb.setAll(tmp, true)
 }
 
 // save remaining items not save by addToBulkQueue
-const deferredSave = deferred(() => pendingItems.size > 0 && saveNClear('saving last items'), 1000)
+const deferredSave = deferred(() => pendingItems.size > 0 && saveNClear(
+    `${new Date().toISOString()} saving last ${pendingItems.size} items`
+), 3000)
 
-const addToBulkQueue = (id, value, lineNum) => {
+const addToBulkQueue = async (id, value, lineNum) => {
 	if (pendingItems.size >= bulkSize) {
-		saveNClear(`Saving items ${lineNum - bulkSize} to ${lineNum - 1}`)
+		await saveNClear(`Saving items ${lineNum - bulkSize} to ${lineNum - 1}`)
 	}
 	pendingItems.set(id, value)
 
@@ -111,46 +183,55 @@ const addToBulkQueue = (id, value, lineNum) => {
 	deferredSave()
 }
 
-
 ;(async function() {
 	if (!filepath) throw new Error('filepath required')
-	console.log({ filepath, seed })
+	console.log({ filepath })
 	console.time('companies')
+    // Connection is needed because of Polkadot's peculear behaviour.
+    // Keyring "sometimes" works without creating a connection other time throws error!
+    let countryStorage
+    const { api, keyring } = await getConnection()
+    api.disconnect()
+    // const keyring = kr.keyring
     let count = 0
     let firstLineIgnored = false
     let firstLine = columnNames.join()
     const logTimeEnd = deferred(()=> console.timeEnd('companies'), 3000)
-    // Connection is needed because of Polkadot's peculear behaviour.
-    // Keyring "sometimes" works without creating a connection other time throws error!
-    const { keyring } = await getConnection()
+    await handleCountries(null, (err, countries) => {
+        if (err) throw err
+        countryStorage = new DataStorage()
+        countryStorage.data = countries
+        console.log(`${countries.size} countries retrieved`)
+    })
 
     const readInterface = readline.createInterface({
         input: fs.createReadStream(filepath),
         // output: process.stdout,
         console: false
     })
-
     readInterface.on('line', async function(line) {
         if (!firstLineIgnored) {
-            // firstLine = line.split(',').map(x => {
-            //     x = x.trim().split('')
-            //     x[0] = x[0].toLocaleLowerCase()
-            //     return x.join('')
-            // })
-            // console.log({columnNames: firstLine})
             firstLineIgnored  = true
             return
         }
+        const index = startingNumber + count++
+        const iSeed = `${seed}totem/1/${index}`
         const str = `${firstLine}\n${line}`
-        const company = objClean((await csv().fromString(str))[0], validKeys)
-        const seedX = `${seed}${seed.endsWith('/') ? '' : '/'}1/${startingNumber + count}`
-        const {address} = keyring.addFromUri(seedX)
-        count++
-        addToBulkQueue(address, company, count) // save documents in bulk
-        // couchdb.set(address, company) // save each document independantly
-		console.log(count, address, JSON.stringify(company))
+        let company = objClean((await csv().fromString(str))[0], validKeys)
+        const postCode = company.regAddress.postCode
+        const countryOfOrigin = company.countryOfOrigin
+        const registrationNumber = company.registrationNumber
+        company = textCapitalize(company, true, true, true)
+        company.countryCode = getCountryCode(countryStorage, company.countryOfOrigin.trim())
+        company.countryOfOrigin = countryOfOrigin
+        company.regAddress.postCode = postCode.toUpperCase()
+        company.registrationNumber = registrationNumber
+        const { address } = keyring.addFromUri(iSeed)
+        company.identity = address
+        
+        const hash = generateHash(JSON.stringify(company) + index + uuid.v1())
+        console.log(index, hash, address)
+        addToBulkQueue(hash, company, count) // save documents in bulk
 		logTimeEnd()
     })
 })()
-
-const cleanUpObj = (obj, keys) => Object.keys(obj).forEach(key => !keys.includes(key) && delete obj[key])
