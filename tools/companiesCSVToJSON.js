@@ -1,6 +1,6 @@
 import csv from 'csvtojson'
 import uuid from 'uuid'
-import { objClean, deferred, generateHash, textCapitalize } from '../src/utils/utils'
+import { objClean, deferred, generateHash, textCapitalize, arrSort } from '../src/utils/utils'
 import readline from 'readline'
 import fs from 'fs'
 import CouchDBStorage, { getConnection as getDBConnection } from '../src/CouchDBStorage'
@@ -12,12 +12,14 @@ import DataStorage from '../../totem-ui/src/utils/DataStorage'
 const url = process.env.CouchDB_URL
 const dbConnection = getDBConnection(url)
 const couchdb = new CouchDBStorage(dbConnection, process.env.DBName)
+const indexDB = new CouchDBStorage(dbConnection, 'company-indexes')
 const filepath = process.env.filepath
 const startingNumber = eval(process.env.startingNumber) || 0
 let seed = process.env.seed || '//Alice'
 seed = seed + (seed.endsWith('/') ? '' : '/')
-const bulkSize = eval(process.env.CouchDB_BulkSize) || 100 // group items and send them in bulk
+const bulkSize = eval(process.env.CouchDB_BulkSize) || 5 // group items and send them in bulk
 let pendingItems = new Map()
+let pendingIndexes = new Map()
 const validKeys = [
     'name',
     'registrationNumber',
@@ -28,13 +30,11 @@ const validKeys = [
     'dissolutionDate',
     'incorporationDate',
     'accounts',
-    'limitedPartnershipsNumGenPartners',
-    'limitedPartnershipsNumLimPartners',
-    // 
+    'limitedPartnerships',
     'salesTaxCode',
     'countryCode',
     'partnerAddress',
-]
+].sort()
 // override column names // ignore fields by setting to empty string
 const columnNames = [
     'name', // companyName
@@ -164,8 +164,11 @@ const getCountryCode = (countryStorage, name) => {
 const saveNClear = async (logtxt) => {
     console.log(logtxt)
     const tmp = pendingItems
+    const tmp2 = pendingIndexes
     pendingItems = new Map()
+    pendingIndexes = new Map()
 	await couchdb.setAll(tmp, true)
+	await indexDB.setAll(tmp2, true)
 }
 
 // save remaining items not save by addToBulkQueue
@@ -173,11 +176,12 @@ const deferredSave = deferred(() => pendingItems.size > 0 && saveNClear(
     `${new Date().toISOString()} saving last ${pendingItems.size} items`
 ), 3000)
 
-const addToBulkQueue = async (id, value, lineNum) => {
+const addToBulkQueue = async (id, value, index) => {
 	if (pendingItems.size >= bulkSize) {
-		await saveNClear(`Saving items ${lineNum - bulkSize} to ${lineNum - 1}`)
+		await saveNClear(`Saving items ${index - bulkSize} to ${index - 1}`)
 	}
-	pendingItems.set(id, value)
+    pendingItems.set(id, value)
+    pendingIndexes.set(id, index)
 
 	// last items or if total number of items is less than bulksize
 	deferredSave()
@@ -185,7 +189,9 @@ const addToBulkQueue = async (id, value, lineNum) => {
 
 ;(async function() {
 	if (!filepath) throw new Error('filepath required')
-	console.log({ filepath })
+    await couchdb.getDB() // create db if not exists
+    await indexDB.getDB() // create db if not exists
+	console.log({ filepath, startingNumber })
 	console.time('companies')
     // Connection is needed because of Polkadot's peculear behaviour.
     // Keyring "sometimes" works without creating a connection other time throws error!
@@ -193,9 +199,10 @@ const addToBulkQueue = async (id, value, lineNum) => {
     const { api, keyring } = await getConnection()
     api.disconnect()
     // const keyring = kr.keyring
-    let count = 0
+    let count = startingNumber
     let firstLineIgnored = false
     let firstLine = columnNames.join()
+    let stop = false
     const logTimeEnd = deferred(()=> console.timeEnd('companies'), 3000)
     await handleCountries(null, (err, countries) => {
         if (err) throw err
@@ -210,11 +217,11 @@ const addToBulkQueue = async (id, value, lineNum) => {
         console: false
     })
     readInterface.on('line', async function(line) {
-        if (!firstLineIgnored) {
+        if (!firstLineIgnored || stop) {
             firstLineIgnored  = true
             return
         }
-        const index = startingNumber + count++
+        const index = count++
         const iSeed = `${seed}totem/1/${index}`
         const str = `${firstLine}\n${line}`
         let company = objClean((await csv().fromString(str))[0], validKeys)
@@ -229,9 +236,14 @@ const addToBulkQueue = async (id, value, lineNum) => {
         const { address } = keyring.addFromUri(iSeed)
         company.identity = address
         
-        const hash = generateHash(JSON.stringify(company) + index + uuid.v1())
+        const hash = generateHash({...company, index, uuid: uuid.v1()})
         console.log(index, hash, address)
-        addToBulkQueue(hash, company, count) // save documents in bulk
-		logTimeEnd()
+        try {
+            await addToBulkQueue(hash, company, index) // save documents in bulk
+        } catch (e) {
+            stop = true
+            throw e
+        }
+        logTimeEnd()
     })
 })()
