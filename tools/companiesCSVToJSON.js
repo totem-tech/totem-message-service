@@ -12,14 +12,14 @@ import DataStorage from '../../totem-ui/src/utils/DataStorage'
 const url = process.env.CouchDB_URL
 const dbConnection = getDBConnection(url)
 const couchdb = new CouchDBStorage(dbConnection, process.env.DBName)
-const indexDB = new CouchDBStorage(dbConnection, 'company-indexes')
+// const indexDB = new CouchDBStorage(dbConnection, 'company-indexes')
 const filepath = process.env.filepath
 const startingNumber = eval(process.env.startingNumber) || 0
 let seed = process.env.seed || '//Alice'
 seed = seed + (seed.endsWith('/') ? '' : '/')
 const bulkSize = eval(process.env.CouchDB_BulkSize) || 5 // group items and send them in bulk
 let pendingItems = new Map()
-let pendingIndexes = new Map()
+// let pendingIndexes = new Map()
 const validKeys = [
     'name',
     'registrationNumber',
@@ -33,7 +33,8 @@ const validKeys = [
     'limitedPartnerships',
     'salesTaxCode',
     'countryCode',
-    'partnerAddress',
+    'identity',
+    'parentIdentity',
 ].sort()
 // override column names // ignore fields by setting to empty string
 const columnNames = [
@@ -164,11 +165,11 @@ const getCountryCode = (countryStorage, name) => {
 const saveNClear = async (logtxt) => {
     console.log(logtxt)
     const tmp = pendingItems
-    const tmp2 = pendingIndexes
+    // const tmp2 = pendingIndexes
     pendingItems = new Map()
-    pendingIndexes = new Map()
+    // pendingIndexes = new Map()
 	await couchdb.setAll(tmp, true)
-	await indexDB.setAll(tmp2, true)
+	// await indexDB.setAll(tmp2, true)
 }
 
 // save remaining items not save by addToBulkQueue
@@ -181,7 +182,7 @@ const addToBulkQueue = async (id, value, index) => {
 		await saveNClear(`Saving items ${index - bulkSize} to ${index - 1}`)
 	}
     pendingItems.set(id, value)
-    pendingIndexes.set(id, index)
+    // pendingIndexes.set(id, index)
 
 	// last items or if total number of items is less than bulksize
 	deferredSave()
@@ -190,7 +191,7 @@ const addToBulkQueue = async (id, value, index) => {
 ;(async function() {
 	if (!filepath) throw new Error('filepath required')
     await couchdb.getDB() // create db if not exists
-    await indexDB.getDB() // create db if not exists
+    // await indexDB.getDB() // create db if not exists
 	console.log({ filepath, startingNumber })
 	console.time('companies')
     // Connection is needed because of Polkadot's peculear behaviour.
@@ -203,7 +204,7 @@ const addToBulkQueue = async (id, value, index) => {
     let firstLineIgnored = false
     let firstLine = columnNames.join()
     let stop = false
-    const logTimeEnd = deferred(()=> console.timeEnd('companies'), 3000)
+    const logTimeEnd = deferred(()=> console.timeEnd('companies'), 5000)
     await handleCountries(null, (err, countries) => {
         if (err) throw err
         countryStorage = new DataStorage()
@@ -237,7 +238,7 @@ const addToBulkQueue = async (id, value, index) => {
         company.identity = address
         
         const hash = generateHash({...company, index, uuid: uuid.v1()})
-        console.log(index, hash, address)
+        console.log(JSON.stringify([index, { address, hash }]))
         try {
             await addToBulkQueue(hash, company, index) // save documents in bulk
         } catch (e) {

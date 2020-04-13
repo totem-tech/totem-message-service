@@ -1,5 +1,5 @@
 import CouchDBStorage from './CouchDBStorage'
-import { isFn, isObj, hasValue, objClean, isStr } from './utils/utils'
+import { mapJoin, isFn, isHash, isObj, hasValue, objClean } from './utils/utils'
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'
 import { setTexts } from './language'
@@ -8,7 +8,8 @@ import { getUserByClientId } from './users'
 const companies = new CouchDBStorage(null, 'companies') // disable caching
 // Must-have properties
 const requiredKeys = [
-    'country',              // 2 letter country code
+    'countryCode',          // 2 letter country code
+    'identity',
     'name',                 // name of the company
     'registrationNumber',   // company registration number for the above country
 ]
@@ -22,53 +23,60 @@ const validKeys = [
 const RESULT_LIMIT = 100
 const messages = setTexts({
     exists: 'Company already exists',
+    hashExists: 'Company hash already exists',
     identityAlreadyAssociated: 'Identity is already associated with a company',
     invalidKeys: 'Missing one or more of the following properties',
     invalidCountry: 'Invalid country code supplied',
+    invalidHash: 'Invalid hash supplied',
     invalidIdentity: 'Invalid identity supplied',
     invalidQuery: 'Invalid query',
     loginRequired: 'You must be logged to to perform this action',
     notFound: 'Company not found',
-    requiredSearchKeys: 'Please supply one or more of the following keys',
+    requiredSearchKeys: 'Please supply one or more of the following fields',
 })
 
-// Create company or get company by @identity
+// Create company or get company by @hash
 //
 // Params:
-// @identity    string: company identity/wallet address
+// @hash        string: unique ID for company
 // @company     object: if non-object supplied will return existing company, if available
 // @callback    function: callback function
-export async function handleCompany(identity, company, callback) {
+export async function handleCompany(hash, company, callback) {
     if (!isFn(callback)) return
     const client = this
     const user = await getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
+    const isValidHash = isHash(hash)
+    console.log({hash, isValidHash})
+    if (!isValidHash) return callback(messages.invalidHash)
 
-    if (!addressToStr(identity)) return callback(messages.invalidIdentity) || console.log({ identity: addressToStr(identity) })
     if (!isObj(company)) {
-        company = await companies.get(identity)
-        // ToDo: return company object on second parameter
-        return callback(!company ? messages.notFound : null, company)
+        company = isValidHash && await companies.get(hash)
+        const err = !company ? messages.notFound : null
+        return callback(err, company)
     }
+    if (await companies.get(hash)) return callback(messages.hashExists)
+
+    const { countryCode, identity, name, registrationNumber } = company
+    if (!addressToStr(identity)) return callback(messages.invalidIdentity)
 
     // Check if company with identity already exists
-    if (!!(await companies.get(identity))) return callback(messages.identityAlreadyAssociated)
+    if (!!(await companies.find({identity}, true, true, true))) 
+        return callback(messages.identityAlreadyAssociated)
 
-    const { country, name, registrationNumber } = company
     // make sure all the required keys are supplied
     const invalid = requiredKeys.reduce((invalid, key) => invalid || !hasValue(company[key]), false)
     if (invalid) return callback(`${messages.invalidKeys}: ${requiredKeys.join(', ')}`)
 
     // validate country code
-    if (!isCountryCode(country)) return callback(messages.invalidCountry)
+    if (!isCountryCode(countryCode)) return callback(messages.invalidCountry)
 
-    // check if company with combination of name, registration number and country already exists
-    // PS: same company name can have different registration number in different countries
-    const existing = await companies.find({ name, registrationNumber, country }, true, true, true)
+    // check if company with combination of name, registrationNumber and country code already exists
+    const existing = await companies.find({ name, countryCode, registrationNumber }, true, true, true)
     if (existing) return callback(messages.exists)
 
     company.addedBy = user.id
-    await companies.set(identity, objClean(company, validKeys))
+    await companies.set(hash, objClean(company, validKeys))
     console.log('Company created: ', JSON.stringify(company))
     callback()
 }
@@ -83,25 +91,39 @@ export async function handleCompany(identity, company, callback) {
 // @matchExact  boolean: whether to fulltext search or partial search. Only applies to (2) & (3) above.
 // @ignoreCase  boolean: only applies to (2) & (3) above 
 // @callback    function: callback function.
-export const handleCompanySearch = async (query, matchExact, matchAll, ignoreCase, callback) => {
+export const handleCompanySearch = async (query, findIdentity = false, callback) => {
     if (!isFn(callback)) return
-    let keyValues = {}
-    if (isStr(query)) {
-        // string supplied
-        const company = await companies.get(query)
-        // query string is a valid address, return company if exists otherwise return error message
-        if (company) return callback(null, new Map([[query, company]]))
-        // convert string to object for search by all keys
-        keyValues = validKeys.reduce((kv, key) => {
-            kv[key] = query
-            return kv
-        }, {})
-    } else {
-        if (!isObj(query)) return callback(messages.invalidQuery)
-        keyValues = objClean(query, validKeys)
-        const hasValidkeys = Object.keys(keyValues).length > 0
-        if (hasValidkeys) return callback(`${messages.requiredSearchKeys}: ${validKeys.join()}`)
+    if (isHash(query)) {
+        // valid hash supplied
+        const company =  await companies.get(query)
+        const err = !company ? messages.notFound : null
+        return callback(err, !err && new Map([[query, company]]))
     }
-    const result = await companies.search(keyValues, matchExact, matchAll, ignoreCase, RESULT_LIMIT)
-    callback(null, result)
+
+    // sequentialy search until one or more results found
+    const searchSeq = async (selectors = [], combine) => {
+        let result = new Map()
+        for (let i = 0; i < selectors.length; i++) {
+            if (result.size > 0 && !combine) return result
+            const selector = selectors[i]
+            result = mapJoin(result, await companies.search(selector, true, true, false, RESULT_LIMIT))
+        }
+        return result
+    }
+
+    // search by identity or parentIdentity
+    if (addressToStr(query)) {
+        // valid identity supplied
+        callback(null, await searchSeq([
+            { identity: query },
+            // if no result found matching identity, search for parentIdentity
+            !findIdentity && { parentIdentity: query },
+        ].filter(Boolean), true))
+    }
+
+    return callback(null, await searchSeq([
+        // { registrationNumber: query }, // need to create index first
+        { salesTaxCode:  query },
+        { name: { $gt: query } },
+    ]))
 }
