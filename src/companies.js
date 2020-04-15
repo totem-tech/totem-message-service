@@ -122,7 +122,7 @@ export const handleCompanySearch = async (query, findIdentity = false, callback)
     }
 
     return callback(null, await searchSeq([
-        // { registrationNumber: query }, // need to create index first
+        { registrationNumber: query },
         { salesTaxCode:  query },
         { name: { $gt: query } },
     ]))
