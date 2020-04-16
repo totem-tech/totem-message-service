@@ -110,13 +110,12 @@ const _notifyUser = async (userId) => setTimeout(async () => {
                 let { notificationIds: ids } = (await userNotificationIds.get(userId)) || {}
                 ids = ids || []
                 ids.splice(ids.indexOf(receiverId), 1)
-                console.log({onReceivedIds: ids})
                 if (ids.length > 0) return await userNotificationIds.set(userId, { notificationIds: ids })
                 await userNotificationIds.delete(userId)
             }])
         })
     } catch (err) {
-        console.log('Error sending notification')
+        console.log('Error sending notification: ', err)
     }
 }, 500) // minimum 150 ms delay required, otherwise client UI might not receive it on time to consume the event
 
