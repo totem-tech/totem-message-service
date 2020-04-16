@@ -109,7 +109,8 @@ const _notifyUser = async (userId) => setTimeout(async () => {
             emitToUsers([userId], EVENT_NAME, [receiverId, from, type, childType, message, data, tsCreated, async function onReceived() {
                 let { notificationIds: ids } = (await userNotificationIds.get(userId)) || {}
                 ids = ids || []
-                ids = ids.splice(ids.indexOf(receiverId), 1)
+                ids.splice(ids.indexOf(receiverId), 1)
+                console.log({onReceivedIds: ids})
                 if (ids.length > 0) return await userNotificationIds.set(userId, { notificationIds: ids })
                 await userNotificationIds.delete(userId)
             }])
@@ -119,7 +120,7 @@ const _notifyUser = async (userId) => setTimeout(async () => {
     }
 }, 500) // minimum 150 ms delay required, otherwise client UI might not receive it on time to consume the event
 
-// Check and notify user when on login
+// Check and notify user on login
 onUserLogin(_notifyUser)
 
 // handleNotify deals with notification requests
