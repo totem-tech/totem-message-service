@@ -48,12 +48,12 @@ docker pull couchdb:3.0.0
 ```shell
     docker run \
     --net=host \
-    -d --name totem-couchdb \
+    -dit \
+    --name totem-couchdb \
     -e COUCHDB_USER=admin \
     -e COUCHDB_PASSWORD=123456 \
     -v /home/couchdb/data:/opt/couchdb/data \
     couchdb:3.0.0
-
 ```
 
 - Change username and use a more secure password
@@ -61,6 +61,8 @@ docker pull couchdb:3.0.0
 - Change `/home/couchdb/data` with the location of the CouchDB storage directory so that data remains persistent regardless of the docker container.Make sure CouchDB has read-write permission.
 
 - For **Mac OS** users: change `--net=host` with `-p 5984:5984` if you get an error because of host networking.
+
+- To auto re/start the CouchDB container, read: https://docs.docker.com/config/containers/start-containers-automatically/. TLDR: add flag `--restart always`
 
 Upon initial startup if using a single node, you must silence warnings from the log, by creating a couple of dummy databases:
 
