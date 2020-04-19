@@ -7,10 +7,12 @@ yarn-error.log
 server/data
 server/local-storage
 data
+mongodb
 
 # scripts
 start.sh
 ui-start.sh
+tools/importCompanies.sh
 
 # bundled JS file
 docs/bundle.js

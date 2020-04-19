@@ -1,9 +1,10 @@
-import DataStorage from './utils/DataStorage'
+import CouchDBStorage from './CouchDBStorage'
 import { isArr, isDefined, isFn, isObj, objClean } from './utils/utils'
+import { authorizeData } from './blockchain'
 import { setTexts } from './language'
 import { getUserByClientId } from './users'
 
-const projects = new DataStorage('projects.json', true)
+const projects = new CouchDBStorage(null, 'projects')
 // Must-have properties
 const requiredKeys = ['name', 'ownerAddress', 'description']
 // All the acceptable properties
@@ -13,6 +14,7 @@ const descMaxLen = 160
 const messages = setTexts({
     accessDenied: 'Access denied',
     arrayRequired: 'Array required',
+    bonsaiAuthFailed: 'BONSAI authentication failed',
     exists: 'Activity already exists. Please use a different combination of owner address, name and description.',
     invalidDescMaxLen: `Description must not exceed ${descMaxLen} characters`,
     loginRequired: 'You must be logged in to perform this action',
@@ -20,14 +22,22 @@ const messages = setTexts({
     projectNotFound: 'Activity not found',
 })
 
-// Create/get/update project
-export function handleProject(hash, project, create, callback) {
+// Create/get/update project. 
+// To get a project only `@hash` and `@callback` are required.
+// Otherwise, all properties are required.
+//
+// Params:
+// @hash        string: project hash (AKA ID)
+// @project     object: an object including all project properties.
+//                  See `validKeys` and `requiredKeys` variables above for a list of properties that are accepted.
+// @token       string: BONSAI token to authorize that data is valid and approved by the project owner's identity only
+// @create      bool: whether to create or update the project.
+//                  If truthy and a project already exists, will return an error.
+export async function handleProject(hash, project, create, callback) {
     const client = this
     if (!isFn(callback)) return;
-    const existingProject = projects.get(hash)
-    if (create && !!existingProject) {
-        return callback(messages.exists)
-    }
+    const existingProject = await projects.get(hash)
+    if (create && !!existingProject) return callback(messages.exists)
 
     // return existing project
     if (!isObj(project)) return callback(
@@ -37,25 +47,37 @@ export function handleProject(hash, project, create, callback) {
 
     // check if user is logged in
     // getUserByClientId will return a user only when a user is logged in with client ID
-    const user = getUserByClientId(client.id)
+    const user = await getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
-    // makes sure only the project owner can execute the update operation
-    const { userId } = existingProject || {}
-    if (!create && isDefined(userId) && user.id !== userId) return (messages.accessDenied)
+    // // makes sure only the project owner can execute the update operation
+    // const { userId } = existingProject || {}
+    // if (!create && isDefined(userId) && user.id !== userId) return callback(messages.accessDenied)
 
     // check if project contains all the required properties
     const invalid = !hash || !project || requiredKeys.reduce((invalid, key) => invalid || !project[key], false)
     if (invalid) return callback(messages.projectInvalidKeys)
     if (project.description.length > descMaxLen) return callback(messages.invalidDescMaxLen)
     // exclude any unwanted data and only update the properties that's supplied
-    project = { ...existingProject, ...objClean(project, validKeys) }
-    project.tsCreated = project.createdAt || new Date()
-    project.tsUpdated = new Date()
-    project.userId = create ? user.id : project.userId
+    project = objClean({ ...existingProject, ...project }, validKeys)
+
+    // Authenticate using BONSAI
+    const valid = await authorizeData(hash, project)
+    if (!valid) return callback(messages.bonsaiAuthFailed)
+
+    project.tsCreated = (existingProject || {}).createdAt || (new Date()).toISOString()
+    project.tsUpdated = new Date().toISOString()
+
+    // store user information
+    if (create) {
+        // created by user ID
+        project.userId = user.id
+    } else {
+        project.updatedBy = user.id
+    }
 
     // Add/update project
-    projects.set(hash, project)
-    callback(null)
+    await projects.set(hash, project)
+    callback(null, project)
     console.log(`Activity ${create ? 'created' : 'updated'}: ${hash} `)
 }
 
@@ -66,15 +88,10 @@ export function handleProject(hash, project, create, callback) {
 //						Params:
 //						@err	string, 
 //						@result map, 
-export const handleProjectsByHashes = (hashArr, callback) => {
+export const handleProjectsByHashes = async (hashArr, callback) => {
     if (!isFn(callback)) return;
     if (!isArr(hashArr) || hashArr.length === 0) return callback(messages.arrayRequired)
-    const hashesNotFound = new Array()
-    // Find all projects by supplied hash and return Map
-    const result = hashArr.reduce((res, hash) => {
-        const project = projects.get(hash)
-        !!project ? res.set(hash, project) : hashesNotFound.push(hash)
-        return res
-    }, new Map())
+    let result = await projects.getAll(hashArr)
+    const hashesNotFound = hashArr.filter(hash => !result.get(hash))
     callback(null, result, hashesNotFound)
 }

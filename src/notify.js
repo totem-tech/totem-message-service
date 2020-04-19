@@ -1,13 +1,13 @@
-import DataStorage from './utils/DataStorage'
+import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, getUserByClientId, idExists, isUserOnline, onUserLogin } from './users'
 
 export const EVENT_NAME = 'notify'
-const notifications = new DataStorage('notifications.json', true)
+const notifications = new CouchDBStorage(null, 'notifications')
 // Pending notification recipient user IDs
-const userNotificationIds = new DataStorage('notification-receivers.json', false)
+const userNotificationIds = new CouchDBStorage(null, 'notification-receivers')
 const REQUIRED = true
 const NOT_REQUIRED = false
 const messages = setTexts({
@@ -35,9 +35,10 @@ export const VALID_TYPES = Object.freeze({
                 userId: REQUIRED,
             },
             // check if user id is valid
-            validate: (i, f, toUserIds, { userId }) => {
+            validate: async (i, f, toUserIds, { userId }) => {
+                const exists = await idExists(userId)
                 // makes sure supplied userId is valid
-                if (!idExists(userId)) return messages.invalidUserId
+                if (!exists) return messages.invalidUserId
                 // prevents user to be introduced to themself!
                 if (toUserIds.includes(userId)) return messages.introducingUserIdConflict
             },
@@ -62,7 +63,11 @@ export const VALID_TYPES = Object.freeze({
                 name: REQUIRED,
             },
             // check if introducer id is valid, if provided
-            validate: (_, _1, _2, { introducerId: iId }) => !iId || idExists(iId) ? null : messages.invalidUserId,
+            validate: async (_, _1, _2, { introducerId: id }) => {
+                if (!id) return
+                const exists = await idExists(id)
+                return !exists ? messages.invalidUserId : null
+            },
             message: NOT_REQUIRED,
         }
     },
@@ -91,20 +96,30 @@ export const VALID_TYPES = Object.freeze({
 })
 
 // Send notification to all clients of a specific user
-const _notifyUser = userId => setTimeout(() => {
-    if (!isUserOnline(userId)) return
-    arrUnique(userNotificationIds.get(userId)).forEach(id => {
-        const { from, type, childType, message, data, tsCreated } = notifications.get(id)
-        emitToUsers([userId], EVENT_NAME, [id, from, type, childType, message, data, tsCreated, (received) => {
-            const notifyIds = userNotificationIds.get(userId)
-            notifyIds.splice(notifyIds.indexOf(id), 1)
-            if (notifyIds.length > 0) return userNotificationIds.set(userId, notifyIds)
-            userNotificationIds.delete(userId)
-        }])
-    })
+const _notifyUser = async (userId) => setTimeout(async () => {
+    try {
+        const online = await isUserOnline(userId)
+        if (!online) return
+
+        const { notificationIds } = (await userNotificationIds.get(userId)) || {}
+        if (!notificationIds) return
+
+        notificationIds.forEach(async (receiverId) => {
+            const { from, type, childType, message, data, tsCreated } = await notifications.get(receiverId)
+            emitToUsers([userId], EVENT_NAME, [receiverId, from, type, childType, message, data, tsCreated, async function onReceived() {
+                let { notificationIds: ids } = (await userNotificationIds.get(userId)) || {}
+                ids = ids || []
+                ids.splice(ids.indexOf(receiverId), 1)
+                if (ids.length > 0) return await userNotificationIds.set(userId, { notificationIds: ids })
+                await userNotificationIds.delete(userId)
+            }])
+        })
+    } catch (err) {
+        console.log('Error sending notification: ', err)
+    }
 }, 500) // minimum 150 ms delay required, otherwise client UI might not receive it on time to consume the event
 
-// Check and notify user when on login
+// Check and notify user on login
 onUserLogin(_notifyUser)
 
 // handleNotify deals with notification requests
@@ -116,10 +131,10 @@ onUserLogin(_notifyUser)
 // @message     string   : message to be displayed (unless custom message required). can be encrypted later on
 // @data        object   : information specific to the type of notification
 // @callback    function : params: (@err string) 
-export function handleNotify(toUserIds = [], type = '', childType = '', message = '', data = {}, callback) {
+export async function handleNotify(toUserIds = [], type = '', childType = '', message = '', data = {}, callback) {
     if (!isFn(callback)) return
     const client = this
-    const user = getUserByClientId(client.id)
+    const user = await getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
     if (!isArr(toUserIds) || toUserIds.length === 0) return callback(messages.invalidParams + ': to')
     // prevent user sending notification to themselves
@@ -127,7 +142,15 @@ export function handleNotify(toUserIds = [], type = '', childType = '', message 
     toUserIds = arrUnique(toUserIds)
 
     // check if all receipient user id are valid
-    const invalid = toUserIds.reduce((invalid, userId) => invalid || !idExists(userId), false)
+    // const invalid = toUserIds.reduce(async (invalid, userId) => {
+    //     const exists = await idExists(userId)
+    //     return invalid || !exists
+    // }, false)
+    let invalid = false
+    for (let i = 0; i < toUserIds.length; i++) {
+        if (invalid) continue
+        invalid = !(await idExists(toUserIds[i]))
+    }
     if (invalid) return callback(messages.invalidUserId)
 
     const typeObj = VALID_TYPES[type]
@@ -148,25 +171,30 @@ export function handleNotify(toUserIds = [], type = '', childType = '', message 
     // if notification type has a handler function execute it
     const from = user.id
     const id = uuid.v1()
-    const err = isFn(config.validate) && config.validate.bind(client)(id, from, toUserIds, data, message)
+    const err = isFn(config.validate) && await config.validate.call(client, id, from, toUserIds, data, message)
     if (err) return callback(err)
-    notifications.set(id, {
+
+    await notifications.set(id, {
         from,
-        to: toUserIds,
+        to: JSON.stringify(toUserIds),
         type,
         childType,
         message,
         data,
-        tsCreated: new Date(),
+        tsCreated: (new Date()).toISOString(),
     })
 
+
     // add user id and notification id to a list for faster processing
-    toUserIds.forEach(userId => {
-        const ids = userNotificationIds.get(userId) || []
+    for (let i = 0; i < toUserIds.length; i++) {
+        const receiverId = toUserIds[i]
+        let { notificationIds: ids } = (await userNotificationIds.get(receiverId)) || {}
+        ids = ids || []
         ids.push(id)
-        userNotificationIds.set(userId, arrUnique(ids))
+        await userNotificationIds.set(receiverId, { notificationIds: arrUnique(ids) })
+
         // notify the user if online
-        _notifyUser(userId)
-    })
+        await _notifyUser(receiverId)
+    }
     callback()
 }
