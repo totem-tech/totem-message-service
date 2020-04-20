@@ -12,4 +12,6 @@
 # KeyPath="./sslcert/privkey.pem" \
 # PORT="int 3001" \
 # BuildMode="string: TRUE" \ #indicates whether to allow frontend to be able to grab all error messages at once
+# CouchDB_URL="string: http://adminId:password@127.0.0.1:5984" \ # CouchDB URL and admin credentials (if available) to establish a connection 
+# MigrateFiles="string: comma-separated JSON filenames" \ # migrate JSON storage to CouchDB storage
 # yarn run dev
