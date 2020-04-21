@@ -10,7 +10,7 @@ import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
-import { handleCurrencyConvert, handleCurrencyList } from './currency'
+import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
 import {
