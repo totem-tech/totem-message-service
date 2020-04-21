@@ -3,11 +3,12 @@ import { generateHash, isFn, isStr, isValidNumber } from './utils/utils'
 import { setTexts } from './language'
 
 const currencies = new CouchDBStorage(null, 'currencies')
-let tickerArrHash = ''
+let tickersHash = '' // hash of sorted array of supported currency tickers
 const messages = setTexts({
     invalidRequest: 'Missing one or more of the required fields',
     notFound: 'Unsupported currency'
 })
+const getAll = async () => await currencies.getAll(null, true, 99999)
 
 // initialize
 setTimeout(async () => {
@@ -16,9 +17,9 @@ setTimeout(async () => {
         index: { fields: [ 'currency' ] },
         name: 'currency-index',
     }
+    const tickers = Array.from(await getAll()).map(([_, x]) => x.currency).sort()
+    tickersHash = generateHash(tickers)
     await (await currencies.getDB()).createIndex(indexDef)
-    const tickers = Array.from(await currencies.getAll()).map(([_, x]) => x.currency).sort()
-    tickerArrHash = generateHash(tickers)
 })
 
 // convert currency using exchange rates stored in the database
@@ -50,6 +51,9 @@ export const handleCurrencyConvert = async (from, to, amount, callback) => {
 }
 
 // retrives list of supported currency names
-export const handleCurrencyList = async (hash, callback) => isFn(callback) && callback(
-    null, hash === tickerArrHash ? new Map() : await currencies.getAll()
-)
+export const handleCurrencyList = async (tickersArrHash, callback) => {
+    if(!isFn(callback)) return
+    // whether or not client needs to update the list of tickers
+    const shouldUpdate = tickersArrHash !== tickersHash
+    callback(null, !shouldUpdate ? new Map() : await getAll())
+}
