@@ -46,7 +46,7 @@ export const handleCurrencyConvert = async (from, to, amount, callback) => {
     }, true, true, false)
     if (!toCurrency) return callback(`${messages.notFound}: ${to}`)
     
-    const convertedAmount = (fromCurrency.ratioOfExchange / toCurrency.ratioOfExchange) / amount
+    const convertedAmount = (fromCurrency.ratioOfExchange / toCurrency.ratioOfExchange) * amount
     callback(null, convertedAmount)
 }
 
