@@ -14,7 +14,7 @@ setTimeout(async () => Array.from(await translations.getAll()).forEach(([langCod
     hashes.set(langCode, generateHash(texts))
 }))
 
-export const handleErrorMessages = callback => isFn(callback) && callback(null, build.enList)
+export const handleLanguageErrorMessages = callback => isFn(callback) && callback(null, build.enList)
 
 // handleTranslations handles translated text requests
 //
@@ -24,7 +24,7 @@ export const handleErrorMessages = callback => isFn(callback) && callback(null, 
 // @callback    function: arguments =>
 //              @error  string/null: error message, if any. Null indicates no error.
 //              @list   array/null: list of translated texts. Null indicates no update required.
-export async function handleTranslations(langCode, hash, callback) {
+export async function handleLanguageTranslations(langCode, hash, callback) {
     if (!isFn(callback)) return
 
     if (!isStr(langCode)) return callback(texts.invalidLang)

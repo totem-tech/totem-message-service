@@ -5,10 +5,14 @@ import express from 'express'
 import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
+import { isFn, isArr } from './utils/utils'
+import CouchDBStorage, { getConnection } from './CouchDBStorage'
+import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
+import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleErrorMessages, handleTranslations, setTexts } from './language'
+import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
 import {
     handleProject,
     handleProjectsByHashes,
@@ -21,9 +25,6 @@ import {
     handleRegister,
 } from './users'
 import { handleNotify } from './notify'
-import { isFn, isArr } from './utils/utils'
-import CouchDBStorage, { getConnection } from './CouchDBStorage'
-import DataStorage from './utils/DataStorage'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -51,12 +52,16 @@ const handlers = [
     // Countries
     { name: 'countries', handler: handleCountries },
 
+    // Currency
+    { name: 'currency-convert', handler: handleCurrencyConvert },
+    { name: 'currency-list', handler: handleCurrencyList },
+
     // Faucet request
     { name: 'faucet-request', handler: handleFaucetRequest },
 
-    { name: 'translations', handler: handleTranslations },
     // Language
-    { name: 'error-messages', handler: handleErrorMessages },
+    { name: 'language-translations', handler: handleLanguageTranslations },
+    { name: 'language-error-messages', handler: handleLanguageErrorMessages },
 
     // Notification
     { name: 'notify', handler: handleNotify },

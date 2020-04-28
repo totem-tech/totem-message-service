@@ -112,17 +112,14 @@ export const handleCompanySearch = async (query, findIdentity = false, callback)
     }
 
     // search by identity or parentIdentity
-    if (addressToStr(query)) {
-        // valid identity supplied
-        callback(null, await searchSeq([
-            { identity: query },
-            // if no result found matching identity, search for parentIdentity
-            !findIdentity && { parentIdentity: query },
-        ].filter(Boolean), true))
-    }
+    if (addressToStr(query)) return callback(null, await searchSeq([
+        { identity: query },
+        // if no result found matching identity, search for parentIdentity
+        !findIdentity && { parentIdentity: query },
+    ].filter(Boolean), true))
 
     return callback(null, await searchSeq([
-        { registrationNumber: { $eq: query } },
+        { registrationNumber: query }, //{ $eq: query }
         { salesTaxCode:  query },
         { name: { $gte: query } },
     ]))
