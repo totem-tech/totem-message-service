@@ -1,7 +1,6 @@
 import CouchDBStorage from './CouchDBStorage'
-import { generateHash, isFn, isStr, isValidNumber } from './utils/utils'
+import { arrSort, generateHash, isFn, isStr, isValidNumber } from './utils/utils'
 import { setTexts } from './language'
-import { arrSort } from '../../totem-ui/src/utils/utils'
 
 const currencies = new CouchDBStorage(null, 'currencies')
 let tickersHash = '' // hash of sorted array of supported currency tickers
