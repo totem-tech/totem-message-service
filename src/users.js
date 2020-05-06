@@ -152,23 +152,23 @@ export async function handleDisconnect() {
 //                  @error  string: will include a message if invalid/failed request
 export async function handleMessage(receiverIds = [], message = '', encrypted = false, callback) {
     if (!isFn(callback)) return
+    const client = this
     const everyone = 'everyone' // for trollbox
     const event = 'message'
-    const client = this
+    const timestamp = new Date().toISOString()
     const user = await getUserByClientId(client.id)
     if (!user) return callback(messages.loginOrRegister)
     const senderId = user.id
     receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
     receiverIds = arrUnique([...receiverIds, senderId]) // makes sure message is also sent to senders other devices
-    const args = [message, senderId, receiverIds, encrypted]
+    const args = [message, senderId, receiverIds, encrypted, timestamp]
     if (receiverIds.includes(everyone)) {
         args[2] = [everyone]
         broadcast(client.id, event, args)
     } else {
         emitToUsers(receiverIds, event, args, client.id)
     }
-    console.log({ args })
-    callback()
+    callback(null)
 }
 
 export const handleIdExists = async (userId, callback) => isFn(callback) && callback(await idExists(userId), userId)
