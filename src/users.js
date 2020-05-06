@@ -103,9 +103,9 @@ export const emitToClients = (clientIds = [], eventName = '', params = []) => ev
 // @userIds     array
 // @eventName   string: websocket event name
 // @params      array: parameters to be supplied to the client
-export const emitToUsers = (userIds = [], eventName = '', params = []) => arrUnique(userIds).forEach(userId => {
-    const clientIds = userClientIds.get(userId)
-    emitToClients(clientIds, eventName, params)
+export const emitToUsers = (userIds = [], eventName = '', params = [], excludeClientId) => arrUnique(userIds).forEach(userId => {
+    const clientIds = userClientIds.get(userId) || []
+    emitToClients(clientIds.filter(cid => cid !== excludeClientId), eventName, params)
 })
 
 // Broadcast message to all users except ignoreClientIds
@@ -141,15 +141,33 @@ export async function handleDisconnect() {
     console.info('Client disconnected: ', client.id, ' userId: ', user.id)
 }
 
-export async function handleMessage(msg, callback) {
-    const client = this
-    if (!isStr(msg) || !isFn(callback)) return
-    if (msg.length > msgMaxLength) return callback(`${messages.msgLengthExceeds}: ${msgMaxLength}`)
 
-    const sender = await getUserByClientId(client.id)
-    // Ignore message from logged out users
-    if (!sender) return callback(messages.loginOrRegister);
-    broadcast(client.id, 'message', [msg, sender.id])
+// handle private, group and trollbox messages
+//
+// Params:
+// @receiverIds array: receiving User IDs without '@' sign
+// @message     string: encrypted or plain text message
+// @encrypted   bool: determines whether @message requires decryption
+// @callback    function: Arguments =>
+//                  @error  string: will include a message if invalid/failed request
+export async function handleMessage(receiverIds = [], message = '', encrypted = false, callback) {
+    if (!isFn(callback)) return
+    const everyone = 'everyone' // for trollbox
+    const event = 'message'
+    const client = this
+    const user = await getUserByClientId(client.id)
+    if (!user) return callback(messages.loginOrRegister)
+    const senderId = user.id
+    receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
+    receiverIds = arrUnique([...receiverIds, senderId]) // makes sure message is also sent to senders other devices
+    const args = [message, senderId, receiverIds, encrypted]
+    if (receiverIds.includes(everyone)) {
+        args[2] = [everyone]
+        broadcast(client.id, event, args)
+    } else {
+        emitToUsers(receiverIds, event, args, client.id)
+    }
+    console.log({ args })
     callback()
 }
 
