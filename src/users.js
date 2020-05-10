@@ -152,6 +152,8 @@ export async function handleDisconnect() {
 //                  @error  string: will include a message if invalid/failed request
 export async function handleMessage(receiverIds = [], message = '', encrypted = false, callback) {
     if (!isFn(callback)) return
+    if (!isStr(message) || message.trim().length === 0) return
+    if (message.length > msgMaxLength) return callback(messages.msgLengthExceeds)
     const client = this
     const everyone = 'everyone' // for trollbox
     const event = 'message'
@@ -168,7 +170,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     } else {
         emitToUsers(receiverIds, event, args, client.id)
     }
-    callback(null)
+    callback(null, timestamp)
 }
 
 export const handleIdExists = async (userId, callback) => isFn(callback) && callback(await idExists(userId), userId)
