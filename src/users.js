@@ -17,6 +17,7 @@ const messages = setTexts({
     idLengthMin: 'Minimum number of characters required',
     idExists: 'User ID already taken',
     invalidSecret: 'Secret must be a valid string',
+    invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
     msgLengthExceeds: 'Maximum characters allowed',
@@ -167,13 +168,19 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     if (receiverIds.includes(everyone)) {
         args[2] = [everyone]
         broadcast(client.id, event, args)
-    } else {
-        emitToUsers(receiverIds, event, args, client.id)
+        return callback(null, timestamp)
     }
+
+    const reservedIds = receiverIds.filter(id => RESERVED_IDS.includes(id)).length > 0
+    if (reservedIds.length > 0) return callback(`${textsCap.invalidUserID}: ${receiverIds.join(', ')}`)
+    emitToUsers(receiverIds, event, args, client.id)
     callback(null, timestamp)
 }
 
-export const handleIdExists = async (userId, callback) => isFn(callback) && callback(await idExists(userId), userId)
+export const handleIdExists = async (userId, callback) => {
+    const exists = await idExists(userId)
+    isFn(callback) && callback(!!exists, userId)
+}
 
 export async function handleLogin(userId, secret, callback) {
     const client = this
