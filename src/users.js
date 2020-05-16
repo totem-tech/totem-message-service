@@ -67,10 +67,7 @@ export const idExists = async (userId) => {
 //
 // Params:
 // @userId  string
-export const isUserOnline = async (userId) => {
-    const clientIds = await userClientIds.get(userId)
-    return (clientIds || []).length > 0
-}
+export const isUserOnline = userId => (userClientIds.get(userId) || []).length > 0
 
 // onUserLogin registers callbacks to be executed on any user login occurs
 //
@@ -180,6 +177,26 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
 export const handleIdExists = async (userId, callback) => {
     const exists = await idExists(userId)
     isFn(callback) && callback(!!exists, userId)
+}
+
+// check if user is/are online
+//
+// Params:
+// @userId      string/array
+// @callback    function: Arguments =>
+//                  @err        string: error message, if applicable
+//                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
+export const handleIsUserOnline = async (userId, callback) => {
+    if (!isFn(callback)) return
+
+    if (!isArr(userId)) return callback(null, isUserOnline(userId))
+
+    const userIds = arrUnique(userId).filter(id => isStr(id))
+    const result = {}
+    for (let i = 0; i < userIds.length; i++) {
+        result[userIds[i]] = isUserOnline(userIds[i])
+    }
+    callback(null, result)
 }
 
 export async function handleLogin(userId, secret, callback) {

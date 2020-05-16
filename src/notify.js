@@ -98,7 +98,7 @@ export const VALID_TYPES = Object.freeze({
 // Send notification to all clients of a specific user
 const _notifyUser = async (userId) => setTimeout(async () => {
     try {
-        const online = await isUserOnline(userId)
+        const online = isUserOnline(userId)
         if (!online) return
 
         const { notificationIds } = (await userNotificationIds.get(userId)) || {}

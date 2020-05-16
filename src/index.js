@@ -23,6 +23,7 @@ import {
     handleLogin,
     handleMessage,
     handleRegister,
+    handleIsUserOnline,
 } from './users'
 import { handleNotify } from './notify'
 
@@ -44,6 +45,7 @@ const handlers = [
     { name: 'id-exists', handler: handleIdExists },
     { name: 'register', handler: handleRegister },
     { name: 'login', handler: handleLogin },
+    { name: 'is-user-online', handler: handleIsUserOnline },
 
     // Company
     { name: 'company', handler: handleCompany },
