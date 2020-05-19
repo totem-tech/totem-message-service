@@ -111,7 +111,7 @@ export default class CouchDBStorage {
     }
 
     // search documents within the database
-    async search(keyValues = {}, matchExact, matchAll, ignoreCase, limit = 0, skip = 0, asMap = true) {
+    async search(keyValues = {}, matchExact, matchAll, ignoreCase, limit = 0, skip = 0, asMap = true, extraProps) {
         if (!isObj(keyValues) || Object.keys(keyValues).length === 0) return asMap ? new Map() : []
 
         // assumes no operator is used in @keyValues
@@ -126,7 +126,7 @@ export default class CouchDBStorage {
                 return keyQ
             })
         }
-        const result = await this.searchRaw(keyValues, limit, skip)
+        const result = await this.searchRaw(keyValues, limit, skip, extraProps)
         return !asMap ? result.docs : new Map(result.docs.map(doc => [doc._id, doc]))
     }
 

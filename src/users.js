@@ -3,13 +3,11 @@ import { arrUnique, isArr, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 
 const users = new CouchDBStorage(null, 'users')
-
 export const clients = new Map()
 export const userClientIds = new Map()
 const isValidId = id => /^[a-z][a-z0-9]+$/.test(id)
 const idMaxLength = 16
 const idMinLength = 3
-const msgMaxLength = 160
 // Error messages
 const messages = setTexts({
     idInvalid: `Only alpha-numeric characters allowed and must start with an alphabet`,
@@ -24,13 +22,13 @@ const messages = setTexts({
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
 // User IDs for use by the application ONLY.
-const SYSTEM_IDS = Object.freeze([
+export const SYSTEM_IDS = Object.freeze([
     'everyone',
     'here',
     'me'
 ])
 // User IDs reserved for Totem
-const RESERVED_IDS = Object.freeze([
+export const RESERVED_IDS = Object.freeze([
     ...SYSTEM_IDS,
     'admin',
     'administrator',
@@ -60,7 +58,7 @@ export const getUserByClientId = async (clientId) => {
 // idExists
 export const idExists = async (userId) => {
     if (RESERVED_IDS.includes(userId)) return true
-    return await users.get(userId)
+    return !!(await users.get(userId))
 }
 
 // isUserOnline checks if user is online
@@ -139,45 +137,14 @@ export async function handleDisconnect() {
     console.info('Client disconnected: ', client.id, ' userId: ', user.id)
 }
 
-
-// handle private, group and trollbox messages
+// check if user id exists
 //
 // Params:
-// @receiverIds array: receiving User IDs without '@' sign
-// @message     string: encrypted or plain text message
-// @encrypted   bool: determines whether @message requires decryption
-// @callback    function: Arguments =>
-//                  @error  string: will include a message if invalid/failed request
-export async function handleMessage(receiverIds = [], message = '', encrypted = false, callback) {
-    if (!isFn(callback)) return
-    if (!isStr(message) || message.trim().length === 0) return
-    if (message.length > msgMaxLength) return callback(messages.msgLengthExceeds)
-    const client = this
-    const everyone = 'everyone' // for trollbox
-    const event = 'message'
-    const timestamp = new Date().toISOString()
-    const user = await getUserByClientId(client.id)
-    if (!user) return callback(messages.loginOrRegister)
-    const senderId = user.id
-    receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
-    receiverIds = arrUnique([...receiverIds, senderId]) // makes sure message is also sent to senders other devices
-    const args = [message, senderId, receiverIds, encrypted, timestamp]
-    if (receiverIds.includes(everyone)) {
-        args[2] = [everyone]
-        broadcast(client.id, event, args)
-        return callback(null, timestamp)
-    }
-
-    const reservedIds = receiverIds.filter(id => RESERVED_IDS.includes(id)).length > 0
-    if (reservedIds.length > 0) return callback(`${textsCap.invalidUserID}: ${receiverIds.join(', ')}`)
-    emitToUsers(receiverIds, event, args, client.id)
-    callback(null, timestamp)
-}
-
-export const handleIdExists = async (userId, callback) => {
-    const exists = await idExists(userId)
-    isFn(callback) && callback(!!exists, userId)
-}
+// @userId      string
+// @callback    function: (required) args:
+//                  @err    string: error message, if any
+//                  @exists boolean
+export const handleIdExists = async (userId, callback) => isFn(callback) && callback(null, await idExists(userId))
 
 // check if user is/are online
 //
@@ -218,6 +185,13 @@ export async function handleLogin(userId, secret, callback) {
     _execOnUserLogin(userId)
 }
 
+// user registration
+//
+// Params:
+// @userId      string
+// @secret      string
+// @callback    function: args:
+//                  @err        string: error message, if any
 export async function handleRegister(userId, secret, callback) {
     if (!isFn(callback)) return
     const client = this
