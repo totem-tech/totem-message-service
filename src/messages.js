@@ -51,12 +51,11 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
 
     const senderId = user.id
     receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
-    // makes sure message is also sent to senders other currently logged in devices
     receiverIds = arrUnique([...receiverIds, senderId]).sort()
     const args = [message, senderId, receiverIds, encrypted, timestamp]
     if (receiverIds.includes(everyone)) {
         args[2] = [everyone]
-        broadcast(client.id, event, args)
+        broadcast([], event, args)
         console.log('Broadcast message:', message)
         return callback(null, timestamp)
     }

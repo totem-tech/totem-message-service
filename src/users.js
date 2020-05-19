@@ -30,12 +30,13 @@ export const SYSTEM_IDS = Object.freeze([
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([
     ...SYSTEM_IDS,
+    'accounting',
     'admin',
     'administrator',
     'live',
-    'accounting',
     'support',
     'totem',
+    'trollbox',
 ])
 const onUserLoginCallbacks = []
 const _execOnUserLogin = userId => setTimeout(() => onUserLoginCallbacks.forEach(fn => fn(userId)))
