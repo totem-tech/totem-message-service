@@ -28,6 +28,8 @@ const texts = setTexts({
     invalidUserID: 'Invalid User ID',
     loginOrRegister: 'Login/registration required',
     msgLengthExceeds: 'Maximum characters allowed',
+    groupNameRequired: 'Group name required',
+    nonGroupName: 'Cannot set name for one to one conversation'
 })
 
 // handle private, group and trollbox messages
@@ -62,16 +64,17 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
 
     const reservedIds = receiverIds.filter(id => RESERVED_IDS.includes(id))
     if (reservedIds.length > 0) return callback(`${texts.invalidUserID}: ${reservedIds.join(', ')}`)
-    storage.set(null, {
-        senderId,
-        receiverIds,
-        message,
+    const { id } = await storage.set(null, {
         encrypted,
+        message,
+        receiverIds,
+        senderId,
         timestamp,
     })
+    args[5] = id
 
-    callback(null, timestamp)
     emitToUsers(receiverIds, event, args)
+    callback(null, timestamp, id)
 }
 
 // get user's most recent messsages. Maximum of 1000
@@ -81,7 +84,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
 // @callback        function: args =>
 //                      @err        string: error message, if any
 //                      @messages   array: array of messages
-export async function handleMessagesGetRecent(lastMessageTS, callback) {
+export async function handleMessageGetRecent(lastMessageTS, callback) {
     if (!isFn(callback)) return
     const client = this
     const user = await getUserByClientId(client.id)
@@ -102,4 +105,44 @@ export async function handleMessagesGetRecent(lastMessageTS, callback) {
 
     const result = await storage.search(selector, true, true, false, inboxHistoryLimit, 0, false, extraProps)
     callback(null, result)
+}
+
+// set group name. anyone within the group can set group name.
+//
+// Params:
+// @receiverIds     array:
+export async function handleMessageGroupName(receiverIds, name, callback) {
+    if (!isFn(callback)) return
+    const client = this
+    const user = await getUserByClientId(client.id)
+    const reservedIds = receiverIds.filter(id => RESERVED_IDS.includes(id))
+    if (reservedIds.length > 0) return callback(`${texts.invalidUserID}: ${reservedIds.join(', ')}`)
+    if (!user) return callback(texts.loginOrRegister)
+    if (!isStr(name) || !name) return callback(texts.groupNameRequired)
+
+    const senderId = user.id
+    receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
+    receiverIds = arrUnique([...receiverIds, senderId]).sort()
+    if (receiverIds.length <= 2) return callback(texts.nonGroupName)
+
+    const action = {
+        data: [name],
+        type: 'message-group-name',
+    }
+    const timestamp = new Date()
+    const message = ''
+    const encrypted = false
+    const { id } = await storage.set(null, {
+        action,
+        encrypted,
+        message,
+        receiverIds,
+        senderId,
+        timestamp,
+    })
+    const event = 'message'
+    const args = [message, senderId, receiverIds, encrypted, timestamp, id, action]
+
+    emitToUsers(receiverIds, event, args)
+    callback()
 }

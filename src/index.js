@@ -16,7 +16,8 @@ import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } fro
 import { handleNotify } from './notify'
 import {
     handleMessage,
-    handleMessagesGetRecent,
+    handleMessageGetRecent,
+    handleMessageGroupName,
 } from './messages'
 import {
     handleProject,
@@ -69,7 +70,8 @@ const handlers = [
 
     // Chat/Messages
     { name: 'message', handler: handleMessage },
-    { name: 'messages-get-recent', handler: handleMessagesGetRecent },
+    { name: 'message-get-recent', handler: handleMessageGetRecent },
+    { name: 'message-group-name', handler: handleMessageGroupName },
 
     // Notification
     { name: 'notify', handler: handleNotify },
