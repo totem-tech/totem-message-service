@@ -58,7 +58,6 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     if (receiverIds.includes(everyone)) {
         args[2] = [everyone]
         broadcast([], event, args)
-        console.log('Broadcast message:', message)
         return callback(null, timestamp)
     }
 
