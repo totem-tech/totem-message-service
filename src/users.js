@@ -156,7 +156,6 @@ export const handleIdExists = async (userId, callback) => isFn(callback) && call
 //                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
 export const handleIsUserOnline = async (userId, callback) => {
     if (!isFn(callback)) return
-
     if (!isArr(userId)) return callback(null, isUserOnline(userId))
 
     const userIds = arrUnique(userId).filter(id => isStr(id))
