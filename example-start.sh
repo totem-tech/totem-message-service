@@ -1,4 +1,4 @@
-# git pull && git submodule update --recursive --remote
+# git pull && git submodule sync && git submodule update --init --recursive --remote && \
 # _______________DYNAMIC_VARIABLES_BELOW_______________="Changes to variables below DO NOT REQUIRE server restart" \
 # keyData="string: (96 bytes hex without 0x) exactly as found in the oo7-substrate's secretStore" \
 # serverName="string: a secret name for the server" \

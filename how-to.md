@@ -2,7 +2,7 @@
 
 Creating a self-signed Certificate
 
-```shell
+<!-- ```shell
     cd sslcert
 
     # Use 'localhost' for the 'Common name' CN and for DNS 
@@ -24,8 +24,17 @@ Creating a self-signed Certificate
     # Add the cert to your keychain
     open fullchain.pem
 
-    # you will need to get your OS to trust these certs. See specific docs per OS
+    # you will need to get your OS to trust these certs. See specific docs per OS -->
 
+```bash
+cd sslcert
+# Use 'localhost' for the 'Common name'
+openssl req -new -x509 -sha256 -nodes -newkey rsa:4096 -days 365 -keyout privkey.pem -out fullchain.pem
+
+# Add the cert to your keychain
+open fullchain.pem
+
+# you will need to get your OS to trust these certs.
 ```
 
 To get around permission denied issue: 
