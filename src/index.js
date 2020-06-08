@@ -13,6 +13,12 @@ import { handleCountries } from './countries'
 import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
+import { handleNotify } from './notify'
+import {
+    handleMessage,
+    handleMessageGetRecent,
+    handleMessageGroupName,
+} from './messages'
 import {
     handleProject,
     handleProjectsByHashes,
@@ -21,10 +27,9 @@ import {
     handleDisconnect,
     handleIdExists,
     handleLogin,
-    handleMessage,
     handleRegister,
+    handleIsUserOnline,
 } from './users'
-import { handleNotify } from './notify'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -40,10 +45,10 @@ const texts = setTexts({
 const handlers = [
     // User & connection
     { name: 'disconnect', handler: handleDisconnect },
-    { name: 'message', handler: handleMessage },
     { name: 'id-exists', handler: handleIdExists },
     { name: 'register', handler: handleRegister },
     { name: 'login', handler: handleLogin },
+    { name: 'is-user-online', handler: handleIsUserOnline },
 
     // Company
     { name: 'company', handler: handleCompany },
@@ -62,6 +67,11 @@ const handlers = [
     // Language
     { name: 'language-translations', handler: handleLanguageTranslations },
     { name: 'language-error-messages', handler: handleLanguageErrorMessages },
+
+    // Chat/Messages
+    { name: 'message', handler: handleMessage },
+    { name: 'message-get-recent', handler: handleMessageGetRecent },
+    { name: 'message-group-name', handler: handleMessageGroupName },
 
     // Notification
     { name: 'notify', handler: handleNotify },

@@ -3,13 +3,11 @@ import { arrUnique, isArr, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 
 const users = new CouchDBStorage(null, 'users')
-
 export const clients = new Map()
 export const userClientIds = new Map()
 const isValidId = id => /^[a-z][a-z0-9]+$/.test(id)
 const idMaxLength = 16
 const idMinLength = 3
-const msgMaxLength = 160
 // Error messages
 const messages = setTexts({
     idInvalid: `Only alpha-numeric characters allowed and must start with an alphabet`,
@@ -17,26 +15,28 @@ const messages = setTexts({
     idLengthMin: 'Minimum number of characters required',
     idExists: 'User ID already taken',
     invalidSecret: 'Secret must be a valid string',
+    invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
     msgLengthExceeds: 'Maximum characters allowed',
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
 // User IDs for use by the application ONLY.
-const SYSTEM_IDS = Object.freeze([
+export const SYSTEM_IDS = Object.freeze([
     'everyone',
     'here',
     'me'
 ])
 // User IDs reserved for Totem
-const RESERVED_IDS = Object.freeze([
+export const RESERVED_IDS = Object.freeze([
     ...SYSTEM_IDS,
+    'accounting',
     'admin',
     'administrator',
     'live',
-    'accounting',
     'support',
     'totem',
+    'trollbox',
 ])
 const onUserLoginCallbacks = []
 const _execOnUserLogin = userId => setTimeout(() => onUserLoginCallbacks.forEach(fn => fn(userId)))
@@ -59,17 +59,14 @@ export const getUserByClientId = async (clientId) => {
 // idExists
 export const idExists = async (userId) => {
     if (RESERVED_IDS.includes(userId)) return true
-    return await users.get(userId)
+    return !!(await users.get(userId))
 }
 
 // isUserOnline checks if user is online
 //
 // Params:
 // @userId  string
-export const isUserOnline = async (userId) => {
-    const clientIds = await userClientIds.get(userId)
-    return (clientIds || []).length > 0
-}
+export const isUserOnline = userId => (userClientIds.get(userId) || []).length > 0
 
 // onUserLogin registers callbacks to be executed on any user login occurs
 //
@@ -103,9 +100,9 @@ export const emitToClients = (clientIds = [], eventName = '', params = []) => ev
 // @userIds     array
 // @eventName   string: websocket event name
 // @params      array: parameters to be supplied to the client
-export const emitToUsers = (userIds = [], eventName = '', params = []) => arrUnique(userIds).forEach(userId => {
-    const clientIds = userClientIds.get(userId)
-    emitToClients(clientIds, eventName, params)
+export const emitToUsers = (userIds = [], eventName = '', params = [], excludeClientId) => arrUnique(userIds).forEach(userId => {
+    const clientIds = userClientIds.get(userId) || []
+    emitToClients(clientIds.filter(cid => cid !== excludeClientId), eventName, params)
 })
 
 // Broadcast message to all users except ignoreClientIds
@@ -141,19 +138,33 @@ export async function handleDisconnect() {
     console.info('Client disconnected: ', client.id, ' userId: ', user.id)
 }
 
-export async function handleMessage(msg, callback) {
-    const client = this
-    if (!isStr(msg) || !isFn(callback)) return
-    if (msg.length > msgMaxLength) return callback(`${messages.msgLengthExceeds}: ${msgMaxLength}`)
+// check if user id exists
+//
+// Params:
+// @userId      string
+// @callback    function: (required) args:
+//                  @err    string: error message, if any
+//                  @exists boolean
+export const handleIdExists = async (userId, callback) => isFn(callback) && callback(null, await idExists(userId))
 
-    const sender = await getUserByClientId(client.id)
-    // Ignore message from logged out users
-    if (!sender) return callback(messages.loginOrRegister);
-    broadcast(client.id, 'message', [msg, sender.id])
-    callback()
+// check if user is/are online
+//
+// Params:
+// @userId      string/array
+// @callback    function: Arguments =>
+//                  @err        string: error message, if applicable
+//                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
+export const handleIsUserOnline = async (userId, callback) => {
+    if (!isFn(callback)) return
+    if (!isArr(userId)) return callback(null, isUserOnline(userId))
+
+    const userIds = arrUnique(userId).filter(id => isStr(id))
+    const result = {}
+    for (let i = 0; i < userIds.length; i++) {
+        result[userIds[i]] = isUserOnline(userIds[i])
+    }
+    callback(null, result)
 }
-
-export const handleIdExists = async (userId, callback) => isFn(callback) && callback(await idExists(userId), userId)
 
 export async function handleLogin(userId, secret, callback) {
     const client = this
@@ -174,6 +185,13 @@ export async function handleLogin(userId, secret, callback) {
     _execOnUserLogin(userId)
 }
 
+// user registration
+//
+// Params:
+// @userId      string
+// @secret      string
+// @callback    function: args:
+//                  @err        string: error message, if any
 export async function handleRegister(userId, secret, callback) {
     if (!isFn(callback)) return
     const client = this
