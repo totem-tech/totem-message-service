@@ -5,7 +5,7 @@ import express from 'express'
 import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
-import { isFn, isArr } from './utils/utils'
+import { isFn, isArr, isObj } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
@@ -29,6 +29,7 @@ import {
     handleLogin,
     handleRegister,
     handleIsUserOnline,
+    handleAmISupport,
 } from './users'
 
 const expressApp = express()
@@ -49,6 +50,7 @@ const handlers = [
     { name: 'register', handler: handleRegister },
     { name: 'login', handler: handleLogin },
     { name: 'is-user-online', handler: handleIsUserOnline },
+    { name: 'am-i-support', handler: handleAmISupport },
 
     // Company
     { name: 'company', handler: handleCompany },
@@ -93,6 +95,7 @@ const handlers = [
                 const callback = args[args.length - 1]
                 isFn(callback) && callback(texts.runtimeError)
                 console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
+                isObj(err) && console.log(err.stack)
                 // ToDo: use an error reporting service or bot for automatic error alerts
             }
         }

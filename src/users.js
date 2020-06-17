@@ -27,6 +27,7 @@ export const SYSTEM_IDS = Object.freeze([
     'here',
     'me'
 ])
+export const ROLE_SUPPORT = 'support'
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([
     ...SYSTEM_IDS,
@@ -40,6 +41,69 @@ export const RESERVED_IDS = Object.freeze([
 ])
 const onUserLoginCallbacks = []
 const _execOnUserLogin = userId => setTimeout(() => onUserLoginCallbacks.forEach(fn => fn(userId)))
+// initialize
+setTimeout(async () => {
+    // create an index for the field `timestamp`, ignores if already exists
+    const indexDefs = [{
+        index: { fields: ['roles'] },
+        name: 'roles-index',
+    }]
+    indexDefs.forEach(async (def) => await (await users.getDB()).createIndex(def))
+})
+
+// Broadcast message to all users except ignoreClientIds
+//
+// Params:
+// @ignoreClientIds  array: client IDs to skip.
+// @eventName        string: websocket event name
+// @params           array:  parameters to be supplied to the client
+export const broadcast = (ignoreClientIds, eventName, params) => {
+    if (!isStr(eventName)) return;
+    ignoreClientIds = isArr(ignoreClientIds) ? ignoreClientIds : [ignoreClientIds]
+    const clientIds = Array.from(clients).map(([clientId]) => clientId)
+        .filter(id => ignoreClientIds.indexOf(id) === -1)
+    emitToClients(clientIds, eventName, params)
+}
+
+/*
+ *
+ * Websocket event emitter function
+ * 
+ */
+// Emit to specific clients by ids
+//
+// Params: 
+// @clientIds   array
+// @eventName   string: name of the websocket event
+// @params      array: parameters to be supplied to the client
+// 
+// Example: 
+// Client/receiver will consume the event as follows: 
+//      socket.on(eventName, param[0], param[1], param[2],...)
+export const emitToClients = (clientIds = [], eventName = '', params = []) => eventName && arrUnique(clientIds).forEach(clientId => {
+    const client = clients.get(clientId)
+    client && client.emit.apply(client, [eventName].concat(params))
+})
+
+// Emit to users (everywhere the user is logged in)
+//
+// Params:
+// @userIds     array
+// @eventName   string: websocket event name
+// @params      array: parameters to be supplied to the client
+export const emitToUsers = (userIds = [], eventName = '', params = [], excludeClientId) => arrUnique(userIds).forEach(userId => {
+    const clientIds = userClientIds.get(userId) || []
+    emitToClients(clientIds.filter(cid => cid !== excludeClientId), eventName, params)
+})
+
+// returns an array of users with role 'support'
+export const getSupportUsers = async () => {
+    const selector = {
+        // select all messages to/from current user
+        'roles': { '$all': [ROLE_SUPPORT] }
+    }
+    return await users.search(selector, true, true, false, 99, 0, false)
+}
 
 // findUserByClientId seeks out user ID by connected client ID
 //
@@ -76,54 +140,19 @@ export const onUserLogin = callback => isFn(callback) && onUserLoginCallbacks.pu
 
 /*
  *
- * Websocket event emitter function
- * 
- */
-// Emit to specific clients by ids
-//
-// Params: 
-// @clientIds   array
-// @eventName   string: name of the websocket event
-// @params      array: parameters to be supplied to the client
-// 
-// Example: 
-// Client/receiver will consume the event as follows: 
-//      socket.on(eventName, param[0], param[1], param[2],...)
-export const emitToClients = (clientIds = [], eventName = '', params = []) => eventName && arrUnique(clientIds).forEach(clientId => {
-    const client = clients.get(clientId)
-    client && client.emit.apply(client, [eventName].concat(params))
-})
-
-// Emit to users (everywhere the user is logged in)
-//
-// Params:
-// @userIds     array
-// @eventName   string: websocket event name
-// @params      array: parameters to be supplied to the client
-export const emitToUsers = (userIds = [], eventName = '', params = [], excludeClientId) => arrUnique(userIds).forEach(userId => {
-    const clientIds = userClientIds.get(userId) || []
-    emitToClients(clientIds.filter(cid => cid !== excludeClientId), eventName, params)
-})
-
-// Broadcast message to all users except ignoreClientIds
-//
-// Params:
-// @ignoreClientIds  array: client IDs to skip.
-// @eventName        string: websocket event name
-// @params           array:  parameters to be supplied to the client
-export const broadcast = (ignoreClientIds, eventName, params) => {
-    if (!isStr(eventName)) return;
-    ignoreClientIds = isArr(ignoreClientIds) ? ignoreClientIds : [ignoreClientIds]
-    const clientIds = Array.from(clients).map(([clientId]) => clientId)
-        .filter(id => ignoreClientIds.indexOf(id) === -1)
-    emitToClients(clientIds, eventName, params)
-}
-
-/*
- *
  * event handlers
  * 
  */
+// user checks they have 'support' role
+export async function handleAmISupport(callback) {
+    if (!isFn(callback)) return
+    const client = this
+    const user = await getUserByClientId(client.id)
+    if (!user) return callback(messages.loginOrRegister)
+    callback(null, (user.roles || []).includes(ROLE_SUPPORT))
+}
+
+// cleanup on user client disconnect
 export async function handleDisconnect() {
     const client = this
     clients.delete(client.id)
@@ -166,6 +195,14 @@ export const handleIsUserOnline = async (userId, callback) => {
     callback(null, result)
 }
 
+
+// user login 
+//
+// Params:
+// @userId      string
+// @secret      string
+// @callback    function: args => 
+//                  @err    string: error message if login fails
 export async function handleLogin(userId, secret, callback) {
     const client = this
     if (!isFn(callback)) return
