@@ -13,7 +13,7 @@ import { handleCountries } from './countries'
 import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
-import { handleNotify } from './notify'
+import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
 import {
     handleMessage,
     handleMessageGetRecent,
@@ -76,7 +76,9 @@ const handlers = [
     { name: 'message-group-name', handler: handleMessageGroupName },
 
     // Notification
-    { name: 'notify', handler: handleNotify },
+    { name: 'notification', handler: handleNotification },
+    { name: 'notification-get-recent', handler: handleNotificationGetRecent },
+    { name: 'notification-set-status', handler: handleNotificationSetStatus },
 
     // Project
     { name: 'project', handler: handleProject },

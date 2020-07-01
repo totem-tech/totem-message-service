@@ -6,22 +6,6 @@ import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_ID
 const storage = new CouchDBStorage(null, 'messages')
 const TROLLBOX = 'trollbox' // for trollbox
 const TROLLBOX_ALT = 'everyone'
-// initialize
-setTimeout(async () => {
-    // create an index for the field `timestamp`, ignores if already exists
-    const indexDefs = [
-        {
-            index: { fields: ['timestamp'] },
-            name: 'timestamp-index',
-        },
-        {
-            index: { fields: ['receiverIds', 'timestamp'] },
-            name: 'receiverIds_timestamp-index',
-        }
-    ]
-    indexDefs.forEach(async (def) => await (await storage.getDB()).createIndex(def))
-})
-
 const msgMaxLength = 160
 const RECENT_MESSAGE_LIMIT = 1000
 // Error messages
@@ -32,6 +16,23 @@ const texts = setTexts({
     msgLengthExceeds: 'Maximum characters allowed',
     groupNameRequired: 'Group name required',
     nonGroupName: 'Cannot set name for one to one conversation'
+})
+
+// initialize
+setTimeout(async () => {
+    // create an index for the field `timestamp`, ignores if already exists
+    const indexDefs = [
+        {
+            // index for sorting purposes
+            index: { fields: ['timestamp'] },
+            name: 'timestamp-index',
+        },
+        {
+            index: { fields: ['receiverIds', 'timestamp'] },
+            name: 'receiverIds_timestamp-index',
+        }
+    ]
+    indexDefs.forEach(async (def) => await (await storage.getDB()).createIndex(def))
 })
 
 // handle private, group and trollbox messages
