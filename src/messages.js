@@ -1,4 +1,5 @@
 import CouchDBStorage from './CouchDBStorage'
+import uuid from 'uuid'
 import { arrUnique, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_IDS, ROLE_SUPPORT } from './users'
@@ -63,6 +64,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     if (isTrollbox) {
         // handle trollbox messages
         args[2] = [TROLLBOX]
+        args[5] = 'trollbox-' + uuid.v1()
         broadcast([], event, args)
         return callback(null, timestamp)
     } else if (isSupportMsg) {
