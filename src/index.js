@@ -5,6 +5,7 @@ import express from 'express'
 import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
+import request from 'request'
 import { isFn, isArr, isObj } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
@@ -35,6 +36,8 @@ import {
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
+const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
@@ -98,7 +101,20 @@ const handlers = [
                 isFn(callback) && callback(texts.runtimeError)
                 console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
                 isObj(err) && console.log(err.stack)
+                console.log(DISCORD_WEBHOOK_URL)
+                if (!DISCORD_WEBHOOK_URL) return
                 // ToDo: use an error reporting service or bot for automatic error alerts
+                const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
+                request({
+                    url: DISCORD_WEBHOOK_URL,
+                    method: "POST",
+                    json: true,
+                    body: {
+                        avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+                        content: `>>> **Event: **\`${name}\`\n**Error:** \`${err}\``,
+                        username: 'Messaging Service Logger'
+                    }
+                }, handleReqErr)
             }
         }
     }))
