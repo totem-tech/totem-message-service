@@ -125,14 +125,12 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     }
     if (userIsSupport) {
         // include support messages as well
-        selector.receiverIds = { '$or': [user.id, ROLE_SUPPORT] }
+        selector.receiverIds = { '$in': [user.id, ROLE_SUPPORT] }
     }
 
     if (lastMessageTS) selector = {
-        '$and': [
-            selector,
-            { 'timestamp': { '$gt': lastMessageTS } }
-        ]
+        ...selector,
+        timestamp: { '$gt': lastMessageTS }
     }
 
     const extraProps = { 'sort': [{ 'timestamp': 'asc' }] }
