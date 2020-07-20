@@ -149,8 +149,14 @@ export async function handleFaucetRequest(address, callback) {
         requests[index].funded = !err
         requests[index].hash = hash
         requests[index].inProgress = false
-        // update request data
-        await faucetRequests.set(user.id, { requests })
+        err && console.log('Faucet server response: ', { err, hash })
         callback(err, hash)
+        try {
+            // update request data
+            await faucetRequests.set(user.id, { requests })
+        } catch (err) {
+            console.log('Faucet request successful but failed to save to database. ', { userId: user.id, requests })
+        }
+
     })
 }

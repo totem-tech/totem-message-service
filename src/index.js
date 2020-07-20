@@ -15,15 +15,8 @@ import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
 import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
-import {
-    handleMessage,
-    handleMessageGetRecent,
-    handleMessageGroupName,
-} from './messages'
-import {
-    handleProject,
-    handleProjectsByHashes,
-} from './projects'
+import { handleMessage, handleMessageGetRecent, handleMessageGroupName } from './messages'
+import { handleProject, handleProjectsByHashes } from './projects'
 import {
     handleDisconnect,
     handleIdExists,

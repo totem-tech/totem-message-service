@@ -56,7 +56,7 @@ export async function handleTaskGet(ids, callback) {
 // @task        object: see `REQUIRED_KEYS` & `VALID_KEYS` for a list of accepted properties
 // @callback    function: callback args:
 //                  @err    string: error message, if any
-export async function handleTask(id, task = {}, callback) {
+export async function handleTask(recordId, task = {}, callback) {
     if (!isFn(callback)) return
     if (!!isObj(task)) return callback(messaages.invalidRequest)
     // check if all the required keys are present
@@ -75,7 +75,7 @@ export async function handleTask(id, task = {}, callback) {
     // const authorized = await authorizeData(hash, task)
 
     // save to database
-    await storage.set(id, task)
+    await storage.set(recordId, task)
 
     callback()
 }
