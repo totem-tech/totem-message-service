@@ -111,22 +111,23 @@ export default class CouchDBStorage {
     }
 
     // search documents within the database
-    async search(keyValues = {}, matchExact, matchAll, ignoreCase, limit = 0, skip = 0, asMap = true) {
+    async search(keyValues = {}, matchExact, matchAll, ignoreCase, limit = 0, skip = 0, asMap = true, extraProps) {
         if (!isObj(keyValues) || Object.keys(keyValues).length === 0) return asMap ? new Map() : []
 
-        // assumes no operator is used in @keyValues
-        !matchExact && Object.keys(keyValues).forEach(key => {
-            keyValues[key] = { $regex: `${ignoreCase ? '(?i)' : ''}${keyValues[key]}` }
-        })
-        // if !matchAll, add $or operator to include documents matching one or more fields
-        keyValues = matchAll ? keyValues : {
-            $or: Object.keys(keyValues).map(key => {
-                const keyQ = {}
-                keyQ[key] = keyValues[key]
-                return keyQ
-            })
-        }
-        const result = await this.searchRaw(keyValues, limit, skip)
+        // unused for the time being
+        // // assumes no operator is used in @keyValues
+        // !matchExact && Object.keys(keyValues).forEach(key => {
+        //     keyValues[key] = { $regex: `${ignoreCase ? '(?i)' : ''}${keyValues[key]}` }
+        // })
+        // // if !matchAll, add $or operator to include documents matching one or more fields
+        // keyValues = matchAll ? keyValues : {
+        //     $or: Object.keys(keyValues).map(key => {
+        //         const keyQ = {}
+        //         keyQ[key] = keyValues[key]
+        //         return keyQ
+        //     })
+        // }
+        const result = await this.searchRaw(keyValues, limit, skip, extraProps)
         return !asMap ? result.docs : new Map(result.docs.map(doc => [doc._id, doc]))
     }
 
@@ -148,15 +149,20 @@ export default class CouchDBStorage {
     // create or update document
     // 
     // Params: 
-    // @id      string: (optional) if exists, will update document
-    // @value   object
-    async set(id, value) {
+    // @id              string: (optional) if exists, will update document
+    // @value           object
+    // @allowOverride   boolean: whether to automatically check if `@id` already exists.
+    //                       If false, will CouchDB will throw error if @id` already exists
+    //                              and correct`@value._rev` value not supplied.
+    //
+    // Returns          object
+    async set(id, value, allowOverride = true) {
         id = isStr(id) ? id : uuid.v1()
         const db = await this.getDB()
-        const existing = await this.get(id)
-        if (existing) {
+        const existingDoc = allowOverride && await this.get(id)
+        if (existingDoc) {
             // attach `_rev` to execute an update operation
-            value._rev = existing._rev
+            value._rev = existingDoc._rev
         }
         return await db.insert(value, id)
     }

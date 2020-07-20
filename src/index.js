@@ -5,29 +5,34 @@ import express from 'express'
 import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
+import request from 'request'
+import { isFn, isArr, isObj } from './utils/utils'
+import CouchDBStorage, { getConnection } from './CouchDBStorage'
+import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
+import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleErrorMessages, handleTranslations, setTexts } from './language'
-import {
-    handleProject,
-    handleProjectsByHashes,
-} from './projects'
+import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
+import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
+import { handleMessage, handleMessageGetRecent, handleMessageGroupName } from './messages'
+import { handleProject, handleProjectsByHashes } from './projects'
 import {
     handleDisconnect,
     handleIdExists,
     handleLogin,
-    handleMessage,
     handleRegister,
+    handleIsUserOnline,
+    handleAmISupport,
 } from './users'
-import { handleNotify } from './notify'
-import { isFn, isArr } from './utils/utils'
-import CouchDBStorage, { getConnection } from './CouchDBStorage'
-import DataStorage from './utils/DataStorage'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
+const DISCORD_WEBHOOK_URL_SUPPORT = process.env.DISCORD_WEBHOOK_URL_SUPPORT
+const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
+const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
@@ -39,10 +44,11 @@ const texts = setTexts({
 const handlers = [
     // User & connection
     { name: 'disconnect', handler: handleDisconnect },
-    { name: 'message', handler: handleMessage },
     { name: 'id-exists', handler: handleIdExists },
     { name: 'register', handler: handleRegister },
     { name: 'login', handler: handleLogin },
+    { name: 'is-user-online', handler: handleIsUserOnline },
+    { name: 'am-i-support', handler: handleAmISupport },
 
     // Company
     { name: 'company', handler: handleCompany },
@@ -51,15 +57,26 @@ const handlers = [
     // Countries
     { name: 'countries', handler: handleCountries },
 
+    // Currency
+    { name: 'currency-convert', handler: handleCurrencyConvert },
+    { name: 'currency-list', handler: handleCurrencyList },
+
     // Faucet request
     { name: 'faucet-request', handler: handleFaucetRequest },
 
-    { name: 'translations', handler: handleTranslations },
     // Language
-    { name: 'error-messages', handler: handleErrorMessages },
+    { name: 'language-translations', handler: handleLanguageTranslations },
+    { name: 'language-error-messages', handler: handleLanguageErrorMessages },
+
+    // Chat/Messages
+    { name: 'message', handler: handleMessage },
+    { name: 'message-get-recent', handler: handleMessageGetRecent },
+    { name: 'message-group-name', handler: handleMessageGroupName },
 
     // Notification
-    { name: 'notify', handler: handleNotify },
+    { name: 'notification', handler: handleNotification },
+    { name: 'notification-get-recent', handler: handleNotificationGetRecent },
+    { name: 'notification-set-status', handler: handleNotificationSetStatus },
 
     // Project
     { name: 'project', handler: handleProject },
@@ -71,6 +88,14 @@ const handlers = [
         handler: async function interceptHandler() {
             const args = arguments
             const client = this
+            if (name === 'message') {
+                // pass on extra information along with the client
+                client._data = {
+                    DISCORD_WEBHOOK_URL_SUPPORT,
+                    DISCORD_WEBHOOK_AVATAR_URL,
+                    DISCORD_WEBHOOK_USERNAME,
+                }
+            }
             const { name, handler } = x
             try {
                 await handler.apply(client, args)
@@ -78,7 +103,20 @@ const handlers = [
                 const callback = args[args.length - 1]
                 isFn(callback) && callback(texts.runtimeError)
                 console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
-                // ToDo: use an error reporting service or bot for automatic error alerts
+                isObj(err) && console.log(err.stack)
+                if (!DISCORD_WEBHOOK_URL) return
+
+                const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
+                request({
+                    url: DISCORD_WEBHOOK_URL,
+                    method: "POST",
+                    json: true,
+                    body: {
+                        avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+                        content: `>>> **Event: **\`${name}\`\n**Error:** \`${err}\``,
+                        username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+                    }
+                }, handleReqErr)
             }
         }
     }))

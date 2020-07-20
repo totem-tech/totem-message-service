@@ -1,4 +1,4 @@
-# git pull && git submodule update --recursive --remote
+# git pull && git submodule sync && git submodule update --init --recursive --remote && \
 # _______________DYNAMIC_VARIABLES_BELOW_______________="Changes to variables below DO NOT REQUIRE server restart" \
 # keyData="string: (96 bytes hex without 0x) exactly as found in the oo7-substrate's secretStore" \
 # serverName="string: a secret name for the server" \
@@ -14,4 +14,8 @@
 # BuildMode="string: TRUE" \ #indicates whether to allow frontend to be able to grab all error messages at once
 # CouchDB_URL="string: http://adminId:password@127.0.0.1:5984" \ # CouchDB URL and admin credentials (if available) to establish a connection 
 # MigrateFiles="string: comma-separated JSON filenames" \ # migrate JSON storage to CouchDB storage
+# DISCORD_WEBHOOK_URL="string: URL of the Discord channel webhook. https://url-fo-the-discord-webhook" \
+# DISCORD_WEBHOOK_AVATAR_URL="string: URL to the avatar image. Eg: https://url-to-avatar-image" \
+# DISCORD_WEBHOOK_USERNAME="string: name for the webhook. Eg: `dev.totem.live`" \
+# DISCORD_WEBHOOK_URL_SUPPORT="string: URL of the Discord channel webhook to forward all support messages from the website" \
 # yarn run dev
