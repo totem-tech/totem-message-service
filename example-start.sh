@@ -16,5 +16,5 @@
 # MigrateFiles="string: comma-separated JSON filenames" \ # migrate JSON storage to CouchDB storage
 # DISCORD_WEBHOOK_URL="string: URL to the Discord channel webhook. https://url-fo-the-discord-webhook" \
 # DISCORD_WEBHOOK_AVATAR_URL="string: URL to the avatar image. Eg: https://url-to-avatar-image" \
-# DISCORD_WEBHOOK_USERNAME="string: name for the webhook. Eg: `Messaging Service Logger: dev.totem.live`" \
+# DISCORD_WEBHOOK_USERNAME="string: name for the webhook. Eg: `dev.totem.live`" \
 # yarn run dev

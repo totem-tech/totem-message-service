@@ -1,3 +1,4 @@
+import request from 'request'
 import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isFn, isStr } from './utils/utils'
@@ -9,6 +10,9 @@ const TROLLBOX = 'trollbox' // for trollbox
 const TROLLBOX_ALT = 'everyone'
 const msgMaxLength = 160
 const RECENT_MESSAGE_LIMIT = 1000
+const DISCORD_WEBHOOK_URL_SUPPORT = process.env.DISCORD_WEBHOOK_URL_SUPPORT
+const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
+const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 // Error messages
 const texts = setTexts({
     invalidRequest: 'Invalid request',
@@ -104,6 +108,19 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     }
     emitToUsers(emitIds, event, args)
     callback(null, timestamp, id)
+    if (!DISCORD_WEBHOOK_URL_SUPPORT || !isSupportMsg || userIsSupport) return
+
+    // send support message message to Discord support channel
+    request({
+        url: DISCORD_WEBHOOK_URL_SUPPORT,
+        method: "POST",
+        json: true,
+        body: {
+            avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+            content: `>>> **UserID: **${user.id}\n**Message:** ${message}`,
+            username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+        }
+    }, err => err && console.log('Discord Webhook: failed to send support message. ', err))
 }
 
 // get user's most recent messsages. Maximum of 1000
