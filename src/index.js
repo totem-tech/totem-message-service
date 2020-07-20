@@ -15,15 +15,8 @@ import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
 import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
-import {
-    handleMessage,
-    handleMessageGetRecent,
-    handleMessageGroupName,
-} from './messages'
-import {
-    handleProject,
-    handleProjectsByHashes,
-} from './projects'
+import { handleMessage, handleMessageGetRecent, handleMessageGroupName } from './messages'
+import { handleProject, handleProjectsByHashes } from './projects'
 import {
     handleDisconnect,
     handleIdExists,
@@ -37,6 +30,7 @@ const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
+const DISCORD_WEBHOOK_URL_SUPPORT = process.env.DISCORD_WEBHOOK_URL_SUPPORT
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
 const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
@@ -94,6 +88,14 @@ const handlers = [
         handler: async function interceptHandler() {
             const args = arguments
             const client = this
+            if (name === 'message') {
+                // pass on extra information along with the client
+                client._data = {
+                    DISCORD_WEBHOOK_URL_SUPPORT,
+                    DISCORD_WEBHOOK_AVATAR_URL,
+                    DISCORD_WEBHOOK_USERNAME,
+                }
+            }
             const { name, handler } = x
             try {
                 await handler.apply(client, args)
@@ -102,9 +104,8 @@ const handlers = [
                 isFn(callback) && callback(texts.runtimeError)
                 console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
                 isObj(err) && console.log(err.stack)
-                console.log(DISCORD_WEBHOOK_URL)
                 if (!DISCORD_WEBHOOK_URL) return
-                // ToDo: use an error reporting service or bot for automatic error alerts
+
                 const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
                 request({
                     url: DISCORD_WEBHOOK_URL,

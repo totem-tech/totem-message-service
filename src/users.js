@@ -5,6 +5,7 @@ import { setTexts } from './language'
 const users = new CouchDBStorage(null, 'users')
 export const clients = new Map()
 export const userClientIds = new Map()
+const onlineSupportUsers = new Map()
 const isValidId = id => /^[a-z][a-z0-9]+$/.test(id)
 const idMaxLength = 16
 const idMinLength = 3
@@ -130,7 +131,10 @@ export const idExists = async (userId) => {
 //
 // Params:
 // @userId  string
-export const isUserOnline = userId => (userClientIds.get(userId) || []).length > 0
+export const isUserOnline = userId => {
+    if (userId === ROLE_SUPPORT) return onlineSupportUsers.size > 0
+    return (userClientIds.get(userId) || []).length > 0
+}
 
 // onUserLogin registers callbacks to be executed on any user login occurs
 //
@@ -165,6 +169,10 @@ export async function handleDisconnect() {
     clientIds.splice(clientIdIndex, 1)
     userClientIds.set(user.id, arrUnique(clientIds))
     console.info('Client disconnected: ', client.id, ' userId: ', user.id)
+
+    if (!onlineSupportUsers.get(user.id) || clientIds.length > 0) return
+    // user is not online
+    onlineSupportUsers.delete(user.id)
 }
 
 // check if user id exists
@@ -215,6 +223,7 @@ export async function handleLogin(userId, secret, callback) {
         clientIds.push(client.id)
         userClientIds.set(user.id, arrUnique(clientIds))
         clients.set(client.id, client)
+        if ((user.roles || []).includes(ROLE_SUPPORT)) onlineSupportUsers.set(user.id, true)
     }
 
     console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)

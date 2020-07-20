@@ -21,7 +21,7 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
         await connectionPromsie
         return connection
     }
-    
+
     console.log('Polkadot: connecting to', nodeUrl)
     connectionPromsie = connect(nodeUrl, types, true)
     const { api, keyring, provider } = await connectionPromsie
@@ -36,16 +36,17 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
 // Authorize off-chain data using BONSAI token from blockchain
 //
 // Params:
-// @hash    string: ID/hash of the record
-// @data    object/any: the actual record with with only correct property names.
-//              A hash will be generated using `@data` which must match with the hash returned from blockchain.
-//              If it doesn't match, either record has not been authorized by Identity owner or has incorrect data or unwanted properties.
+// @recordId    string: ID/hash of the record
+// @data        object/any: the actual record with with only correct property names.
+//                  A hash will be generated using `@data` which must match with the hash returned from blockchain.
+//                  If it doesn't match, either record has not been authorized by Identity owner 
+//                  or has incorrect data or unwanted properties.
 //
-// Returns boolean
-export const authorizeData = async (hash, data) => {
+// Returns      boolean
+export const authorizeData = async (recordId, data) => {
     const token = generateHash(data)
     const { api } = await getConnection()
     // token returned from blockchain
-    const tokenX = hashToStr(await api.query.bonsai.isValidRecord(hash))
+    const tokenX = hashToStr(await api.query.bonsai.isValidRecord(recordId))
     return tokenX === token
 }

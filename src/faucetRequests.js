@@ -143,14 +143,25 @@ export async function handleFaucetRequest(address, callback) {
         secretKey
     )
     requests[index].inProgress = true
-    // save request data
+    // save inprogress status to database
     await faucetRequests.set(user.id, { requests })
-    faucetClient.emit('faucet', encryptedMsg, nonce, async (err, hash) => {
-        requests[index].funded = !err
-        requests[index].hash = hash
-        requests[index].inProgress = false
-        // update request data
-        await faucetRequests.set(user.id, { requests })
-        callback(err, hash)
-    })
+
+    // Promisify websocket request
+    const emitToFaucetClient = () => new Promise(resolve => faucetClient.emit(
+        'faucet',
+        encryptedMsg,
+        nonce,
+        (err, hash) => resolve([err, hash]) ,
+    ))
+    const [emitErr, hash] = await emitToFaucetClient()
+    requests[index].funded = !emitErr
+    requests[index].hash = hash
+    requests[index].inProgress = false
+
+    !!emitErr && console.log(`Faucet request failed. Error: ${emitErr}`)
+    // get back to the user
+    callback(emitErr, hash)
+
+    // update completed status to database
+    await faucetRequests.set(user.id, { requests })
 }
