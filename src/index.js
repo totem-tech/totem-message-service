@@ -38,6 +38,7 @@ const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
+const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
@@ -112,7 +113,7 @@ const handlers = [
                     body: {
                         avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
                         content: `>>> **Event: **\`${name}\`\n**Error:** \`${err}\``,
-                        username: 'Messaging Service Logger'
+                        username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
                     }
                 }, handleReqErr)
             }
