@@ -2,7 +2,7 @@ import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr } from './utils/utils'
 import { setTexts } from './language'
-import { emitToUsers, getUserByClientId, idExists, isUserOnline, onUserLogin } from './users'
+import { emitToUsers, getUserByClientId, idExists } from './users'
 
 // Pending notification recipient user IDs
 // Notification object properties:

@@ -40,8 +40,6 @@ export const RESERVED_IDS = Object.freeze([
     'totem',
     'trollbox',
 ])
-const onUserLoginCallbacks = []
-const _execOnUserLogin = userId => setTimeout(() => onUserLoginCallbacks.forEach(fn => fn(userId)))
 // initialize
 setTimeout(async () => {
     // create an index for the field `timestamp`, ignores if already exists
@@ -136,25 +134,12 @@ export const isUserOnline = userId => {
     return (userClientIds.get(userId) || []).length > 0
 }
 
-// onUserLogin registers callbacks to be executed on any user login occurs
-//
-// Params:
-// @callback    function: params => (@loggedInUserId string)
-export const onUserLogin = callback => isFn(callback) && onUserLoginCallbacks.push(callback)
-
 /*
  *
  * event handlers
  * 
  */
-// user checks they have 'support' role
-export async function handleAmISupport(callback) {
-    if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
-    if (!user) return callback(messages.loginOrRegister)
-    callback(null, (user.roles || []).includes(ROLE_SUPPORT))
-}
+
 
 // cleanup on user client disconnect
 export async function handleDisconnect() {
@@ -218,17 +203,16 @@ export async function handleLogin(userId, secret, callback) {
     if (RESERVED_IDS.includes(userId)) return callback(texts.reservedId)
     const user = await users.get(userId)
     const valid = user && user.secret === secret
-    if (valid) {
-        const clientIds = userClientIds.get(user.id) || []
-        clientIds.push(client.id)
-        userClientIds.set(user.id, arrUnique(clientIds))
-        clients.set(client.id, client)
-        if ((user.roles || []).includes(ROLE_SUPPORT)) onlineSupportUsers.set(user.id, true)
-    }
-
     console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
-    callback(valid ? null : messages.loginFailed)
-    _execOnUserLogin(userId)
+    if (!valid) return callback(messages.loginFailed)
+    const { roles = [] } = user
+    const clientIds = userClientIds.get(user.id) || []
+    clientIds.push(client.id)
+    userClientIds.set(user.id, arrUnique(clientIds))
+    clients.set(client.id, client)
+    if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user.id, true)
+
+    callback(null, { roles })
 }
 
 // user registration
@@ -259,5 +243,4 @@ export async function handleRegister(userId, secret, callback) {
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
     callback()
-    _execOnUserLogin(userId)
 }

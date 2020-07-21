@@ -23,7 +23,6 @@ import {
     handleLogin,
     handleRegister,
     handleIsUserOnline,
-    handleAmISupport,
 } from './users'
 
 const expressApp = express()
@@ -48,7 +47,6 @@ const handlers = [
     { name: 'register', handler: handleRegister },
     { name: 'login', handler: handleLogin },
     { name: 'is-user-online', handler: handleIsUserOnline },
-    { name: 'am-i-support', handler: handleAmISupport },
 
     // Company
     { name: 'company', handler: handleCompany },
@@ -83,8 +81,8 @@ const handlers = [
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
 ]
     .filter(x => isFn(x.handler)) // ignore if handler is not a function
-    .map(x => ({
-        ...x,
+    .map(item => ({
+        ...item,
         handler: async function interceptHandler() {
             const args = arguments
             const client = this
@@ -96,7 +94,7 @@ const handlers = [
                     DISCORD_WEBHOOK_USERNAME,
                 }
             }
-            const { name, handler } = x
+            const { name, handler } = item
             try {
                 await handler.apply(client, args)
             } catch (err) {
