@@ -148,7 +148,7 @@ async function migrate(fileNames) {
         'faucet-requests': 'requests', // store the value array under the property called 'requests'
         'translations': 'texts', // store the value array under the property called 'texts'
     }
-    // databases where update of documents is allowed
+    // databases where update of document update is allowed
     const allowUpdates = [
         'translations', // for easier access to updating translated texts
     ]
@@ -183,15 +183,11 @@ async function migrate(fileNames) {
             data.set(id, value)
         })
 
-        const result = await db.setAll(data, allowUpdates.includes(dbName))
-        let count = 0
-        result.forEach(({ ok, id }) => {
-            if (!ok) retrun
-            data.delete(id)
-            count++
-        })
+        const result = await db.setAll(data, !allowUpdates.includes(dbName))
+        const okIds = result.map(({ ok, id }) => ok && id).filter(Boolean)
+        data.delete(okIds)
         // update JSON file to remove migrated entries
         jsonStorage.setAll(data)
-        console.log(`${file}: added ${count} entries. Ignored ${total - count} existing etries`)
+        console.log(`${file} => saved: ${okIds.length}. Ignored existing: ${total - okIds.length}`)
     }
 }
