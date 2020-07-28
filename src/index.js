@@ -185,7 +185,8 @@ async function migrate(fileNames) {
 
         const result = await db.setAll(data, !allowUpdates.includes(dbName))
         const okIds = result.map(({ ok, id }) => ok && id).filter(Boolean)
-        data.delete(okIds)
+        // remove saved entries
+        okIds.forEach(id => data.delete(id))
         // update JSON file to remove migrated entries
         jsonStorage.setAll(data)
         console.log(`${file} => saved: ${okIds.length}. Ignored existing: ${total - okIds.length}`)
