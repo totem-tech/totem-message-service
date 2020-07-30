@@ -1,5 +1,4 @@
-import { hashToStr } from './utils/convert'
-import { connect } from './utils/polkadotHelper'
+import { connect, query } from './utils/polkadotHelper'
 import types from './utils/totem-polkadot-js-types'
 import { generateHash } from './utils/utils'
 
@@ -46,7 +45,9 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
 export const authorizeData = async (recordId, data) => {
     const token = generateHash(data)
     const { api } = await getConnection()
-    // token returned from blockchain
-    const tokenX = hashToStr(await api.query.bonsai.isValidRecord(recordId))
-    return tokenX === token
+    return token === await query(
+        api,
+        api.query.bonsai.isValidRecord,
+        recordId,
+    )
 }

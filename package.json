@@ -67,7 +67,6 @@
     "oo7-substrate": "^0.8.0",
     "pbkdf2": "^3.0.17",
     "socket.io": "^2.3.0",
-    "tweetnacl-util": "^0.15.0",
     "uuid": "^3.3.3",
     "uws": "^10.148.1",
     "xxhashjs": "^0.2.2"
