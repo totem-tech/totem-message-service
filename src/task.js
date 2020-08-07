@@ -1,7 +1,7 @@
 import CouchDBStorage from './CouchDBStorage'
 import { setTexts } from './language'
 import { isFn, isObj, objClean, objContains, isArr, arrUnique } from './utils/utils'
-import { authorizeData } from './blockchain'
+import { authorizeData, recordTypes } from './blockchain'
 import { getUserByClientId } from './users'
 
 // Tasks database
@@ -43,7 +43,8 @@ const MAX = {
 export async function handleTaskGetById(ids, callback) {
     if (!isFn(callback)) return
     ids = arrUnique((isArr(ids) ? ids : [ids]).filter(Boolean))
-    callback(null, await storage.getAll(ids, true, 100))
+    const result = await storage.getAll(ids, true, ids.length)
+    callback(null, result)
 }
 
 // handleTask saves non-blockchain task details to the database.
@@ -55,32 +56,36 @@ export async function handleTaskGetById(ids, callback) {
 // @task        object: see `REQUIRED_KEYS` & `VALID_KEYS` for a list of accepted properties
 // @callback    function: callback args:
 //                  @err    string: error message, if unsuccessful
-export async function handleTask(taskId, task = {}, callback) {
-    console.log({ taskId, task, callback })
+export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!isFn(callback)) return
-    if (!!isObj(task)) return callback(messages.invalidRequest)
+    if (!isObj(task)) return callback(messages.invalidRequest)
     // check if all the required keys are present
-    if (!objContains(REQUIRED_KEYS)) return callback(`${messages.invalidKeys}: ${REQUIRED_KEYS.join(', ')}`)
+    if (!objContains(task, REQUIRED_KEYS)) return callback(`${messages.invalidKeys}: ${REQUIRED_KEYS.join(', ')}`)
     // TODO: add data type, length etc validation
 
     const client = this
     const user = getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
+    task = objClean(task, VALID_KEYS)
+    // check if data has been authorized using BONSAI
+    const tokenData = `${recordTypes.task}${ownerAddress}${JSON.stringify(task)}`
+    const authErr = await authorizeData(taskId, tokenData)
+    if (authErr) return callback(authErr)
 
-    const existingTask = await storage.get(taskId)
     const tsUpdated = new Date()
+    const existingTask = await storage.get(taskId)
     task = {
         // if an entry already exists merge with new information
-        ...existingTask,
+        ...existingTask || {
+            createdBy: user.id,
+            tsCreated: tsUpdated,
+        },
         // get rid of any unwanted properties
-        ...objClean(task, VALID_KEYS),
+        ...task,
         updatedBy: user.id,
         tsUpdated,
-        tsCreated: existingTask.tsCreated || tsUpdated,
     }
 
-    // check if data has been authorized using BONSAI
-    // const authorized = await authorizeData(taskId, task)
 
     // save to database
     const result = await storage.set(taskId, task)
