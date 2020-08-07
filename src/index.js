@@ -24,6 +24,8 @@ import {
     handleRegister,
     handleIsUserOnline,
 } from './users'
+import { handleTask, handleTaskGetById } from './task'
+import { handleGlAccounts } from './glAccounts'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -62,6 +64,9 @@ const handlers = [
     // Faucet request
     { name: 'faucet-request', handler: handleFaucetRequest },
 
+    // GL Accounts
+    { name: 'gl-accounts', handler: handleGlAccounts },
+
     // Language
     { name: 'language-translations', handler: handleLanguageTranslations },
     { name: 'language-error-messages', handler: handleLanguageErrorMessages },
@@ -79,6 +84,9 @@ const handlers = [
     // Project
     { name: 'project', handler: handleProject },
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
+
+    { name: 'task', handler: handleTask },
+    { name: 'task-get-by-id', handler: handleTaskGetById },
 ]
     .filter(x => isFn(x.handler)) // ignore if handler is not a function
     .map(item => ({
