@@ -17,7 +17,7 @@ const messages = setTexts({
 })
 const REQUIRED_KEYS = [
     'currency',
-    'published',
+    'publish',
     'title',
 ]
 // all acceptable keys
