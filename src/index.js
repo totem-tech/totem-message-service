@@ -6,6 +6,7 @@ import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
 import request from 'request'
+import uuid from 'uuid'
 import { isFn, isArr, isObj } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
@@ -40,9 +41,15 @@ const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO.listen(server)
+// Error messages
 const texts = setTexts({
     loginRequired: 'Please login or create an account if you have not already done so',
-    runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
+    runtimeError: `
+        Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
+        You can also email us as support@totemaccounting.com. 
+        Someone from the Totem team will get back to you as soon as possible.
+        Don't forget to mention the following Request ID
+    `,
 })
 const handlers = [
     // User & connection
@@ -105,28 +112,47 @@ const handlers = [
                 }
             }
             const { handler, name, requireLogin = false } = item
-            let user = getUserByClientId(client.id)
+            // if event requres a callback, last argument is expected to be the function
             const callback = args.slice(-1)
+            let user
+
             try {
-                if (isFn(callback) && requireLogin && !user) return callback(loginRequired)
-                await handler.apply(
-                    !requireLogin ? client : [client, user],
-                    args,
-                )
+                if (requireLogin) {
+                    // user must be logged
+                    user = await getUserByClientId(client.id)
+                    if (!user) return isFn(callback) && callback(loginRequired)
+                }
+                // include the user object if login is required for this event
+                await handler.apply(!requireLogin ? client : [client, user], args,)
             } catch (err) {
-                isFn(callback) && callback(texts.runtimeError)
-                console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
-                isObj(err) && console.log(err.stack)
+                user = user || await getUserByClientId(client.id)
+                const requestId = uuid.v1()
+                isFn(callback) && callback(`${texts.runtimeError}: ${requestId}`)
+
+                // Print error meta data
+                console.log([
+                    `interceptHandler: uncaught error on event "${name}" handler.`,
+                    `RequestID: ${requestId}.`,
+                ].join('\n'))
+                // print the error stack trace
+                isObj(err) && console.log(err.stack, '\n')
                 if (!DISCORD_WEBHOOK_URL) return
 
+                // send message to discord
                 const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
+                const content = '>>> ' + [
+                    `**RequestID:** ${requestId}`,
+                    `**Event:** *${name}*`,
+                    '**Error:**' + `${err}`.replace('Error:', ''),
+                    user ? `**UserID:** ${user.id}` : '',
+                ].join('\n')
                 request({
                     url: DISCORD_WEBHOOK_URL,
                     method: "POST",
                     json: true,
                     body: {
                         avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-                        content: `>>> **Event: **\`${name}\`\n**Error:** \`${err}\``,
+                        content,
                         username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
                     }
                 }, handleReqErr)
