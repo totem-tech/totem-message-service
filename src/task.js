@@ -1,8 +1,8 @@
 import CouchDBStorage from './CouchDBStorage'
 import { setTexts } from './language'
-import { isFn, isObj, objClean, objContains, isArr, arrUnique } from './utils/utils'
+import { isFn, objClean, isArr, arrUnique } from './utils/utils'
+import { TYPES, validateObj, validate } from './utils/validate'
 import { authorizeData, recordTypes } from './blockchain'
-import { getUserByClientId } from './users'
 
 // Tasks database
 const storage = new CouchDBStorage(null, 'task')
@@ -15,22 +15,83 @@ const messages = setTexts({
     maxLenDesc: 'Description exceeds maximum acceptable length',
     maxLenTitle: 'Title exceeds maximum acceptable length',
 })
-const REQUIRED_KEYS = [
-    'currency',
-    'publish',
-    'title',
-]
-// all acceptable keys
-const VALID_KEYS = [
-    ...REQUIRED_KEYS,
-    'description',
-    'tags',
-]
-const MAX = {
-    // maximum number of characters alllowed in description
-    description: 5000,
-    // maximum number of characters allowed in title
-    title: 128,
+// configuration to validate task object using `validateObj` function
+const validatorConfig = {
+    amountXTX: {
+        required: true,
+        type: TYPES.integer,
+    },
+    currency: {
+        required: true,
+        type: TYPES.string,
+    },
+    description: {
+        maxLength: 5000,
+        required: false,
+        type: TYPES.string,
+    },
+    publish: {
+        accept: [0, 1], // only values accepted as valid
+        required: true,
+        type: TYPES.integer,
+    },
+    tags: {
+        required: false,
+        type: TYPES.array
+    },
+    title: {
+        maxLength: 128,
+        minLength: 3,
+        required: true,
+        type: TYPES.string
+    },
+}
+const REQUIRED_KEYS = Object.keys(validatorConfig)
+// handleTask saves non-blockchain task details to the database.
+// Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
+// Login is required simply for the purpose of loggin the User ID who saved the data.
+// 
+// Params:
+// @taskId      string: ID of the task
+// @task        object: see `validatorConfig` for a list of properties and their respected accepted data types etc.
+// @callback    function: callback args:
+//                  @err    string: error message, if unsuccessful
+export async function handleTask(taskId, task = {}, ownerAddress, callback) {
+    if (!isFn(callback)) return
+
+    // validate object properties including taskId
+    let err = validate(taskId, { required: true, type: TYPES.hex })
+        || validateObj(task, validatorConfig, true, true)
+    if (err) return callback(err)
+
+    const [client, user] = this
+    console.log(user)
+    // const user = getUserByClientId(client.id)
+    if (!user) return callback(messages.loginRequired)
+
+    task = objClean(task, REQUIRED_KEYS)
+    // check if data has been authorized using BONSAI
+    const tokenData = `${recordTypes.task}${ownerAddress}${JSON.stringify(task)}`
+    const authErr = await authorizeData(taskId, tokenData)
+    if (authErr) return callback(authErr)
+
+    const tsUpdated = new Date()
+    const existingTask = (await storage.get(taskId)) || {
+        createdBy: user.id,
+        tsCreated: tsUpdated,
+    }
+    task = {
+        // if an entry already exists merge with new information
+        ...existingTask,
+        // get rid of any unwanted properties
+        ...task,
+        updatedBy: user.id,
+        tsUpdated,
+    }
+
+    // save to database
+    const result = await storage.set(taskId, task)
+    callback(null, result)
 }
 
 // handleTaskGet retrieves non-blockchain task details from database
@@ -47,47 +108,9 @@ export async function handleTaskGetById(ids, callback) {
     callback(null, result)
 }
 
-// handleTask saves non-blockchain task details to the database.
-// Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
-// Login is required simply for the purpose of loggin the User ID who saved the data.
-// 
-// Params:
-// @taskId      string: ID of the task
-// @task        object: see `REQUIRED_KEYS` & `VALID_KEYS` for a list of accepted properties
-// @callback    function: callback args:
-//                  @err    string: error message, if unsuccessful
-export async function handleTask(taskId, task = {}, ownerAddress, callback) {
+export async function handleTaskMarketplaceSearch(filters = {}, callback) {
     if (!isFn(callback)) return
-    if (!isObj(task)) return callback(messages.invalidRequest)
-    // check if all the required keys are present
-    if (!objContains(task, REQUIRED_KEYS)) return callback(`${messages.invalidKeys}: ${REQUIRED_KEYS.join(', ')}`)
-    // TODO: add data type, length etc validation
-
-    const client = this
-    const user = getUserByClientId(client.id)
-    if (!user) return callback(messages.loginRequired)
-    task = objClean(task, VALID_KEYS)
-    // check if data has been authorized using BONSAI
-    const tokenData = `${recordTypes.task}${ownerAddress}${JSON.stringify(task)}`
-    const authErr = await authorizeData(taskId, tokenData)
-    if (authErr) return callback(authErr)
-
-    const tsUpdated = new Date()
-    const existingTask = await storage.get(taskId)
-    task = {
-        // if an entry already exists merge with new information
-        ...existingTask || {
-            createdBy: user.id,
-            tsCreated: tsUpdated,
-        },
-        // get rid of any unwanted properties
-        ...task,
-        updatedBy: user.id,
-        tsUpdated,
-    }
+    const { keywords, tags, amountXTX, deadline, tsCreated } = filters
 
 
-    // save to database
-    const result = await storage.set(taskId, task)
-    callback(null, result)
 }

@@ -23,6 +23,7 @@ import {
     handleLogin,
     handleRegister,
     handleIsUserOnline,
+    getUserByClientId,
 } from './users'
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
@@ -40,6 +41,7 @@ const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO.listen(server)
 const texts = setTexts({
+    loginRequired: 'Please login or create an account if you have not already done so',
     runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
 })
 const handlers = [
@@ -85,14 +87,14 @@ const handlers = [
     { name: 'project', handler: handleProject },
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
 
-    { name: 'task', handler: handleTask },
+    { name: 'task', handler: handleTask, requireLogin: true, },
     { name: 'task-get-by-id', handler: handleTaskGetById },
 ]
     .filter(x => isFn(x.handler)) // ignore if handler is not a function
     .map(item => ({
         ...item,
         handler: async function interceptHandler() {
-            const args = arguments
+            const args = [...arguments]
             const client = this
             if (name === 'message') {
                 // pass on extra information along with the client
@@ -102,11 +104,16 @@ const handlers = [
                     DISCORD_WEBHOOK_USERNAME,
                 }
             }
-            const { name, handler } = item
+            const { handler, name, requireLogin = false } = item
+            let user = getUserByClientId(client.id)
+            const callback = args.slice(-1)
             try {
-                await handler.apply(client, args)
+                if (isFn(callback) && requireLogin && !user) return callback(loginRequired)
+                await handler.apply(
+                    !requireLogin ? client : [client, user],
+                    args,
+                )
             } catch (err) {
-                const callback = args[args.length - 1]
                 isFn(callback) && callback(texts.runtimeError)
                 console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
                 isObj(err) && console.log(err.stack)
