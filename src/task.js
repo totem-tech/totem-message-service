@@ -1,7 +1,7 @@
 import CouchDBStorage from './CouchDBStorage'
 import { setTexts } from './language'
 import { isFn, objClean, isArr, arrUnique } from './utils/utils'
-import { TYPES, validateObj, validate } from './utils/validate'
+import { TYPES, validateObj, validate } from './utils/validator'
 import { authorizeData, recordTypes } from './blockchain'
 
 // Tasks database
@@ -25,12 +25,27 @@ const validatorConfig = {
         required: true,
         type: TYPES.string,
     },
+    deadline: {
+        min: 1,
+        required: true,
+        type: TYPES.integer,
+    },
     description: {
+        min: 0,
         maxLength: 5000,
         required: false,
         type: TYPES.string,
     },
-    publish: {
+    dueDate: {
+        min: 1,
+        required: true,
+        type: TYPES.integer,
+    },
+    isClosed: {
+        required: true,
+        type: TYPES.boolean,
+    },
+    isSell: {
         accept: [0, 1], // only values accepted as valid
         required: true,
         type: TYPES.integer,
@@ -58,7 +73,7 @@ const REQUIRED_KEYS = Object.keys(validatorConfig)
 //                  @err    string: error message, if unsuccessful
 export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!isFn(callback)) return
-
+    console.log({ taskId, task })
     // validate object properties including taskId
     let err = validate(taskId, { required: true, type: TYPES.hex })
         || validateObj(task, validatorConfig, true, true)
