@@ -45,7 +45,7 @@ const validatorConfig = {
         required: true,
         type: TYPES.boolean,
     },
-    isSell: {
+    isSell: { // false === marketplace
         accept: [0, 1], // only values accepted as valid
         required: true,
         type: TYPES.integer,
