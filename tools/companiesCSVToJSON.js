@@ -93,7 +93,7 @@ const columnNames = [
     // 'previousName_10.CompanyName',
     // 'confStmtNextDueDate',
     // 'confStmtLastMadeUpDate'
-  ]
+]
 const countryCodeExceptions = {
     'United Kingdom': 'GB',
     'Great Britain': 'GB',
@@ -117,7 +117,7 @@ const countryCodeExceptions = {
     'Iran': 'IR',
     'Tanzania': 'TZ',
     'Ivory Coast': 'CI',    // => Côte d'Ivoire????? 
-    
+
     'Irish Rep': 'IE', // Ireland
     'Ireland Rep': 'IE',
     'Republic Of Ireland': 'IE',
@@ -125,10 +125,10 @@ const countryCodeExceptions = {
 
     'Yugoslavia': 'YU',       //Macedonia (the former Yugoslav Republic of)
     'Holland': 'NL', // Netherland
-    
+
     'Czechoslovakia': 'SK', // => Slovakia ??
     'Slovak Republic': 'SK',
-    
+
     'Turks & Caicos Islands': 'TC',
     'St Kitts-nevis': 'KN',
     'St Lucia': 'LCA',
@@ -158,7 +158,7 @@ const countryCodeExceptions = {
 const getCountryCode = (countryStorage, name) => {
     if (!name) return ''
     if (countryCodeExceptions[name]) return countryCodeExceptions[name]
-    let country = countryStorage.find( { name }, true, false, true ) //code: name, code3: name, 
+    let country = countryStorage.find({ name }, true, false, true) //code: name, code3: name, 
     return country && country.code || ''
 }
 // save and clear pending items
@@ -168,8 +168,8 @@ const saveNClear = async (logtxt) => {
     // const tmp2 = pendingIndexes
     pendingItems = new Map()
     // pendingIndexes = new Map()
-	await couchdb.setAll(tmp, true)
-	// await indexDB.setAll(tmp2, true)
+    await couchdb.setAll(tmp, true)
+    // await indexDB.setAll(tmp2, true)
 }
 
 // save remaining items not save by addToBulkQueue
@@ -178,22 +178,22 @@ const deferredSave = deferred(() => pendingItems.size > 0 && saveNClear(
 ), 3000)
 
 const addToBulkQueue = async (id, value, index) => {
-	if (pendingItems.size >= bulkSize) {
-		await saveNClear(`Saving items ${index - bulkSize} to ${index - 1}`)
-	}
+    if (pendingItems.size >= bulkSize) {
+        await saveNClear(`Saving items ${index - bulkSize} to ${index - 1}`)
+    }
     pendingItems.set(id, value)
     // pendingIndexes.set(id, index)
 
-	// last items or if total number of items is less than bulksize
-	deferredSave()
+    // last items or if total number of items is less than bulksize
+    deferredSave()
 }
 
-;(async function() {
-	if (!filepath) throw new Error('filepath required')
+(async function () {
+    if (!filepath) throw new Error('filepath required')
     await couchdb.getDB() // create db if not exists
     // await indexDB.getDB() // create db if not exists
-	console.log({ filepath, startingNumber })
-	console.time('companies')
+    console.log({ filepath, startingNumber })
+    console.time('companies')
     // Connection is needed because of Polkadot's peculear behaviour.
     // Keyring "sometimes" works without creating a connection other time throws error!
     let countryStorage
@@ -204,11 +204,11 @@ const addToBulkQueue = async (id, value, index) => {
     let firstLineIgnored = false
     let firstLine = columnNames.join()
     let stop = false
-    const logTimeEnd = deferred(()=> console.timeEnd('companies'), 5000)
+    const logTimeEnd = deferred(() => console.timeEnd('companies'), 5000)
     await handleCountries(null, (err, countries) => {
         if (err) throw err
         countryStorage = new DataStorage()
-        countryStorage.data = countries
+        countryStorage.setAll(countries)
         console.log(`${countries.size} countries retrieved`)
     })
 
@@ -217,9 +217,9 @@ const addToBulkQueue = async (id, value, index) => {
         // output: process.stdout,
         console: false
     })
-    readInterface.on('line', async function(line) {
+    readInterface.on('line', async function (line) {
         if (!firstLineIgnored || stop) {
-            firstLineIgnored  = true
+            firstLineIgnored = true
             return
         }
         const index = count++
@@ -236,8 +236,8 @@ const addToBulkQueue = async (id, value, index) => {
         company.registrationNumber = registrationNumber
         const { address } = keyring.addFromUri(iSeed)
         company.identity = address
-        
-        const hash = generateHash({...company, index, uuid: uuid.v1()})
+
+        const hash = generateHash({ ...company, index, uuid: uuid.v1() })
         console.log(JSON.stringify([index, { address, hash }]))
         try {
             await addToBulkQueue(hash, company, index) // save documents in bulk
