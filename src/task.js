@@ -55,7 +55,7 @@ const validatorConfig = {
         type: TYPES.array
     },
     title: {
-        maxLength: 128,
+        maxLength: 160,
         minLength: 3,
         required: true,
         type: TYPES.string
@@ -73,14 +73,12 @@ const REQUIRED_KEYS = Object.keys(validatorConfig)
 //                  @err    string: error message, if unsuccessful
 export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!isFn(callback)) return
-    console.log({ taskId, task })
     // validate object properties including taskId
     let err = validate(taskId, { required: true, type: TYPES.hex })
         || validateObj(task, validatorConfig, true, true)
     if (err) return callback(err)
 
     const [client, user] = this
-    console.log(user)
     // const user = getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
 

@@ -86,15 +86,15 @@ const handlers = [
     { name: 'message-group-name', handler: handleMessageGroupName },
 
     // Notification
-    { name: 'notification', handler: handleNotification },
-    { name: 'notification-get-recent', handler: handleNotificationGetRecent },
-    { name: 'notification-set-status', handler: handleNotificationSetStatus },
+    { name: 'notification', handler: handleNotification, requireLogin: true },
+    { name: 'notification-get-recent', handler: handleNotificationGetRecent, requireLogin: true },
+    { name: 'notification-set-status', handler: handleNotificationSetStatus, requireLogin: true },
 
     // Project
     { name: 'project', handler: handleProject },
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
 
-    { name: 'task', handler: handleTask, requireLogin: true, },
+    { name: 'task', handler: handleTask, requireLogin: true },
     { name: 'task-get-by-id', handler: handleTaskGetById },
 ]
     .filter(x => isFn(x.handler)) // ignore if handler is not a function
