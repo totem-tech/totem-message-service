@@ -1,6 +1,7 @@
 import { TYPES, validateObj } from './utils/validator'
 import CouchDBStorage from './CouchDBStorage'
 import { setTexts } from './language'
+import { objClean } from './utils/utils'
 
 const messages = setTexts({
     signupExists: 'You have already signed up with the email address!'
@@ -11,20 +12,27 @@ const validatorConfig = {
         required: true,
         type: TYPES.email,
     },
-    name: {
-        minLength: 4,
+    firstName: {
+        minLength: 3,
+        required: true,
+        type: TYPES.string,
+    },
+    lastName: {
+        minLength: 3,
         required: true,
         type: TYPES.string,
     }
 }
+const VALID_KEYS = Object.freeze(Object.keys(validatorConfig))
 export const handleNewsletterSignup = async (values, callback) => {
     const errMsg = validateObj(values, validatorConfig, true, true)
     if (errMsg) return callback(errMsg)
 
-    const { email, name } = values
-    const exits = await signups.get(email)
-    if (exits) return callback(messages.signupExists)
+    const { email } = values
+    const { firstName, lastName } = (await signups.get(email)) || {}
+    // allow update if names don't exist
+    if (firstName && lastName) return callback(messages.signupExists)
 
-    await signups.set(email, { name, tsCreated: new Date() }, false)
+    await signups.set(email, { ...objClean(values, VALID_KEYS), tsCreated: new Date() })
     callback(null)
 }
