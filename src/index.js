@@ -28,6 +28,7 @@ import {
 } from './users'
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
+import { handleNewsletterSignup } from './newsletterSignup'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -85,6 +86,9 @@ const handlers = [
     { name: 'message-get-recent', handler: handleMessageGetRecent },
     { name: 'message-group-name', handler: handleMessageGroupName },
 
+    // Newsletter signup
+    { name: 'newsletter-signup', handler: handleNewsletterSignup, requireCallback: true },
+
     // Notification
     { name: 'notification', handler: handleNotification, requireLogin: true },
     { name: 'notification-get-recent', handler: handleNotificationGetRecent, requireLogin: true },
@@ -111,23 +115,26 @@ const handlers = [
                     DISCORD_WEBHOOK_USERNAME,
                 }
             }
-            const { handler, name, requireLogin = false } = item
+            const { handler, name, requireCallback, requireLogin } = item
             // if event requres a callback, last argument is expected to be the function
-            const callback = args.slice(-1)
+            const callback = args[handler.length - 1]
+            const hasCallback = isFn(callback)
             let user
+            // ignore if callback is required but not supplied
+            if (requireCallback && !hasCallback) return
 
             try {
                 if (requireLogin) {
                     // user must be logged
                     user = await getUserByClientId(client.id)
-                    if (!user) return isFn(callback) && callback(loginRequired)
+                    if (!user) return hasCallback && callback(loginRequired)
                 }
                 // include the user object if login is required for this event
                 await handler.apply(!requireLogin ? client : [client, user], args,)
             } catch (err) {
                 user = user || await getUserByClientId(client.id)
                 const requestId = uuid.v1()
-                isFn(callback) && callback(`${texts.runtimeError}: ${requestId}`)
+                hasCallback && callback(`${texts.runtimeError}: ${requestId}`)
 
                 // Print error meta data
                 console.log([
