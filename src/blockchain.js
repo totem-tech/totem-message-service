@@ -1,8 +1,11 @@
-import { hashToStr } from './utils/convert'
-import { connect } from './utils/polkadotHelper'
+import { connect, query } from './utils/polkadotHelper'
 import types from './utils/totem-polkadot-js-types'
 import { generateHash } from './utils/utils'
+import { setTexts } from './language'
 
+const messages = setTexts({
+    authFailed: 'BONSAI authentication failed',
+})
 const connection = {
     api: null,
     provider: null,
@@ -11,10 +14,26 @@ let connectionPromsie
 let nodes = [
     'wss://node1.totem.live',
 ]
+export const recordTypes = {
+    /// 1000
+    /// 2000
+    project: 3000,
+    timekeeping: 4000,
+    task: 5000,
+    /// 5000
+    /// 6000
+    /// 7000
+    /// 8000
+    /// 9000
+}
 
-// connect to blockchain
-//
-// Retuns object
+/**
+ * @name            getConnection
+ * @summary         connection to Blockchain
+ * @param {String}  nodeUrl 
+ * 
+ * @returns {Object} an object with the following properties: api, provider
+ */
 export const getConnection = async (nodeUrl = nodes[0]) => {
     if (connection.api && connection.api._isConnected.value) return connection
     if (connectionPromsie) {
@@ -33,20 +52,22 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
     return connection
 }
 
-// Authorize off-chain data using BONSAI token from blockchain
-//
-// Params:
-// @recordId    string: ID/hash of the record
-// @data        object/any: the actual record with with only correct property names.
-//                  A hash will be generated using `@data` which must match with the hash returned from blockchain.
-//                  If it doesn't match, either record has not been authorized by Identity owner 
-//                  or has incorrect data or unwanted properties.
-//
-// Returns      boolean
-export const authorizeData = async (recordId, data) => {
-    const token = generateHash(data)
+/**
+ * @name                authorizeData
+ * @summary             Authorize off-chain data using BONSAI token from blockchain
+ * @param {String}      recordId ID of the record
+ * @param {String|*}    record  data used to generate BONSAI token for validation. 
+ *                          Non-string values will be converted to string.
+ * 
+ * @returns         false/string: if valid, will return false othewise , error message.
+ */
+export const authorizeData = async (recordId, record) => {
+    const token = generateHash(record)
     const { api } = await getConnection()
-    // token returned from blockchain
-    const tokenX = hashToStr(await api.query.bonsai.isValidRecord(recordId))
-    return tokenX === token
+    const tokenX = await query(
+        api,
+        api.query.bonsai.isValidRecord,
+        recordId,
+    )
+    return token !== tokenX && messages.authFailed
 }

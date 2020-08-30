@@ -1,6 +1,6 @@
 import nano from 'nano'
 import uuid from 'uuid'
-import { isObj, isStr, isArr, arrUnique, isMap } from './utils/utils'
+import { isObj, isStr, isArr, arrUnique, isMap, objClean } from './utils/utils'
 
 let connection
 // getConnection returns existing connection, if available.
@@ -90,13 +90,14 @@ export default class CouchDBStorage {
     // Params:
     // @ids     array: use null/falsy to retrieve all items
     // @asMap   boolean: whether to return the list of documents as a Map or Array
-    // @limit   number: if @ids is falsy, specifiy how many items to retrieve. (if not specified, CouchDB will return 25 items by default)
+    // @limit   number: if @ids is falsy, specifiy how many items to retrieve. 
+    //                  (if not specified, CouchDB will return 25 items by default)
     // @skip    number: number of items to skip. Use for pagination
     //
     // Returns array/map: depends on @asMap
     async getAll(ids = [], asMap = true, limit = 25, skip = 0) {
         const db = await this.getDB()
-        // if ids supplied only retrieve only those otherwise, retrieve all
+        // if ids supplied only retrieve only those otherwise, retrieve all (paginated)
         let rows
         if (!ids || ids.length === 0) {
             rows = (await this.searchRaw({}, limit, skip)).docs

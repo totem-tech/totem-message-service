@@ -6,6 +6,7 @@ import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
 import request from 'request'
+import uuid from 'uuid'
 import { isFn, isArr, isObj } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
@@ -23,8 +24,11 @@ import {
     handleLogin,
     handleRegister,
     handleIsUserOnline,
-    handleAmISupport,
+    getUserByClientId,
 } from './users'
+import { handleTask, handleTaskGetById } from './task'
+import { handleGlAccounts } from './glAccounts'
+import { handleNewsletterSignup } from './newsletterSignup'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -37,13 +41,16 @@ const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
-// const socket = socketIO.listen(server)
-// https://github.com/socketio/socket.io/issues/2276 stops setting an http cookie
-const socket = socketIO.listen(server, { cookie: false })
-
+const socket = socketIO.listen(server)
 // Error messages
 const texts = setTexts({
-    runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
+    loginRequired: 'Please login or create an account if you have not already done so',
+    runtimeError: `
+        Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
+        You can also email us as support@totemaccounting.com. 
+        Someone from the Totem team will get back to you as soon as possible.
+        Don't forget to mention the following Request ID
+    `,
 })
 const handlers = [
     // User & connection
@@ -52,7 +59,6 @@ const handlers = [
     { name: 'register', handler: handleRegister },
     { name: 'login', handler: handleLogin },
     { name: 'is-user-online', handler: handleIsUserOnline },
-    { name: 'am-i-support', handler: handleAmISupport },
 
     // Company
     { name: 'company', handler: handleCompany },
@@ -68,6 +74,9 @@ const handlers = [
     // Faucet request
     { name: 'faucet-request', handler: handleFaucetRequest },
 
+    // GL Accounts
+    { name: 'gl-accounts', handler: handleGlAccounts },
+
     // Language
     { name: 'language-translations', handler: handleLanguageTranslations },
     { name: 'language-error-messages', handler: handleLanguageErrorMessages },
@@ -77,20 +86,26 @@ const handlers = [
     { name: 'message-get-recent', handler: handleMessageGetRecent },
     { name: 'message-group-name', handler: handleMessageGroupName },
 
+    // Newsletter signup
+    { name: 'newsletter-signup', handler: handleNewsletterSignup, requireCallback: true },
+
     // Notification
-    { name: 'notification', handler: handleNotification },
-    { name: 'notification-get-recent', handler: handleNotificationGetRecent },
-    { name: 'notification-set-status', handler: handleNotificationSetStatus },
+    { name: 'notification', handler: handleNotification, requireLogin: true },
+    { name: 'notification-get-recent', handler: handleNotificationGetRecent, requireLogin: true },
+    { name: 'notification-set-status', handler: handleNotificationSetStatus, requireLogin: true },
 
     // Project
     { name: 'project', handler: handleProject },
     { name: 'projects-by-hashes', handler: handleProjectsByHashes },
+
+    { name: 'task', handler: handleTask, requireLogin: true },
+    { name: 'task-get-by-id', handler: handleTaskGetById },
 ]
     .filter(x => isFn(x.handler)) // ignore if handler is not a function
-    .map(x => ({
-        ...x,
+    .map(item => ({
+        ...item,
         handler: async function interceptHandler() {
-            const args = arguments
+            const args = [...arguments]
             const client = this
             if (name === 'message') {
                 // pass on extra information along with the client
@@ -100,24 +115,51 @@ const handlers = [
                     DISCORD_WEBHOOK_USERNAME,
                 }
             }
-            const { name, handler } = x
+            const { handler, name, requireCallback, requireLogin } = item
+            // if event requres a callback, last argument is expected to be the function
+            const callback = args[handler.length - 1]
+            const hasCallback = isFn(callback)
+            let user
+            // ignore if callback is required but not supplied
+            if (requireCallback && !hasCallback) return
+
             try {
-                await handler.apply(client, args)
+                if (requireLogin) {
+                    // user must be logged
+                    user = await getUserByClientId(client.id)
+                    if (!user) return hasCallback && callback(loginRequired)
+                }
+                // include the user object if login is required for this event
+                await handler.apply(!requireLogin ? client : [client, user], args,)
             } catch (err) {
-                const callback = args[args.length - 1]
-                isFn(callback) && callback(texts.runtimeError)
-                console.log(`interceptHandlerCb: uncaught error on event "${name}" handler. Error: ${err}`)
-                isObj(err) && console.log(err.stack)
+                user = user || await getUserByClientId(client.id)
+                const requestId = uuid.v1()
+                hasCallback && callback(`${texts.runtimeError}: ${requestId}`)
+
+                // Print error meta data
+                console.log([
+                    `interceptHandler: uncaught error on event "${name}" handler.`,
+                    `RequestID: ${requestId}.`,
+                ].join('\n'))
+                // print the error stack trace
+                isObj(err) && console.log(err.stack, '\n')
                 if (!DISCORD_WEBHOOK_URL) return
 
+                // send message to discord
                 const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
+                const content = '>>> ' + [
+                    `**RequestID:** ${requestId}`,
+                    `**Event:** *${name}*`,
+                    '**Error:**' + `${err}`.replace('Error:', ''),
+                    user ? `**UserID:** ${user.id}` : '',
+                ].join('\n')
                 request({
                     url: DISCORD_WEBHOOK_URL,
                     method: "POST",
                     json: true,
                     body: {
                         avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-                        content: `>>> **Event: **\`${name}\`\n**Error:** \`${err}\``,
+                        content,
                         username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
                     }
                 }, handleReqErr)
@@ -154,7 +196,7 @@ async function migrate(fileNames) {
         'faucet-requests': 'requests', // store the value array under the property called 'requests'
         'translations': 'texts', // store the value array under the property called 'texts'
     }
-    // databases where update of documents is allowed
+    // databases where update of document update is allowed
     const allowUpdates = [
         'translations', // for easier access to updating translated texts
     ]
@@ -189,15 +231,12 @@ async function migrate(fileNames) {
             data.set(id, value)
         })
 
-        const result = await db.setAll(data, allowUpdates.includes(dbName))
-        let count = 0
-        result.forEach(({ ok, id }) => {
-            if (!ok) retrun
-            data.delete(id)
-            count++
-        })
+        const result = await db.setAll(data, !allowUpdates.includes(dbName))
+        const okIds = result.map(({ ok, id }) => ok && id).filter(Boolean)
+        // remove saved entries
+        okIds.forEach(id => data.delete(id))
         // update JSON file to remove migrated entries
         jsonStorage.setAll(data)
-        console.log(`${file}: added ${count} entries. Ignored ${total - count} existing etries`)
+        console.log(`${file} => saved: ${okIds.length}. Ignored existing: ${total - okIds.length}`)
     }
 }

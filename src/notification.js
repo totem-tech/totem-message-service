@@ -2,7 +2,7 @@ import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr } from './utils/utils'
 import { setTexts } from './language'
-import { emitToUsers, getUserByClientId, idExists, isUserOnline, onUserLogin } from './users'
+import { emitToUsers, getUserByClientId, idExists, RESERVED_IDS } from './users'
 
 // Pending notification recipient user IDs
 // Notification object properties:
@@ -23,7 +23,6 @@ import { emitToUsers, getUserByClientId, idExists, isUserOnline, onUserLogin } f
 // }
 // 
 const notifications = new CouchDBStorage(null, 'notifications')
-const userNotificationIds = new CouchDBStorage(null, 'notification-receivers') // ToDo: deprecated
 const REQUIRED = true
 const NOT_REQUIRED = false
 // maximum number of recent unreceived notifications user can receive
@@ -142,8 +141,7 @@ export const VALID_TYPES = Object.freeze({
 //                          @result     Map: list of notifications
 export async function handleNotificationGetRecent(tsLastReceived, callback) {
     if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [_, user] = this
     if (!user) return callback(messages.loginRequired)
     const extraProps = {
         sort: [{ tsCreated: 'desc' }], // latest first
@@ -192,8 +190,7 @@ export async function handleNotificationGetRecent(tsLastReceived, callback) {
 
 export async function handleNotificationSetStatus(id, read, deleted, callback) {
     if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [_, user] = this
     if (!user) return callback(messages.loginRequired)
 
     const notificaiton = await notifications.get(id)
@@ -233,8 +230,7 @@ export async function handleNotification(
     callback,
 ) {
     if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [client, user] = this
     if (!user) return callback(messages.loginRequired)
     if (!isArr(toUserIds) || toUserIds.length === 0) return callback(messages.invalidParams + ': to')
 
@@ -242,6 +238,8 @@ export async function handleNotification(
     toUserIds = arrUnique(toUserIds)
     // prevent user sending notification to themselves
     if (toUserIds.indexOf(senderId) >= 0) return callback(messages.notifySelf)
+
+    if (toUserIds.find(userId => RESERVED_IDS.includes(userId))) return callback(messages.invalidUserId)
 
     // throw error if any of the user ids are invalid
     for (let i = 0; i < toUserIds.length; i++) {
