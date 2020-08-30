@@ -37,7 +37,11 @@ const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO.listen(server)
+// const socket = socketIO.listen(server)
+// https://github.com/socketio/socket.io/issues/2276 stops setting an http cookie
+const socket = socketIO.listen(server, { cookie: false })
+
+// Error messages
 const texts = setTexts({
     runtimeError: 'Runtime error occured. Please try again later or email support@totemaccounting.com',
 })
