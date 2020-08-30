@@ -1,8 +1,8 @@
 import CouchDBStorage from './CouchDBStorage'
 import { setTexts } from './language'
-import { isFn, isObj, objClean, objContains, isArr } from './utils/utils'
-import { authorizeData } from './blockchain'
-import { getUserByClientId } from './users'
+import { isFn, objClean, isArr, arrUnique } from './utils/utils'
+import { TYPES, validateObj, validate } from './utils/validator'
+import { authorizeData, recordTypes } from './blockchain'
 
 // Tasks database
 const storage = new CouchDBStorage(null, 'task')
@@ -15,67 +15,115 @@ const messages = setTexts({
     maxLenDesc: 'Description exceeds maximum acceptable length',
     maxLenTitle: 'Title exceeds maximum acceptable length',
 })
-const REQUIRED_KEYS = [
-    'address',
-    'currency',
-    'published',
-    'title',
-]
-// all acceptable keys
-const VALID_KEYS = [
-    ...REQUIRED_KEYS,
-    'description',
-    'tags',
-]
-const MAX = {
-    // maximum number of characters alllowed in description
-    description: 5000,
-    // maximum number of characters allowed in title
-    title: 128,
+// configuration to validate task object using `validateObj` function
+const validatorConfig = {
+    amountXTX: {
+        required: true,
+        type: TYPES.integer,
+    },
+    currency: {
+        required: true,
+        type: TYPES.string,
+    },
+    deadline: {
+        min: 1,
+        required: true,
+        type: TYPES.integer,
+    },
+    description: {
+        min: 0,
+        maxLength: 5000,
+        required: false,
+        type: TYPES.string,
+    },
+    dueDate: {
+        min: 1,
+        required: true,
+        type: TYPES.integer,
+    },
+    isClosed: {
+        required: true,
+        type: TYPES.boolean,
+    },
+    isSell: { // false === marketplace
+        accept: [0, 1], // only values accepted as valid
+        required: true,
+        type: TYPES.integer,
+    },
+    tags: {
+        required: false,
+        type: TYPES.array
+    },
+    title: {
+        maxLength: 160,
+        minLength: 3,
+        required: true,
+        type: TYPES.string
+    },
 }
-
-// handleTaskGet retrieves non-blockchain task details from database
-//
-// Params:
-// @ids         array/string: single or array of task IDs (task hash)
-// @callback    function: callback args =>
-//                  @err    string: error message, if any
-//                  @result array: 2D array of task objects. Intended to be used as a Map, eg: `new Map(result)`
-export async function handleTaskGet(ids, callback) {
-    if (!isFn(callback)) return
-    ids = isArr(ids) ? ids : [ids].filter(Boolean)
-    callback(null, await storage.getAll(ids, true, 100))
-}
-
+const REQUIRED_KEYS = Object.keys(validatorConfig)
 // handleTask saves non-blockchain task details to the database.
 // Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
 // Login is required simply for the purpose of loggin the User ID who saved the data.
 // 
 // Params:
-// @id          string: hash of the task
-// @task        object: see `REQUIRED_KEYS` & `VALID_KEYS` for a list of accepted properties
+// @taskId      string: ID of the task
+// @task        object: see `validatorConfig` for a list of properties and their respected accepted data types etc.
 // @callback    function: callback args:
-//                  @err    string: error message, if any
-export async function handleTask(recordId, task = {}, callback) {
+//                  @err    string: error message, if unsuccessful
+export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!isFn(callback)) return
-    if (!!isObj(task)) return callback(messaages.invalidRequest)
-    // check if all the required keys are present
-    if (!objContains(REQUIRED_KEYS)) return callback(`${messages.invalidKeys}: ${REQUIRED_KEYS.join(', ')}`)
-    // TODO: add data type, length etc validation
+    // validate object properties including taskId
+    let err = validate(taskId, { required: true, type: TYPES.hex })
+        || validateObj(task, validatorConfig, true, true)
+    if (err) return callback(err)
 
-    const client = this
-    const user = getUserByClientId(client.id)
+    const [client, user] = this
+    // const user = getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
 
-    // get rid of any unwanted properties
-    task = objClean(task, VALID_KEYS)
-    task.savedBy = user.id
-
+    task = objClean(task, REQUIRED_KEYS)
     // check if data has been authorized using BONSAI
-    // const authorized = await authorizeData(hash, task)
+    const tokenData = `${recordTypes.task}${ownerAddress}${JSON.stringify(task)}`
+    const authErr = await authorizeData(taskId, tokenData)
+    if (authErr) return callback(authErr)
+
+    const tsUpdated = new Date()
+    const existingTask = (await storage.get(taskId)) || {
+        createdBy: user.id,
+        tsCreated: tsUpdated,
+    }
+    task = {
+        // if an entry already exists merge with new information
+        ...existingTask,
+        // get rid of any unwanted properties
+        ...task,
+        updatedBy: user.id,
+        tsUpdated,
+    }
 
     // save to database
-    await storage.set(recordId, task)
+    const result = await storage.set(taskId, task)
+    callback(null, result)
+}
 
-    callback()
+// handleTaskGet retrieves non-blockchain task details from database
+//
+// Params:
+// @ids         array/string: single or array of task IDs
+// @callback    function: callback args =>
+//                  @err    string: error message, if any
+//                  @result array: 2D array of task objects. Intended to be used as a Map, eg: `new Map(result)`
+export async function handleTaskGetById(ids, callback) {
+    if (!isFn(callback)) return
+    ids = arrUnique((isArr(ids) ? ids : [ids]).filter(Boolean))
+    const result = await storage.getAll(ids, true, ids.length)
+    callback(null, result)
+}
+
+export async function handleTaskMarketplaceSearch(filters = {}, callback) {
+    if (!isFn(callback)) return
+    const { keywords, tags, amountXTX, deadline, tsCreated } = filters
+
+
 }

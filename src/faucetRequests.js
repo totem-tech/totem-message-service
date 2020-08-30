@@ -1,7 +1,14 @@
 
 import CouchDBStorage from './CouchDBStorage'
 import ioClient from 'socket.io-client'
-import { encrypt, encryptionKeypair, signingKeyPair, newNonce, newSignature, verifySignature, keyInfoFromKeyData } from './utils/naclHelper'
+import {
+    encrypt,
+    encryptionKeypair,
+    signingKeyPair,
+    newSignature,
+    verifySignature,
+    keyInfoFromKeyData,
+} from './utils/naclHelper'
 import { isFn, isStr } from './utils/utils'
 import { getUserByClientId } from './users'
 import { setTexts } from './language'
@@ -22,9 +29,10 @@ let keyData, walletAddress, secretKey, signPublicKey, signSecretKey, encryption_
 const texts = setTexts({
     fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period',
     loginOrRegister: 'Login/registration required',
+    faucetServerDown: 'Faucet client is not connected',
     faucetTransferInProgress: `
-    You already have a faucet request in-progress. 
-    Please wait until it is finished or wait at least 15 minutes from previous previous request time.
+        You already have a faucet request in-progress. 
+        Please wait until it is finished or wait at least 15 minutes from previous previous request time.
     `,
     invalidSignature: 'Signature pre-verification failed',
 })
@@ -88,6 +96,7 @@ export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
     const client = this
     console.log('faucetClient.connected', faucetClient.connected)
+    if (!faucetClient.connected) throw texts.faucetServerDown
     const err = setVariables()
     if (err) throw err
 
@@ -129,18 +138,16 @@ export async function handleFaucetRequest(address, callback) {
     lenStr = lenStr.padStart(minLength)
 
     // Generate new signature
-    const signature = newSignature(data, signSecretKey)
+    const signature = newSignature(data, signPublicKey, signSecretKey)
     printSensitiveData && console.log('signSecretKey:\n', signSecretKey, '\nSignature:\n', signature)
     const valid = verifySignature(data, signature, signPublicKey)
     if (!valid) return callback(texts.invalidSignature)
 
-    const nonce = newNonce()
     const message = lenStr + external_serverName + data + signature
-    const encryptedMsg = encrypt(
+    const { sealed: encryptedMsg, nonce } = encrypt(
         message,
-        nonce,
+        secretKey,
         external_publicKey,
-        secretKey
     )
     requests[index].inProgress = true
     // save inprogress status to database

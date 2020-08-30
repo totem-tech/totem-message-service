@@ -61,8 +61,8 @@ export async function handleProject(hash, project, create, callback) {
     project = objClean({ ...existingProject, ...project }, validKeys)
 
     // Authenticate using BONSAI
-    const valid = await authorizeData(hash, project)
-    if (!valid) return callback(messages.bonsaiAuthFailed)
+    const authErr = await authorizeData(hash, project)
+    if (authErr) return callback(authErr)
 
     project.tsCreated = (existingProject || {}).createdAt || (new Date()).toISOString()
     project.tsUpdated = new Date().toISOString()
