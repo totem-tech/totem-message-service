@@ -28,4 +28,4 @@ sslcert/*.key
 sslcert/*.pem
 
 # ignore submodules
-.submodules
+.gitmodules
