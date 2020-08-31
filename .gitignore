@@ -11,6 +11,8 @@ mongodb
 
 # scripts
 start.sh
+startmes.sh
+startmesdev.sh
 ui-start.sh
 tools/importCompanies.sh
 

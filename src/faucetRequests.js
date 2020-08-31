@@ -55,9 +55,9 @@ const setVariables = () => {
 
     // Key pairs of this server
     keyData = process.env.keyData
-    const keyDataBytes = keyInfoFromKeyData(keyData)
+    const kp = keyInfoFromKeyData(keyData)
 
-    walletAddress = keyDataBytes.walletAddress
+    walletAddress = kp.address
     // walletAddress = keyPair.walletAddress
 
     const encryptionKeyPair = encryptionKeypair(keyData)

@@ -140,9 +140,10 @@ const handlers = [
                 console.log([
                     `interceptHandler: uncaught error on event "${name}" handler.`,
                     `RequestID: ${requestId}.`,
+                    // print the error stack trace
+                    `Error: ${err}`,
                 ].join('\n'))
-                // print the error stack trace
-                isObj(err) && console.log(err.stack, '\n')
+
                 if (!DISCORD_WEBHOOK_URL) return
 
                 // send message to discord
