@@ -127,7 +127,7 @@ const handlers = [
                 if (requireLogin) {
                     // user must be logged
                     user = await getUserByClientId(client.id)
-                    if (!user) return hasCallback && callback(loginRequired)
+                    if (!user) return hasCallback && callback(texts.loginRequired)
                 }
                 // include the user object if login is required for this event
                 await handler.apply(!requireLogin ? client : [client, user], args,)
@@ -151,7 +151,7 @@ const handlers = [
                 const content = '>>> ' + [
                     `**RequestID:** ${requestId}`,
                     `**Event:** *${name}*`,
-                    '**Error:**' + `${err}`.replace('Error:', ''),
+                    '**Error:** ' + `${err}`.replace('Error:', ''),
                     user ? `**UserID:** ${user.id}` : '',
                 ].join('\n')
                 request({
