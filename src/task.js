@@ -41,14 +41,18 @@ const validatorConfig = {
         required: true,
         type: TYPES.integer,
     },
-    isClosed: {
+    isMarket: {
         required: true,
         type: TYPES.boolean,
     },
-    isSell: { // false === marketplace
-        accept: [0, 1], // only values accepted as valid
+    isSell: {
+        accept: [0, 1],
         required: true,
         type: TYPES.integer,
+    },
+    parentId: {
+        required: false,
+        type: TYPES.hex,
     },
     tags: {
         required: false,
