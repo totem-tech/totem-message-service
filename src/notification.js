@@ -2,7 +2,8 @@ import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr } from './utils/utils'
 import { setTexts } from './language'
-import { emitToUsers, getUserByClientId, idExists, RESERVED_IDS } from './users'
+import { emitToUsers, idExists, RESERVED_IDS } from './users'
+import { TYPES, validateObj } from './utils/validator'
 
 // Pending notification recipient user IDs
 // Notification object properties:
@@ -23,20 +24,6 @@ import { emitToUsers, getUserByClientId, idExists, RESERVED_IDS } from './users'
 // }
 // 
 const notifications = new CouchDBStorage(null, 'notifications')
-const REQUIRED = true
-const NOT_REQUIRED = false
-// maximum number of recent unreceived notifications user can receive
-const UNRECEIVED_LIMIT = 200
-const messages = setTexts({
-    accessDenied: 'Access denied',
-    introducingUserIdConflict: 'Introducing user cannot not be a recipient',
-    invalidId: 'invalid notification ID',
-    invalidParams: 'Invalid/missing required parameter(s)',
-    invalidUserId: 'Invalid User ID supplied',
-    loginRequired: 'You need to complete the Getting Started module, and create a messaging User ID',
-    notifySelf: 'You cannot notify yourself!',
-})
-
 // initialize
 setTimeout(async () => {
     // create an index for the field `timestamp`, ignores if already exists
@@ -53,6 +40,35 @@ setTimeout(async () => {
     ]
     indexDefs.forEach(async (def) => await (await notifications.getDB()).createIndex(def))
 })
+// maximum number of recent unreceived notifications user can receive
+const UNRECEIVED_LIMIT = 200
+const messages = setTexts({
+    accessDenied: 'Access denied',
+    introducingUserIdConflict: 'Introducing user cannot not be a recipient',
+    invalidId: 'invalid notification ID',
+    invalidParams: 'Invalid/missing required parameter(s)',
+    invalidUserId: 'Invalid User ID supplied',
+})
+const validatorConfig = {
+    recipients: {
+        reject: [user.id], // user cannot be recipient themselves
+        customMessages: {},
+        minLength: 1,
+        required: true,
+        reject: RESERVED_IDS,
+        type: TYPES.array,
+        unique: true,
+    },
+    type: {
+        accept: Object.keys(VALID_TYPES),
+        required: true,
+        type: TYPES.array,
+    },
+    data: {
+        required: false,
+        type: TYPES.object,
+    }
+}
 
 // @validate function: callback function to be executed before adding a notification.
 //                      Must return error string if any error occurs or notification should be void.
@@ -68,7 +84,7 @@ export const VALID_TYPES = Object.freeze({
         // user1 recommends user2 to share their identity with user3
         introduce: {
             dataFields: {
-                userId: REQUIRED,
+                userId: { minLength: 3, required: true, type: TYPES.string },
             },
             // check if user id is valid
             validate: async (i, f, toUserIds, { userId }) => {
@@ -78,25 +94,25 @@ export const VALID_TYPES = Object.freeze({
                 // prevents user to be introduced to themself!
                 if (toUserIds.includes(userId)) return messages.introducingUserIdConflict
             },
-            message: NOT_REQUIRED,
+            messageField: { required: false, type: TYPES.string },
         },
         // user1 requests identity from user2
         request: {
             dataFields: {
                 // one-liner explanation by the requester of why they want receivers identity
-                reason: REQUIRED,
+                reason: { minLength: 3, required: true, type: TYPES.string },
             },
-            message: NOT_REQUIRED,
+            messageField: { required: false, type: TYPES.string },
         },
         // user1 shares identity with user2
         share: {
             dataFields: {
                 // address/identity being shared
-                address: REQUIRED,
+                address: { required: true, type: TYPES.identity },
                 // optionally include introducer ID
-                introducedBy: NOT_REQUIRED,
+                introducedBy: { required: false, type: TYPES.string },
                 // name of the user or the identity
-                name: REQUIRED,
+                name: { minLength: 3, required: true, type: TYPES.string },
             },
             // check if introducer id is valid, if provided
             validate: async (_, _1, _2, { introducerId: id }) => {
@@ -104,29 +120,30 @@ export const VALID_TYPES = Object.freeze({
                 const exists = await idExists(id)
                 return !exists ? messages.invalidUserId : null
             },
-            message: NOT_REQUIRED,
+            messageField: { required: false, type: TYPES.string },
         }
     },
     time_keeping: {
         dispute: {
-            responseRequired: REQUIRED
+            responseRequired: true,
+            messageField: { required: false, type: TYPES.string },
         },
         invitation: {
             dataFields: {
-                projectHash: REQUIRED,
-                projectName: REQUIRED,
-                workerAddress: REQUIRED,
+                projectHash: { required: true, type: TYPES.hex },
+                projectName: { minLength: 3, required: true, type: TYPES.string },
+                workerAddress: { required: true, type: TYPES.identity },
             },
-            messageRequird: NOT_REQUIRED,
+            messageField: { required: false, type: TYPES.string },
         },
         invitation_response: {
             dataFields: {
-                accepted: REQUIRED,
-                projectHash: REQUIRED,
-                projectName: REQUIRED,
-                workerAddress: REQUIRED,
+                accepted: { required: true, type: TYPES.boolean },
+                projectHash: { required: true, type: TYPES.hex },
+                projectName: { minLength: 3, required: true, type: TYPES.string },
+                workerAddress: { required: true, type: TYPES.identity },
             },
-            messageRequird: REQUIRED,
+            messageField: { required: true, type: TYPES.string },
         },
     },
 })
@@ -140,9 +157,7 @@ export const VALID_TYPES = Object.freeze({
 //                          @err        string: error message, if unsuccessful
 //                          @result     Map: list of notifications
 export async function handleNotificationGetRecent(tsLastReceived, callback) {
-    if (!isFn(callback)) return
-    const [_, user] = this
-    if (!user) return callback(messages.loginRequired)
+    const [_, user = {}] = this
     const extraProps = {
         sort: [{ tsCreated: 'desc' }], // latest first
         fields: [
@@ -189,10 +204,7 @@ export async function handleNotificationGetRecent(tsLastReceived, callback) {
 }
 
 export async function handleNotificationSetStatus(id, read, deleted, callback) {
-    if (!isFn(callback)) return
-    const [_, user] = this
-    if (!user) return callback(messages.loginRequired)
-
+    const [_, user = {}] = this
     const notificaiton = await notifications.get(id)
     if (!notificaiton) return callback(messages.invalidId)
     if (!notificaiton.to.includes(user.id)) return callback(message.accessDenied)
@@ -208,7 +220,14 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
         return true // changed
     }
 
-    if (markAs('deleted', deleted) || markAs('read', read)) await notifications.set(id, notificaiton)
+    if (markAs('deleted', deleted) || markAs('read', read)) {
+        await notifications.set(id, notificaiton)
+        let { senderId, type, childType, message, data, tsCreated, read, deleted } = notificaiton
+        read = read.includes(user.id)
+        deleted = deleted.includes(user.id)
+
+        emitToUsers([user.id], 'notification', [id, senderId, type, childType, message, data, tsCreated, read, deleted])
+    }
     callback()
 }
 
@@ -221,54 +240,39 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
 // @message     string   : message to be displayed (unless custom message required). can be encrypted later on
 // @data        object   : information specific to the type of notification
 // @callback    function : params: (@err string) 
-export async function handleNotification(
-    toUserIds = [],
-    type = '',
-    childType = '',
-    message = '',
-    data = {},
-    callback,
-) {
-    if (!isFn(callback)) return
+export async function handleNotification(recipients, type, childType, message, data, callback) {
     const [client, user] = this
-    if (!user) return callback(messages.loginRequired)
-    if (!isArr(toUserIds) || toUserIds.length === 0) return callback(messages.invalidParams + ': to')
-
     const senderId = user.id
-    toUserIds = arrUnique(toUserIds)
-    // prevent user sending notification to themselves
-    if (toUserIds.indexOf(senderId) >= 0) return callback(messages.notifySelf)
-
-    if (toUserIds.find(userId => RESERVED_IDS.includes(userId))) return callback(messages.invalidUserId)
-
+    const err = validateObj({ data, recipients, type }, validatorConfig, true, true)
+    if (err) return callback(err)
+    const userIdsExists = await idExists(recipients)
     // throw error if any of the user ids are invalid
-    for (let i = 0; i < toUserIds.length; i++) {
-        const exists = await idExists(toUserIds[i])
-        if (!exists) return callback(messages.invalidUserId)
-    }
-
-    const typeObj = VALID_TYPES[type]
-    if (!isObj(typeObj)) return callback(messages.invalidParams + ': type')
+    if (!userIdsExists) return callback(messages.invalidUserId)
 
     const childTypeObj = typeObj[childType]
     if (childType && !isObj(childTypeObj)) return callback(messages.invalidParams + ': childType')
 
     const config = childType ? childTypeObj : typeObj
-    const dataInvalid = config.dataRequired && !objHasKeys(data, config.dataFields, true)
-    if (dataInvalid) return callback(`${messages.invalidParams}: data { ${config.dataFields.join()} }`)
+    const dataErr = isObj(config.dataFields) && validateObj(data, config.dataFields, true, true)
+    if (dataErr) return callback(dataErr)
 
-    const msgInvalid = config.messageRequired && (!isStr(message) || !message.trim())
-    if (msgInvalid) return callback(messages.invalidParams + ': message')
+    const messageErr = isObj(config.messageField) && validateObj(
+        { message },
+        { message: config.messageField },
+        true,
+        true,
+    )
+    if (messageErr) return callback(messageErr)
 
     // if notification type has a handler function execute it
     const id = uuid.v1()
-    const err = isFn(config.validate) && await config.validate.call(client, id, senderId, toUserIds, data, message)
+    const err = isFn(config.validate) && await config.validate.call(client, id, senderId, recipients, data, message)
     if (err) return callback(err)
 
     const tsCreated = (new Date()).toISOString()
     await notifications.set(id, {
         from: senderId,
-        to: toUserIds,
+        to: recipients,
         type,
         childType,
         message,
@@ -278,7 +282,63 @@ export async function handleNotification(
         tsCreated,
     })
 
-    // add user id and notification id to a list for faster processing
-    emitToUsers(toUserIds, 'notification', [id, senderId, type, childType, message, data, tsCreated])
+    emitToUsers(recipients, 'notification', [id, senderId, type, childType, message, data, tsCreated, false, false])
     callback()
 }
+
+// export async function handleNotification(
+//     toUserIds = [],
+//     type = '',
+//     childType = '',
+//     message = '',
+//     data = {},
+//     callback,
+// ) {
+//     const [client, user] = this
+//     const senderId = user.id
+//     toUserIds = arrUnique(toUserIds).filter(id => id !== user.id)
+//     if (!isArr(toUserIds) || toUserIds.length === 0) return callback(messages.invalidParams + ': to')
+
+
+//     if (toUserIds.find(userId => RESERVED_IDS.includes(userId))) return callback(messages.invalidUserId)
+
+//     // throw error if any of the user ids are invalid
+//     for (let i = 0; i < toUserIds.length; i++) {
+//         const exists = await idExists(toUserIds[i])
+//         if (!exists) return callback(messages.invalidUserId)
+//     }
+
+//     const typeObj = VALID_TYPES[type]
+//     if (!isObj(typeObj)) return callback(messages.invalidParams + ': type')
+
+//     const childTypeObj = typeObj[childType]
+//     if (childType && !isObj(childTypeObj)) return callback(messages.invalidParams + ': childType')
+
+//     const config = childType ? childTypeObj : typeObj
+//     const dataInvalid = config.dataRequired && !objHasKeys(data, config.dataFields, true)
+//     if (dataInvalid) return callback(`${messages.invalidParams}: data { ${config.dataFields.join()} }`)
+
+//     const msgInvalid = config.messageField && (!isStr(message) || !message.trim())
+//     if (msgInvalid) return callback(messages.invalidParams + ': message')
+
+//     // if notification type has a handler function execute it
+//     const id = uuid.v1()
+//     const err = isFn(config.validate) && await config.validate.call(client, id, senderId, toUserIds, data, message)
+//     if (err) return callback(err)
+
+//     const tsCreated = (new Date()).toISOString()
+//     await notifications.set(id, {
+//         from: senderId,
+//         to: toUserIds,
+//         type,
+//         childType,
+//         message,
+//         data,
+//         deleted: [],
+//         read: [],
+//         tsCreated,
+//     })
+
+//     emitToUsers(toUserIds, 'notification', [id, senderId, type, childType, message, data, tsCreated, false, false])
+//     callback()
+// }

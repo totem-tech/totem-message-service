@@ -90,9 +90,24 @@ const handlers = [
     { name: 'newsletter-signup', handler: handleNewsletterSignup, requireCallback: true },
 
     // Notification
-    { name: 'notification', handler: handleNotification, requireLogin: true },
-    { name: 'notification-get-recent', handler: handleNotificationGetRecent, requireLogin: true },
-    { name: 'notification-set-status', handler: handleNotificationSetStatus, requireLogin: true },
+    {
+        name: 'notification',
+        handler: handleNotification,
+        requireLogin: true,
+        requireCallback: true,
+    },
+    {
+        name: 'notification-get-recent',
+        handler: handleNotificationGetRecent,
+        requireLogin: true,
+        requireCallback: true,
+    },
+    {
+        name: 'notification-set-status',
+        handler: handleNotificationSetStatus,
+        requireLogin: true,
+        requireCallback: true,
+    },
 
     // Project
     { name: 'project', handler: handleProject },
