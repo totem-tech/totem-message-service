@@ -49,26 +49,6 @@ const messages = setTexts({
     invalidParams: 'Invalid/missing required parameter(s)',
     invalidUserId: 'Invalid User ID supplied',
 })
-const validatorConfig = {
-    recipients: {
-        reject: [user.id], // user cannot be recipient themselves
-        customMessages: {},
-        minLength: 1,
-        required: true,
-        reject: RESERVED_IDS,
-        type: TYPES.array,
-        unique: true,
-    },
-    type: {
-        accept: Object.keys(VALID_TYPES),
-        required: true,
-        type: TYPES.array,
-    },
-    data: {
-        required: false,
-        type: TYPES.object,
-    }
-}
 
 // @validate function: callback function to be executed before adding a notification.
 //                      Must return error string if any error occurs or notification should be void.
@@ -147,7 +127,25 @@ export const VALID_TYPES = Object.freeze({
         },
     },
 })
-
+const validatorConfig = {
+    recipients: {
+        customMessages: {}, //ToDo: add custom error messages
+        minLength: 1,
+        required: true,
+        reject: RESERVED_IDS,
+        type: TYPES.array,
+        unique: true,
+    },
+    type: {
+        accept: Object.keys(VALID_TYPES),
+        required: true,
+        type: TYPES.string,
+    },
+    data: {
+        required: false,
+        type: TYPES.object,
+    }
+}
 // Get user notifications that not deleted
 //
 // Params:
@@ -243,30 +241,35 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
 export async function handleNotification(recipients, type, childType, message, data, callback) {
     const [client, user] = this
     const senderId = user.id
-    const err = validateObj({ data, recipients, type }, validatorConfig, true, true)
-    if (err) return callback(err)
-    const userIdsExists = await idExists(recipients)
-    // throw error if any of the user ids are invalid
-    if (!userIdsExists) return callback(messages.invalidUserId)
 
+    let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
+    if (err) return callback(err)
+
+    const typeObj = VALID_TYPES[type]
     const childTypeObj = typeObj[childType]
     if (childType && !isObj(childTypeObj)) return callback(messages.invalidParams + ': childType')
 
+    // validate data fields
     const config = childType ? childTypeObj : typeObj
-    const dataErr = isObj(config.dataFields) && validateObj(data, config.dataFields, true, true)
-    if (dataErr) return callback(dataErr)
+    err = isObj(config.dataFields) && validateObj(data, config.dataFields, true, true)
+    if (err) return callback(dataErr)
 
-    const messageErr = isObj(config.messageField) && validateObj(
+    // validate message
+    err = isObj(config.messageField) && validateObj(
         { message },
         { message: config.messageField },
         true,
         true,
     )
-    if (messageErr) return callback(messageErr)
+    if (err) return callback(err)
+
+    // throw error if any of the user ids are invalid
+    const userIdsExists = !recipients.includes(user.id) && await idExists(recipients)
+    if (!userIdsExists) return callback(messages.invalidUserId)
 
     // if notification type has a handler function execute it
     const id = uuid.v1()
-    const err = isFn(config.validate) && await config.validate.call(client, id, senderId, recipients, data, message)
+    err = isFn(config.validate) && await config.validate.call(client, id, senderId, recipients, data, message)
     if (err) return callback(err)
 
     const tsCreated = (new Date()).toISOString()
