@@ -119,10 +119,21 @@ export const getUserByClientId = async (clientId) => {
     return await users.get(userId)
 }
 
-// idExists
-export const idExists = async (userId) => {
-    if (RESERVED_IDS.includes(userId)) return true
-    return !!(await users.get(userId))
+/**
+ * @name    idExists
+ * @summary check if each of the supplied user IDs exists
+ * 
+ * @param   {String|Array} userIds
+ * 
+ * @returns {Boolean}
+ */
+export const idExists = async (userIds = []) => {
+    if (!userIds || userIds.length === 0) return false
+    userIds = isArr(userIds) ? userIds : [userIds]
+    userIds = userIds.filter(id => !RESERVED_IDS.includes(id))
+
+    const usersFound = await users.getAll(userIds, false)
+    return userIds.length === usersFound.length
 }
 
 // isUserOnline checks if user is online
@@ -160,22 +171,26 @@ export async function handleDisconnect() {
     onlineSupportUsers.delete(user.id)
 }
 
-// check if user id exists
-//
-// Params:
-// @userId      string
-// @callback    function: (required) args:
-//                  @err    string: error message, if any
-//                  @exists boolean
-export const handleIdExists = async (userId, callback) => isFn(callback) && callback(null, await idExists(userId))
+/**
+ * @name    handleIdExists
+ * @summary check if user ID(s) exists
+ * 
+ * @param   {String|Array}  userIds 
+ * @param   {Function}      callback 
+ * 
+ * @returns {Boolean}       true if all supplied IDs exists, otherwise, false.
+ */
+export const handleIdExists = async (userIds, callback) => isFn(callback) && callback(null, await idExists(userIds))
 
-// check if user is/are online
-//
-// Params:
-// @userId      string/array
-// @callback    function: Arguments =>
-//                  @err        string: error message, if applicable
-//                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
+/**
+ * @name    handleIsUserOnline
+ * @summary check if user is/are online
+ * 
+ * @param {String|Array}    userId
+ * @param {Function}        callback    : Arguments =>
+ *                  @err        string: error message, if applicable
+ *                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
+ */
 export const handleIsUserOnline = async (userId, callback) => {
     if (!isFn(callback)) return
     if (!isArr(userId)) return callback(null, isUserOnline(userId))
