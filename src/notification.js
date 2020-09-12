@@ -220,11 +220,11 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
 
     if (markAs('deleted', deleted) || markAs('read', read)) {
         await notifications.set(id, notificaiton)
-        let { senderId, type, childType, message, data, tsCreated, read, deleted } = notificaiton
+        let { from, type, childType, message, data, tsCreated, read, deleted } = notificaiton
         read = read.includes(user.id)
         deleted = deleted.includes(user.id)
 
-        emitToUsers([user.id], 'notification', [id, senderId, type, childType, message, data, tsCreated, read, deleted])
+        emitToUsers([user.id], 'notification', [id, from, type, childType, message, data, tsCreated, read, deleted])
     }
     callback()
 }
