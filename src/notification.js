@@ -103,7 +103,7 @@ export const VALID_TYPES = Object.freeze({
             messageField: { required: false, type: TYPES.string },
         }
     },
-    time_keeping: {
+    timekeeping: {
         dispute: {
             responseRequired: true,
             messageField: { required: false, type: TYPES.string },

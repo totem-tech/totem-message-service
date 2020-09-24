@@ -1,21 +1,17 @@
 import CouchDBStorage from './CouchDBStorage'
 import { arrUnique, isArr, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
+import { TYPES, validateObj } from './utils/validator'
 
 const users = new CouchDBStorage(null, 'users')
 export const clients = new Map()
 export const userClientIds = new Map()
 const onlineSupportUsers = new Map()
-const isValidId = id => /^[a-z][a-z0-9]+$/.test(id)
-const idMaxLength = 16
-const idMinLength = 3
+const userIdRegex = /^[a-z][a-z0-9]+$/
 // Error messages
 const messages = setTexts({
-    idInvalid: `Only alpha-numeric characters allowed and must start with an alphabet`,
-    idLengthMax: 'Maximum number of characters allowed',
-    idLengthMin: 'Minimum number of characters required',
+    idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
     idExists: 'User ID already taken',
-    invalidSecret: 'Secret must be a valid string',
     invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
@@ -42,7 +38,7 @@ export const RESERVED_IDS = Object.freeze([
 ])
 // initialize
 setTimeout(async () => {
-    // create an index for the field `timestamp`, ignores if already exists
+    // create an index for the field `roles`, ignores if already exists
     const indexDefs = [{
         index: { fields: ['roles'] },
         name: 'roles-index',
@@ -64,11 +60,6 @@ export const broadcast = (ignoreClientIds, eventName, params) => {
     emitToClients(clientIds, eventName, params)
 }
 
-/*
- *
- * Websocket event emitter function
- * 
- */
 // Emit to specific clients by ids
 //
 // Params: 
@@ -145,13 +136,6 @@ export const isUserOnline = userId => {
     return (userClientIds.get(userId) || []).length > 0
 }
 
-/*
- *
- * event handlers
- * 
- */
-
-
 // cleanup on user client disconnect
 export async function handleDisconnect() {
     const client = this
@@ -164,7 +148,7 @@ export async function handleDisconnect() {
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
     userClientIds.set(user.id, arrUnique(clientIds))
-    console.info('Client disconnected: ', client.id, ' userId: ', user.id)
+    console.info('Client disconnected: userId', user.id, ' | Client ID: ', client.id)
 
     if (!onlineSupportUsers.get(user.id) || clientIds.length > 0) return
     // user is not online
@@ -180,7 +164,7 @@ export async function handleDisconnect() {
  * 
  * @returns {Boolean}       true if all supplied IDs exists, otherwise, false.
  */
-export const handleIdExists = async (userIds, callback) => isFn(callback) && callback(null, await idExists(userIds))
+export const handleIdExists = async (userIds, callback) => callback(null, await idExists(userIds))
 
 /**
  * @name    handleIsUserOnline
@@ -192,7 +176,6 @@ export const handleIdExists = async (userIds, callback) => isFn(callback) && cal
  *                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
  */
 export const handleIsUserOnline = async (userId, callback) => {
-    if (!isFn(callback)) return
     if (!isArr(userId)) return callback(null, isUserOnline(userId))
 
     const userIds = arrUnique(userId).filter(id => isStr(id))
@@ -204,18 +187,18 @@ export const handleIsUserOnline = async (userId, callback) => {
 }
 
 
-// user login 
-//
-// Params:
-// @userId      string
-// @secret      string
-// @callback    function: args => 
-//                  @err    string: error message if login fails
+/**
+ * @name    handleLogin
+ * @summary user login event handler
+ * 
+ * @param   {String}      userId 
+ * @param   {String}      secret 
+ * @param   {Function}    callback args => @err string: error message if login fails
+ */
 export async function handleLogin(userId, secret, callback) {
     const client = this
-    if (!isFn(callback)) return
     // prevent login with a reserved id
-    if (RESERVED_IDS.includes(userId)) return callback(texts.reservedId)
+    if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
     const user = await users.get(userId)
     const valid = user && user.secret === secret
     console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
@@ -230,25 +213,19 @@ export async function handleLogin(userId, secret, callback) {
     callback(null, { roles })
 }
 
-// user registration
-//
-// Params:
-// @userId      string
-// @secret      string
-// @callback    function: args:
-//                  @err        string: error message, if any
+/**
+ * @name    handleRegister
+ * @summary user registration event handler
+ * 
+ * @param   {String}    userId 
+ * @param   {String}    secret 
+ * @param   {Function}  callback  args => @err string: error message if login fails
+ */
 export async function handleRegister(userId, secret, callback) {
-    if (!isFn(callback)) return
     const client = this
-    userId = (userId || '').toLowerCase()
-    secret = (secret || '').trim()
-    // prevent registration with a reserved id
-    if (RESERVED_IDS.includes(userId)) return callback(texts.reservedId)
+    const err = validateObj({ secret, userId }, handleRegister.validationConfig, true, true)
+    if (err) return callback(err)
     if (await users.get(userId)) return callback(messages.idExists)
-    if (!isValidId(userId)) return callback(messages.idInvalid)
-    if (userId.length > idMaxLength) return callback(`${messages.idLengthMax}: ${idMaxLength}`)
-    if (userId.length < idMinLength) return callback(`${messages.idLengthMin}: ${idMinLength}`)
-    if (!isStr(secret) || !secret) return callback(messages.invalidSecret)
     const newUser = {
         id: userId,
         secret: secret,
@@ -258,4 +235,23 @@ export async function handleRegister(userId, secret, callback) {
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
     callback()
+}
+handleRegister.validationConfig = {
+    secret: {
+        minLegth: 10,
+        maxLength: 64,
+        type: TYPES.string,
+    },
+    userId: {
+        customMessages: {
+            regex: messages.idInvalid,
+            reject: messages.idExists,
+        },
+        maxLength: 16,
+        minLegth: 3,
+        regex: userIdRegex,
+        reject: RESERVED_IDS,
+        required: true,
+        type: TYPES.string,
+    },
 }

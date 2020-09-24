@@ -55,10 +55,10 @@ const texts = setTexts({
 const handlers = [
     // User & connection
     { name: 'disconnect', handler: handleDisconnect },
-    { name: 'id-exists', handler: handleIdExists },
-    { name: 'register', handler: handleRegister },
-    { name: 'login', handler: handleLogin },
-    { name: 'is-user-online', handler: handleIsUserOnline },
+    { name: 'id-exists', handler: handleIdExists, requireCallback: true },
+    { name: 'register', handler: handleRegister, requireCallback: true },
+    { name: 'login', handler: handleLogin, requireCallback: true },
+    { name: 'is-user-online', handler: handleIsUserOnline, requireCallback: true },
 
     // Company
     { name: 'company', handler: handleCompany },
@@ -145,7 +145,8 @@ const handlers = [
                     if (!user) return hasCallback && callback(texts.loginRequired)
                 }
                 // include the user object if login is required for this event
-                await handler.apply(!requireLogin ? client : [client, user], args,)
+                const thisArg = !requireLogin ? client : [client, user]
+                await handler.apply(thisArg, args)
             } catch (err) {
                 user = user || await getUserByClientId(client.id)
                 const requestId = uuid.v1()
