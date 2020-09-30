@@ -15,7 +15,7 @@ import { setTexts } from './language'
 
 const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
 // Maximum number of requests within @TIME_LIMIT
-const REQUEST_LIMIT = 5
+const REQUEST_LIMIT = 50
 const TIME_LIMIT = 24 * 60 * 60 * 1000 // 1 day in milliseconds
 // Duration to disallow user from creating a new faucet request if there is already one in progress (neither success nor error).
 // After timeout, assume something went wrong and allow user to create a new request
@@ -151,24 +151,25 @@ export async function handleFaucetRequest(address, callback) {
     )
     requests[index].inProgress = true
     // save inprogress status to database
-    await faucetRequests.set(user.id, { requests })
+    await faucetRequests.set(user.id, { requests }, true)
 
     // Promisify websocket request
-    const emitToFaucetClient = () => new Promise(resolve => faucetClient.emit(
+    const requestToFaucetServer = () => new Promise(resolve => faucetClient.emit(
         'faucet',
         encryptedMsg,
         nonce,
-        (err, hash) => resolve([err, hash]) ,
+        (err, result) => resolve([err, result]) ,
     ))
-    const [emitErr, hash] = await emitToFaucetClient()
-    requests[index].funded = !emitErr
-    requests[index].hash = hash
+    const [faucetServerErr, result] = await requestToFaucetServer()
+    const [blockHash] = result || []
+    requests[index].funded = !faucetServerErr
+    requests[index].blockHash = blockHash
     requests[index].inProgress = false
 
-    !!emitErr && console.log(`Faucet request failed. Error: ${emitErr}`)
+    !!faucetServerErr && console.log(`Faucet request failed. Error: ${faucetServerErr}`)
     // get back to the user
-    callback(emitErr, hash)
+    callback(faucetServerErr, blockHash)
 
     // update completed status to database
-    await faucetRequests.set(user.id, { requests })
+    await faucetRequests.set(user.id, { requests }, true)
 }
