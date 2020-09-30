@@ -15,7 +15,7 @@ import { setTexts } from './language'
 
 const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
 // Maximum number of requests within @TIME_LIMIT
-const REQUEST_LIMIT = 50
+const REQUEST_LIMIT = 5
 const TIME_LIMIT = 24 * 60 * 60 * 1000 // 1 day in milliseconds
 // Duration to disallow user from creating a new faucet request if there is already one in progress (neither success nor error).
 // After timeout, assume something went wrong and allow user to create a new request
