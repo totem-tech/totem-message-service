@@ -278,7 +278,7 @@ export async function handleNotification(recipients, type, childType, message, d
     // validate data fields
     const config = childType ? childTypeObj : typeObj
     err = isObj(config.dataFields) && validateObj(data, config.dataFields, true, true)
-    if (err) return callback(dataErr)
+    if (err) return callback(err)
 
     // validate message
     err = isObj(config.messageField) && validateObj(
