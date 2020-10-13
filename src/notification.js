@@ -100,12 +100,12 @@ export const VALID_TYPES = Object.freeze({
                 name: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
                 location: {
                     config: {
-                        addressLine1: str3To64,
-                        addressLine2: { ...str3To64, required: false },
-                        city: str3To64,
-                        postcode: { ...str3To64, maxLength: 16 },
-                        state: { ...str3To64, minLength: 2 },
-                        countryCode: { ...str3To64, maxLength: 3 },
+                        addressLine1: commonConfs.str3To64,
+                        addressLine2: { ...commonConfs.str3To64, required: false },
+                        city: commonConfs.str3To64,
+                        postcode: { ...commonConfs.str3To64, maxLength: 16 },
+                        state: { ...commonConfs.str3To64, minLength: 2 },
+                        countryCode: { ...commonConfs.str3To64, maxLength: 3 },
                     },
                     required: false,
                     type: TYPES.object,
