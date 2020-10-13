@@ -53,6 +53,7 @@ const commonConfs = {
     identity: { required: true, type: TYPES.identity },
     idHex: { maxLength: 66, minLength: 66, required: true, type: TYPES.hex },
     message: { maxLength: 160, minLength: 3, required: false, type: TYPES.string },
+    str3To64: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
 }
 
@@ -97,6 +98,18 @@ export const VALID_TYPES = Object.freeze({
                 introducedBy: { required: false, type: TYPES.string },
                 // name of the user or the identity
                 name: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
+                location: {
+                    config: {
+                        addressLine1: str3To64,
+                        addressLine2: { ...str3To64, required: false },
+                        city: str3To64,
+                        postcode: { ...str3To64, maxLength: 16 },
+                        state: { ...str3To64, minLength: 2 },
+                        countryCode: { ...str3To64, maxLength: 3 },
+                    },
+                    required: false,
+                    type: TYPES.object,
+                },
             },
             // validate introducer id, if supplied
             validate: async (_, _1, _2, { introducerId: id }) => {
