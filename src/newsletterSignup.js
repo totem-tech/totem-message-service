@@ -1,7 +1,7 @@
 import { TYPES, validateObj } from './utils/validator'
 import CouchDBStorage from './CouchDBStorage'
 import { setTexts } from './language'
-import { objClean } from './utils/utils'
+import { isFn, objClean } from './utils/utils'
 
 const messages = setTexts({
     signupExists: 'You have already signed up with the email address!'
@@ -25,6 +25,7 @@ const validatorConfig = {
 }
 const VALID_KEYS = Object.freeze(Object.keys(validatorConfig))
 export const handleNewsletterSignup = async (values, callback) => {
+    if (!isFn(callback)) return
     const errMsg = validateObj(values, validatorConfig, true, true)
     if (errMsg) return callback(errMsg)
 

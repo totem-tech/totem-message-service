@@ -1,5 +1,5 @@
 import CouchDBStorage from './CouchDBStorage'
-import { mapJoin, isFn, isHash, isObj, hasValue, objClean } from './utils/utils'
+import { mapJoin, isFn, isHash, isObj, hasValue, objClean, isAddress } from './utils/utils'
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'
 import { setTexts } from './language'
@@ -43,11 +43,9 @@ const messages = setTexts({
 // @callback    function: callback function
 export async function handleCompany(hash, company, callback) {
     if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [_, user] = this
     if (!user) return callback(messages.loginRequired)
     const isValidHash = isHash(hash)
-    console.log({hash, isValidHash})
     if (!isValidHash) return callback(messages.invalidHash)
 
     if (!isObj(company)) {
@@ -80,7 +78,15 @@ export async function handleCompany(hash, company, callback) {
     console.log('Company created: ', JSON.stringify(company))
     callback()
 }
+handleCompany.requireLogin = true
 
+/**
+ * @name    handleCompanySearch
+ * @summary search companies. Maximum results 100 (see `RESULT_LIMIT`)
+ * @param   {*} query 
+ * @param   {*} searchParentIdentity 
+ * @param   {*} callback 
+ */
 // Find companies by key-value pair(s)
 //
 // Params:
@@ -88,10 +94,7 @@ export async function handleCompany(hash, company, callback) {
 //                  1. if string and is a valid SS58 encoded address a company is associted with it, will return a Map of single item.
 //                  2. if string and not an address, will search by all searchable company properties
 //                  3. if object, will only search for specific keys supplied. Key(s) must exist in the `validKeys` array.
-// @matchExact  boolean: whether to fulltext search or partial search. Only applies to (2) & (3) above.
-// @ignoreCase  boolean: only applies to (2) & (3) above 
-// @callback    function: callback function.
-export const handleCompanySearch = async (query, findIdentity = false, callback) => {
+export async function handleCompanySearch(query, searchParentIdentity = false, callback) {
     if (!isFn(callback)) return
     if (isHash(query)) {
         // valid hash supplied
@@ -100,7 +103,6 @@ export const handleCompanySearch = async (query, findIdentity = false, callback)
         return callback(err, !err && new Map([[query, company]]))
     }
 
-    // sequentialy search until one or more results found
     const searchSeq = async (selectors = [], combine) => {
         let result = new Map()
         for (let i = 0; i < selectors.length; i++) {
@@ -110,12 +112,12 @@ export const handleCompanySearch = async (query, findIdentity = false, callback)
         }
         return result
     }
-
+    
     // search by identity or parentIdentity
-    if (addressToStr(query)) return callback(null, await searchSeq([
+    if (isAddress(query)) return callback(null, await searchSeq([
         { identity: query },
         // if no result found matching identity, search for parentIdentity
-        !findIdentity && { parentIdentity: query },
+        searchParentIdentity && { parentIdentity: query },
     ].filter(Boolean), true))
 
     return callback(null, await searchSeq([

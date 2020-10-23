@@ -7,7 +7,7 @@ import https from 'https'
 import socketIO from 'socket.io'
 import request from 'request'
 import uuid from 'uuid'
-import { isFn, isArr, isObj } from './utils/utils'
+import { isFn, isArr } from './utils/utils'
 import CouchDBStorage, { getConnection } from './CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
@@ -52,140 +52,121 @@ const texts = setTexts({
         Don't forget to mention the following Request ID
     `,
 })
-const handlers = [
+const events = {
     // User & connection
-    { name: 'disconnect', handler: handleDisconnect },
-    { name: 'id-exists', handler: handleIdExists, requireCallback: true },
-    { name: 'register', handler: handleRegister, requireCallback: true },
-    { name: 'login', handler: handleLogin, requireCallback: true },
-    { name: 'is-user-online', handler: handleIsUserOnline, requireCallback: true },
+    'disconnect': handleDisconnect,
+    'id-exists': handleIdExists,
+    'register': handleRegister,
+    'login': handleLogin,
+    'is-user-online': handleIsUserOnline,
 
     // Company
-    { name: 'company', handler: handleCompany },
-    { name: 'company-search', handler: handleCompanySearch },
+    'company': handleCompany,
+    'company-search': handleCompanySearch,
 
     // Countries
-    { name: 'countries', handler: handleCountries },
+    'countries': handleCountries,
 
     // Currency
-    { name: 'currency-convert', handler: handleCurrencyConvert },
-    { name: 'currency-list', handler: handleCurrencyList },
+    'currency-convert': handleCurrencyConvert,
+    'currency-list': handleCurrencyList,
 
     // Faucet request
-    { name: 'faucet-request', handler: handleFaucetRequest },
+    'faucet-request': handleFaucetRequest,
 
     // GL Accounts
-    { name: 'gl-accounts', handler: handleGlAccounts },
+    'gl-accounts': handleGlAccounts,
 
     // Language
-    { name: 'language-translations', handler: handleLanguageTranslations },
-    { name: 'language-error-messages', handler: handleLanguageErrorMessages },
+    'language-translations': handleLanguageTranslations,
+    'language-error-messages': handleLanguageErrorMessages,
 
     // Chat/Messages
-    { name: 'message', handler: handleMessage },
-    { name: 'message-get-recent', handler: handleMessageGetRecent },
-    { name: 'message-group-name', handler: handleMessageGroupName },
+    'message': handleMessage,
+    'message-get-recent': handleMessageGetRecent,
+    'message-group-name': handleMessageGroupName,
 
     // Newsletter signup
-    { name: 'newsletter-signup', handler: handleNewsletterSignup, requireCallback: true },
+    'newsletter-signup': handleNewsletterSignup,
 
     // Notification
-    {
-        name: 'notification',
-        handler: handleNotification,
-        requireLogin: true,
-        requireCallback: true,
-    },
-    {
-        name: 'notification-get-recent',
-        handler: handleNotificationGetRecent,
-        requireLogin: true,
-        requireCallback: true,
-    },
-    {
-        name: 'notification-set-status',
-        handler: handleNotificationSetStatus,
-        requireLogin: true,
-        requireCallback: true,
-    },
+    'notification': handleNotification,
+    'notification-get-recent': handleNotificationGetRecent,
+    'notification-set-status': handleNotificationSetStatus,
 
     // Project
-    { name: 'project', handler: handleProject },
-    { name: 'projects-by-hashes', handler: handleProjectsByHashes },
-
-    { name: 'task', handler: handleTask, requireLogin: true },
-    { name: 'task-get-by-id', handler: handleTaskGetById },
-]
-    .filter(x => isFn(x.handler)) // ignore if handler is not a function
-    .map(item => ({
-        ...item,
-        handler: async function interceptHandler() {
-            const args = [...arguments]
-            const client = this
-            if (name === 'message') {
-                // pass on extra information along with the client
-                client._data = {
-                    DISCORD_WEBHOOK_URL_SUPPORT,
-                    DISCORD_WEBHOOK_AVATAR_URL,
-                    DISCORD_WEBHOOK_USERNAME,
-                }
-            }
-            const { handler, name, requireCallback, requireLogin } = item
-            // if event requres a callback, last argument is expected to be the function
-            const callback = args[handler.length - 1]
-            const hasCallback = isFn(callback)
-            let user
-            // ignore if callback is required but not supplied
-            if (requireCallback && !hasCallback) return
-
-            try {
-                if (requireLogin) {
-                    // user must be logged
-                    user = await getUserByClientId(client.id)
-                    if (!user) return hasCallback && callback(texts.loginRequired)
-                }
-                // include the user object if login is required for this event
-                const thisArg = !requireLogin ? client : [client, user]
-                await handler.apply(thisArg, args)
-            } catch (err) {
-                user = user || await getUserByClientId(client.id)
-                const requestId = uuid.v1()
-                hasCallback && callback(`${texts.runtimeError}: ${requestId}`)
-
-                // Print error meta data
-                console.log([
-                    `interceptHandler: uncaught error on event "${name}" handler.`,
-                    `RequestID: ${requestId}.`,
-                    // print the error stack trace
-                    `Error: ${err}`,
-                ].join('\n'))
-
-                if (!DISCORD_WEBHOOK_URL) return
-
-                // send message to discord
-                const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
-                const content = '>>> ' + [
-                    `**RequestID:** ${requestId}`,
-                    `**Event:** *${name}*`,
-                    '**Error:** ' + `${err}`.replace('Error:', ''),
-                    user ? `**UserID:** ${user.id}` : '',
-                ].join('\n')
-                request({
-                    url: DISCORD_WEBHOOK_URL,
-                    method: "POST",
-                    json: true,
-                    body: {
-                        avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-                        content,
-                        username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
-                    }
-                }, handleReqErr)
-            }
+    'project': handleProject,
+    'projects-by-hashes': handleProjectsByHashes,
+    
+    // Task 
+    'task': handleTask,
+    'task-get-by-id': handleTaskGetById,
+}
+const interceptHandler = (name, handler) => async function (...args) {
+    if (!isFn(handler)) return
+    const client = this
+    const { requireLogin } = handler
+    if (name === 'message') {
+        // pass on extra information along with the client
+        client._data = {
+            DISCORD_WEBHOOK_URL_SUPPORT,
+            DISCORD_WEBHOOK_AVATAR_URL,
+            DISCORD_WEBHOOK_USERNAME,
         }
-    }))
+    }
+    // last argument is expected to be the function
+    const callback = args.slice(-1)
+    const hasCallback = isFn(callback)
+    let user
 
+    try {
+        if (requireLogin) {
+            // user must be logged
+            user = await getUserByClientId(client.id)
+            if (!user) return hasCallback && callback(texts.loginRequired)
+        }
+        // include the user object if login is required for this event
+        const thisArg = !requireLogin ? client : [client, user]
+        await handler.apply(thisArg, args)
+    } catch (err) {
+        user = user || await getUserByClientId(client.id)
+        const requestId = uuid.v1()
+        hasCallback && callback(`${texts.runtimeError}: ${requestId}`)
+
+        // Print error meta data
+        console.log([
+            `interceptHandler: uncaught error on event "${name}" handler.`,
+            `RequestID: ${requestId}.`,
+            // print the error stack trace
+            `Error: ${err}`,
+        ].join('\n'))
+
+        if (!DISCORD_WEBHOOK_URL) return
+
+        // send message to discord
+        const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
+        const content = '>>> ' + [
+            `**RequestID:** ${requestId}`,
+            `**Event:** *${name}*`,
+            '**Error:** ' + `${err}`.replace('Error:', ''),
+            user ? `**UserID:** ${user.id}` : '',
+        ].join('\n')
+        request({
+            url: DISCORD_WEBHOOK_URL,
+            method: "POST",
+            json: true,
+            body: {
+                avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+                content,
+                username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+            }
+        }, handleReqErr)
+    }
+}
+// replace handlers with intercepted handler
+Object.keys(events).forEach(name => events[name] = interceptHandler(name, events[name]))
 // Setup websocket event handlers
-socket.on('connection', client => handlers.forEach(x => client.on(x.name, x.handler)))
+socket.on('connection', client => Object.keys(events).forEach(name => client.on(name, events[name])))
 // Start listening
 server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
 
@@ -198,7 +179,6 @@ try {
     process.exit(1)
 }
 if (!!migrateFiles) setTimeout(() => migrate(migrateFiles), 1000)
-
 
 // Migrate JSON file storage to CouchDB.
 // Existing entries will be ignored and will remain in the JSON file.

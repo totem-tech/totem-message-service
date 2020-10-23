@@ -94,13 +94,12 @@ const faucetClient = ioClient(FAUCET_SERVER_URL, { secure: true, rejectUnauthori
 
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
-    const client = this
     console.log('faucetClient.connected', faucetClient.connected)
     if (!faucetClient.connected) throw texts.faucetServerDown
     const err = setVariables()
     if (err) throw err
-
-    const user = await getUserByClientId(client.id)
+    
+    const [_, user] = this
     if (!user) return callback(texts.loginOrRegister)
     let { requests } = (await faucetRequests.get(user.id)) || {}
     requests = requests || []
@@ -173,3 +172,4 @@ export async function handleFaucetRequest(address, callback) {
     // update completed status to database
     await faucetRequests.set(user.id, { requests }, true)
 }
+handleFaucetRequest.requireLogin = true

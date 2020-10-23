@@ -110,6 +110,7 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     const result = await storage.set(taskId, task)
     callback(null, result)
 }
+handleTask.requireLogin = true
 
 // handleTaskGet retrieves non-blockchain task details from database
 //

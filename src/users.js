@@ -141,7 +141,7 @@ export async function handleDisconnect() {
     const client = this
     clients.delete(client.id)
     const user = await getUserByClientId(client.id)
-    if (!user) return;
+    if (!user) return // nothing to do
 
     const clientIds = userClientIds.get(user.id) || []
     const clientIdIndex = clientIds.indexOf(client.id)
@@ -164,7 +164,7 @@ export async function handleDisconnect() {
  * 
  * @returns {Boolean}       true if all supplied IDs exists, otherwise, false.
  */
-export const handleIdExists = async (userIds, callback) => callback(null, await idExists(userIds))
+export const handleIdExists = async (userIds, callback) => isFn(callback) && callback(null, await idExists(userIds))
 
 /**
  * @name    handleIsUserOnline
@@ -176,6 +176,7 @@ export const handleIdExists = async (userIds, callback) => callback(null, await 
  *                  @online     bool/object: boolean for signle id and object if array of user Ids supplied in @userId
  */
 export const handleIsUserOnline = async (userId, callback) => {
+    if (!isFn(callback)) return
     if (!isArr(userId)) return callback(null, isUserOnline(userId))
 
     const userIds = arrUnique(userId).filter(id => isStr(id))
@@ -185,6 +186,7 @@ export const handleIsUserOnline = async (userId, callback) => {
     }
     callback(null, result)
 }
+handleIsUserOnline.requireLogin = true
 
 
 /**
@@ -196,9 +198,10 @@ export const handleIsUserOnline = async (userId, callback) => {
  * @param   {Function}    callback args => @err string: error message if login fails
  */
 export async function handleLogin(userId, secret, callback) {
-    const client = this
+    if (!isFn(callback)) return
     // prevent login with a reserved id
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
+    const client = this
     const user = await users.get(userId)
     const valid = user && user.secret === secret
     console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
@@ -222,6 +225,7 @@ export async function handleLogin(userId, secret, callback) {
  * @param   {Function}  callback  args => @err string: error message if login fails
  */
 export async function handleRegister(userId, secret, callback) {
+    if (!isFn(callback)) return
     const client = this
     const err = validateObj({ secret, userId }, handleRegister.validationConfig, true, true)
     if (err) return callback(err)
