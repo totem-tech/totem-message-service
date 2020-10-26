@@ -10,8 +10,10 @@ const onlineSupportUsers = new Map()
 const userIdRegex = /^[a-z][a-z0-9]+$/
 // Error messages
 const messages = setTexts({
+    alreadyRegistered: 'You have already registered! Please contact support for instructions if you wish to get a new user ID.',
     idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
     idExists: 'User ID already taken',
+    invalidReferrerID: 'invalid referrer ID',
     invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
@@ -222,18 +224,30 @@ export async function handleLogin(userId, secret, callback) {
  * 
  * @param   {String}    userId 
  * @param   {String}    secret 
+ * @param   {String}    referredBy (optional) referrer user ID
  * @param   {Function}  callback  args => @err string: error message if login fails
  */
-export async function handleRegister(userId, secret, callback) {
+export async function handleRegister(userId, secret, referredBy, callback) {
     if (!isFn(callback)) return
     const client = this
-    const err = validateObj({ secret, userId }, handleRegister.validationConfig, true, true)
-    if (err) return callback(err)
-    if (await users.get(userId)) return callback(messages.idExists)
+    // prevent registered user is attemping to register again!
+    const user = await getUserByClientId(client.id)
+    console.log({ user })
+    if (user) return callback(messages.alreadyRegistered)
+    
     const newUser = {
         id: userId,
-        secret: secret,
+        referredBy,
+        secret,
     }
+    const err = validateObj(newUser, handleRegister.validationConfig, true, true)
+    if (err) return callback(err)
+    userId = userId.trim() // get rid of any leading and trailing spaces
+    // check if user ID already exists
+    if (await idExists([userId])) return callback(messages.idExists)
+    // check if referrer ID is valid
+    if (referredBy && !(await idExists([referredBy]))) return callback(messages.invalidReferrerID)
+        
     await users.set(userId, newUser)
     clients.set(client.id, client)
     userClientIds.set(userId, [client.id])
@@ -241,12 +255,7 @@ export async function handleRegister(userId, secret, callback) {
     callback()
 }
 handleRegister.validationConfig = {
-    secret: {
-        minLegth: 10,
-        maxLength: 64,
-        type: TYPES.string,
-    },
-    userId: {
+    id: {
         customMessages: {
             regex: messages.idInvalid,
             reject: messages.idExists,
@@ -256,6 +265,19 @@ handleRegister.validationConfig = {
         regex: userIdRegex,
         reject: RESERVED_IDS,
         required: true,
+        type: TYPES.string,
+    },
+    referredBy: {
+        maxLength: 16,
+        minLegth: 3,
+        regex: userIdRegex,
+        reject: RESERVED_IDS,
+        required: false,
+        type: TYPES.string,
+    },
+    secret: {
+        minLegth: 10,
+        maxLength: 64,
         type: TYPES.string,
     },
 }

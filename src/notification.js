@@ -52,20 +52,21 @@ const messages = setTexts({
 })
 const commonConfs = {
     identity: { required: true, type: TYPES.identity },
-    idHex: { maxLength: 66, minLength: 66, required: true, type: TYPES.hex },
-    message: { maxLength: 160, minLength: 3, required: false, type: TYPES.string },
-    str3To64: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
+    idHash: { required: true, type: TYPES.hash },
+    str3To160: { maxLength: 160, minLength: 3, required: false, type: TYPES.string },
+    str3To160Required: { maxLength: 160, minLength: 3, required: true, type: TYPES.string },
+    str3To64Required: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
 }
 commonConfs.location = { // validation config for a location
     config: {
-        addressLine1: commonConfs.str3To64,
-        addressLine2: { ...commonConfs.str3To64, required: false },
-        city: commonConfs.str3To64,
-        name: commonConfs.str3To64,
-        postcode: { ...commonConfs.str3To64, maxLength: 16 },
-        state: { ...commonConfs.str3To64, minLength: 2 },
-        countryCode: { ...commonConfs.str3To64, minLength: 2, maxLength: 3 },
+        addressLine1: commonConfs.str3To64Required,
+        addressLine2: { ...commonConfs.str3To64Required, required: false },
+        city: commonConfs.str3To64Required,
+        name: commonConfs.str3To64Required,
+        postcode: { ...commonConfs.str3To64Required, maxLength: 16 },
+        state: { ...commonConfs.str3To64Required, minLength: 2 },
+        countryCode: { ...commonConfs.str3To64Required, minLength: 2, maxLength: 2 },
     },
     required: false,
     type: TYPES.object,
@@ -86,22 +87,21 @@ export const VALID_TYPES = Object.freeze({
         introduce: {
             dataFields: { userId: commonConfs.userId },
             // check if user id is valid
-            validate: async (i, f, toUserIds, { userId }) => {
-                const exists = await idExists(userId)
-                // makes sure supplied userId is valid
-                if (!exists) return messages.invalidUserId
-                // prevents user to be introduced to themself!
-                if (toUserIds.includes(userId)) return messages.introducingUserIdConflict
-            },
-            messageField: commonConfs.message,
+            validate: async (i, f, toUserIds, { userId }) => !await idExists(userId)
+                ? messages.invalidUserId
+                : toUserIds.includes(userId)
+                    // prevent user to be introduced to themself!
+                    ? messages.introducingUserIdConflict
+                    : null,
+            messageField: commonConfs.str3To160,
         },
         // user1 requests identity from user2
         request: {
             dataFields: {
                 // one-liner explanation by the requester of why they want receivers identity
-                reason: { maxLength: 256, minLength: 3, required: true, type: TYPES.string },
+                reason: commonConfs.str3To160Required,
             },
-            messageField: commonConfs.message,
+            messageField: commonConfs.str3To160,
         },
         // user1 shares identity with user2
         share: {
@@ -115,30 +115,43 @@ export const VALID_TYPES = Object.freeze({
                 location: commonConfs.location,
             },
             // validate introducer id, if supplied
-            validate: async (_, _1, _2, { introducerId: id }) => {
-                if (!id) return
-                const exists = await idExists(id)
-                return !exists ? messages.invalidUserId : null
-            },
-            messageField: commonConfs.message,
+            validate: async (_, _1, _2, { introducerId: id }) => !id || await idExists(id)
+                ? null
+                : messages.invalidUserId
         }
     },
     task: {
         // notify user when a task has been assigned to them
         assignment: {
             dataFields: {
-                assigneeAddress: commonConfs.identity,
-                taskId: commonConfs.idHex,
+                fulfillerAddress: commonConfs.identity,
+                taskId: commonConfs.idHash,
             },
-            messageField: commonConfs.message,
         },
         // notify task owner when an assignee accepted/rejected a task
         assignment_response: {
             dataFields: {
+                accepted: { required: true, type: TYPES.boolean },
+                taskId: commonConfs.idHash,
+                taskTitle: commonConfs.str3To160Required,
                 ownerAddress: commonConfs.identity,
-                taskId: commonConfs.idHex,
             },
-            messageField: commonConfs.message,
+        },
+        // notify task owner when assignee marks task as done
+        invoiced: {
+            dataFields: {
+                ownerAddress: commonConfs.identity,
+                taskId: commonConfs.idHash,
+                taskTitle: commonConfs.str3To160Required,
+            },
+        },
+        invoiced_response: {
+            dataFields: {
+                disputed: { required: true, type: TYPES.boolean},
+                fulfillerAddress: commonConfs.identity,
+                taskId: commonConfs.idHash,
+                taskTitle: commonConfs.str3To160Required,
+            },
         },
         // // notify task owner when a task has been completed and invoice created
         // invoice: {},
@@ -148,24 +161,31 @@ export const VALID_TYPES = Object.freeze({
     timekeeping: {
         dispute: {
             responseRequired: true,
-            messageField: commonConfs.message,
+            messageField: commonConfs.str3To160,
         },
         invitation: {
             dataFields: {
-                projectHash: commonConfs.idHex,
+                projectHash: commonConfs.idHash,
                 projectName: { minLength: 3, required: true, type: TYPES.string },
                 workerAddress: { required: true, type: TYPES.identity },
             },
-            messageField: commonConfs.message,
+            messageField: commonConfs.str3To160,
         },
         invitation_response: {
             dataFields: {
                 accepted: { required: true, type: TYPES.boolean },
-                projectHash: commonConfs.idHex,
+                projectHash: commonConfs.idHash,
                 projectName: { minLength: 3, required: true, type: TYPES.string },
                 workerAddress: { required: true, type: TYPES.identity },
             },
-            messageField: { ...commonConfs.message, required: true },
+            messageField: { ...commonConfs.str3To160, required: true },
+        },
+    },
+    transfer: {
+        dataFields: {
+            addressFrom: commonConfs.identity,
+            addressTo: commonConfs.identity,
+            amountXTX: { maxLength: 18, minLength: 1, required: true, type: TYPES.integer },
         },
     },
 })
