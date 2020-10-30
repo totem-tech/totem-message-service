@@ -34,8 +34,8 @@ const messages = setTexts({
 // @create      bool: whether to create or update the project.
 //                  If truthy and a project already exists, will return an error.
 export async function handleProject(hash, project, create, callback) {
-    const client = this
-    if (!isFn(callback)) return;
+    if (!isFn(callback)) return
+    const [client, user] = this
     const existingProject = await projects.get(hash)
     if (create && !!existingProject) return callback(messages.exists)
 
@@ -45,10 +45,6 @@ export async function handleProject(hash, project, create, callback) {
         existingProject
     )
 
-    // check if user is logged in
-    // getUserByClientId will return a user only when a user is logged in with client ID
-    const user = await getUserByClientId(client.id)
-    if (!user) return callback(messages.loginRequired)
     // // makes sure only the project owner can execute the update operation
     // const { userId } = existingProject || {}
     // if (!create && isDefined(userId) && user.id !== userId) return callback(messages.accessDenied)
@@ -80,6 +76,7 @@ export async function handleProject(hash, project, create, callback) {
     callback(null, project)
     console.log(`Activity ${create ? 'created' : 'updated'}: ${hash} `)
 }
+handleProject.requireLogin = true
 
 // user projects by list of project hashes
 // Params
@@ -89,7 +86,7 @@ export async function handleProject(hash, project, create, callback) {
 //						@err	string, 
 //						@result map, 
 export const handleProjectsByHashes = async (hashArr, callback) => {
-    if (!isFn(callback)) return;
+    if (!isFn(callback)) return
     if (!isArr(hashArr) || hashArr.length === 0) return callback(messages.arrayRequired)
     let result = await projects.getAll(hashArr)
     const hashesNotFound = hashArr.filter(hash => !result.get(hash))

@@ -52,10 +52,9 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     if (!isFn(callback)) return
     if (!isStr(message) || message.trim().length === 0) return
     if (message.length > msgMaxLength) return callback(texts.msgLengthExceeds)
-    const client = this
+    const [_, user] = this
     const event = 'message'
     const timestamp = new Date().toISOString()
-    const user = await getUserByClientId(client.id)
     if (!user) return callback(texts.loginOrRegister)
 
     const senderId = user.id
@@ -122,6 +121,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         }
     }, err => err && console.log('Discord Webhook: failed to send support message. ', err))
 }
+handleMessage.requireLogin = true
 
 // get user's most recent messsages. Maximum of 1000
 //
@@ -132,8 +132,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
 //                      @messages   array: array of messages
 export async function handleMessageGetRecent(lastMessageTS, callback) {
     if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [_, user] = this
     if (!user) return callback(texts.loginOrRegister)
     const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
     let selector = {
@@ -154,6 +153,7 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     const result = await storage.search(selector, true, true, false, RECENT_MESSAGE_LIMIT, 0, false, extraProps)
     callback(null, result)
 }
+handleMessageGetRecent.requireLogin = true
 
 // set group name. anyone within the group can set group name.
 //
@@ -161,8 +161,7 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
 // @receiverIds     array:
 export async function handleMessageGroupName(receiverIds, name, callback) {
     if (!isFn(callback)) return
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [_, user] = this
     const reservedIds = receiverIds.filter(id => RESERVED_IDS.includes(id))
     if (reservedIds.length > 0) return callback(`${texts.invalidUserID}: ${reservedIds.join(', ')}`)
     if (!user) return callback(texts.loginOrRegister)
@@ -194,3 +193,4 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
     emitToUsers(receiverIds, event, args)
     callback()
 }
+handleMessageGroupName.requireLogin = true
