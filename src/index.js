@@ -29,6 +29,7 @@ import {
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
+import { handleDAA, handleKyc } from './DAA'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -70,6 +71,10 @@ const events = {
     // Currency
     'currency-convert': handleCurrencyConvert,
     'currency-list': handleCurrencyList,
+
+    // KYC && DAA
+    'KYC': handleKyc,
+    'DAA': handleDAA,
 
     // Faucet request
     'faucet-request': handleFaucetRequest,

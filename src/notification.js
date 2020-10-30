@@ -1,6 +1,6 @@
 import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
-import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr, objClean } from './utils/utils'
+import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, idExists, RESERVED_IDS } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -45,19 +45,29 @@ setTimeout(async () => {
 const UNRECEIVED_LIMIT = 200
 const messages = setTexts({
     accessDenied: 'Access denied',
+    ethAddressError: 'valid Ethereum address required',
     introducingUserIdConflict: 'Introducing user cannot not be a recipient',
     invalidId: 'Invalid notification ID',
     invalidParams: 'Invalid or missing required parameters',
     invalidUserId: 'Invalid User ID supplied',
 })
-const commonConfs = {
+let strict = false
+export const commonConfs = objReadOnly({
+    ethAddress: {
+        customMessages: { hex: messages.ethAddressError },
+        // number of characters required including '0x'
+        minLength: 42, 
+        maxLength: 42,
+        required: true,
+        type: TYPES.hex,
+    },
     identity: { required: true, type: TYPES.identity },
     idHash: { required: true, type: TYPES.hash },
     str3To160: { maxLength: 160, minLength: 3, required: false, type: TYPES.string },
     str3To160Required: { maxLength: 160, minLength: 3, required: true, type: TYPES.string },
     str3To64Required: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
-}
+}, () => strict, true)
 commonConfs.location = { // validation config for a location
     config: {
         addressLine1: commonConfs.str3To64Required,
@@ -71,6 +81,7 @@ commonConfs.location = { // validation config for a location
     required: false,
     type: TYPES.object,
 }
+strict = true
 
 // @validate function: callback function to be executed before adding a notification.
 //                      Must return error string if any error occurs or notification should be void.
