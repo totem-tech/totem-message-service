@@ -94,13 +94,12 @@ const faucetClient = ioClient(FAUCET_SERVER_URL, { secure: true, rejectUnauthori
 
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
-    const client = this
     console.log('faucetClient.connected', faucetClient.connected)
     if (!faucetClient.connected) throw texts.faucetServerDown
     const err = setVariables()
     if (err) throw err
-
-    const user = await getUserByClientId(client.id)
+    
+    const [_, user] = this
     if (!user) return callback(texts.loginOrRegister)
     let { requests } = (await faucetRequests.get(user.id)) || {}
     requests = requests || []
@@ -151,24 +150,26 @@ export async function handleFaucetRequest(address, callback) {
     )
     requests[index].inProgress = true
     // save inprogress status to database
-    await faucetRequests.set(user.id, { requests })
+    await faucetRequests.set(user.id, { requests }, true)
 
     // Promisify websocket request
-    const emitToFaucetClient = () => new Promise(resolve => faucetClient.emit(
+    const requestToFaucetServer = () => new Promise(resolve => faucetClient.emit(
         'faucet',
         encryptedMsg,
         nonce,
-        (err, hash) => resolve([err, hash]) ,
+        (err, result) => resolve([err, result]) ,
     ))
-    const [emitErr, hash] = await emitToFaucetClient()
-    requests[index].funded = !emitErr
-    requests[index].hash = hash
+    const [faucetServerErr, result] = await requestToFaucetServer()
+    const [blockHash] = result || []
+    requests[index].funded = !faucetServerErr
+    requests[index].blockHash = blockHash
     requests[index].inProgress = false
 
-    !!emitErr && console.log(`Faucet request failed. Error: ${emitErr}`)
+    !!faucetServerErr && console.log(`Faucet request failed. Error: ${faucetServerErr}`)
     // get back to the user
-    callback(emitErr, hash)
+    callback(faucetServerErr, blockHash)
 
     // update completed status to database
-    await faucetRequests.set(user.id, { requests })
+    await faucetRequests.set(user.id, { requests }, true)
 }
+handleFaucetRequest.requireLogin = true
