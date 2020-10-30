@@ -27,13 +27,13 @@ const envErr = validateObj(
     true,
     true,
 )
-if (envErr) throw `Missing or invalid environment variable. ${envErr}`
+if (KYC_PublicKey && envErr) throw `Missing or invalid environment variable. ${envErr}`
 
 // placeholder
 const generateDOTAddress = async (userId) => { return 'a dot address for ' + userId }
 
 //
-export function handleKyc(kycData, callback) {
+export async function handleKyc(kycData, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
