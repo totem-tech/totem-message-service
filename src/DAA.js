@@ -37,9 +37,8 @@ export async function handleKyc(kycData, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
-    const kycEntry = kyc.get(user.id)
-    // user has already done KYC
-    if (kycEntry) return callback(null)
+    // check if user has already done KYC
+    if (kyc.get(user.id)) return callback(null)
 
     const err = validateObj(kycData, handleKyc.validationConf, true)
     if (err) return callback(err)
@@ -104,11 +103,11 @@ export async function handleDAA(blockchain, ethAddress, callback) {
         !isSelf
             ? messages.addressAlreadyInUse // for ETH address ONLY
             : null,
-        isSelf
-            ? isETH
+        !isSelf
+            ? undefined
+            : isETH
                 ? ETH_Smart_Contract
                 : existingEntry.address
-            : undefined
     )
 
     err = validateObj(v, conf)
