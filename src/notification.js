@@ -51,15 +51,15 @@ const messages = setTexts({
     invalidParams: 'Invalid or missing required parameters',
     invalidUserId: 'Invalid User ID supplied',
 })
-let strict = false
-export const commonConfs = objReadOnly({
+export const commonConfs = {
     ethAddress: {
-        customMessages: { hex: messages.ethAddressError },
+        chainType: 'ethereum',
+        customMessages: { identity: messages.ethAddressError },
         // number of characters required including '0x'
         minLength: 42, 
         maxLength: 42,
         required: true,
-        type: TYPES.hex,
+        type: TYPES.identity,
     },
     identity: { required: true, type: TYPES.identity },
     idHash: { required: true, type: TYPES.hash },
@@ -67,7 +67,7 @@ export const commonConfs = objReadOnly({
     str3To160Required: { maxLength: 160, minLength: 3, required: true, type: TYPES.string },
     str3To64Required: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
-}, () => strict, true)
+}
 commonConfs.location = { // validation config for a location
     config: {
         addressLine1: commonConfs.str3To64Required,
@@ -81,7 +81,9 @@ commonConfs.location = { // validation config for a location
     required: false,
     type: TYPES.object,
 }
-strict = true
+Object.keys(commonConfs).forEach(key =>
+    commonConfs[key] = objReadOnly(commonConfs[key], true, true)
+)
 
 // @validate function: callback function to be executed before adding a notification.
 //                      Must return error string if any error occurs or notification should be void.
@@ -259,9 +261,6 @@ export async function handleNotificationGetRecent(tsLastReceived, callback) {
     // retrieve latest notifications
     let result = (await notifications.search(
         selector,
-        true,
-        true,
-        false,
         UNRECEIVED_LIMIT,
         0,
         true,

@@ -5,7 +5,7 @@ import { arrUnique, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_IDS, ROLE_SUPPORT } from './users'
 
-const storage = new CouchDBStorage(null, 'messages')
+const chatMessages = new CouchDBStorage(null, 'messages')
 const TROLLBOX = 'trollbox' // for trollbox
 const TROLLBOX_ALT = 'everyone'
 const msgMaxLength = 160
@@ -37,7 +37,7 @@ setTimeout(async () => {
             name: 'receiverIds_timestamp-index',
         }
     ]
-    indexDefs.forEach(async (def) => await (await storage.getDB()).createIndex(def))
+    indexDefs.forEach(async (def) => await (await chatMessages.getDB()).createIndex(def))
 })
 
 // handle private, group and trollbox messages
@@ -87,7 +87,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     // handle private p2p or group message
     const reservedIds = receiverIds.filter(id => prohibitedIds.includes(id))
     if (reservedIds.length > 0) return callback(`${texts.invalidUserID}: ${reservedIds.join(', ')}`)
-    const { id } = await storage.set(null, {
+    const { id } = await chatMessages.set(null, {
         encrypted,
         message,
         receiverIds,
@@ -150,7 +150,7 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     }
 
     const extraProps = { 'sort': [{ 'timestamp': 'asc' }] }
-    const result = await storage.search(selector, true, true, false, RECENT_MESSAGE_LIMIT, 0, false, extraProps)
+    const result = await chatMessages.search(selector, RECENT_MESSAGE_LIMIT, 0, false, extraProps)
     callback(null, result)
 }
 handleMessageGetRecent.requireLogin = true
@@ -179,7 +179,7 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
     const timestamp = new Date()
     const message = ''
     const encrypted = false
-    const { id } = await storage.set(null, {
+    const { id } = await chatMessages.set(null, {
         action,
         encrypted,
         message,

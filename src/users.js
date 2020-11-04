@@ -94,7 +94,7 @@ export const getSupportUsers = async () => {
         // select all messages to/from current user
         'roles': { '$all': [ROLE_SUPPORT] }
     }
-    return await users.search(selector, true, true, false, 99, 0, false)
+    return await users.search(selector, 99, 0, false)
 }
 
 // findUserByClientId seeks out user ID by connected client ID

@@ -1,6 +1,6 @@
 import nano from 'nano'
 import uuid from 'uuid'
-import { isObj, isStr, isArr, arrUnique, isMap, objClean } from './utils/utils'
+import { isObj, isStr, isArr, arrUnique, isMap } from './utils/utils'
 
 let connection
 // getConnection returns existing connection, if available.
@@ -71,8 +71,8 @@ export default class CouchDBStorage {
     }
 
     // find the first item matching criteria
-    async find(keyValues, matchExact, matchAll, ignoreCase) {
-        const docs = await this.search(keyValues, matchExact, matchAll, ignoreCase, 1, 0, false)
+    async find(selector) {
+        const docs = await this.search(selector, 1, 0, false)
         return docs[0]
     }
 
@@ -112,23 +112,9 @@ export default class CouchDBStorage {
     }
 
     // search documents within the database
-    async search(keyValues = {}, matchExact, matchAll, ignoreCase, limit = 0, skip = 0, asMap = true, extraProps) {
-        if (!isObj(keyValues) || Object.keys(keyValues).length === 0) return asMap ? new Map() : []
-
-        // unused for the time being
-        // // assumes no operator is used in @keyValues
-        // !matchExact && Object.keys(keyValues).forEach(key => {
-        //     keyValues[key] = { $regex: `${ignoreCase ? '(?i)' : ''}${keyValues[key]}` }
-        // })
-        // // if !matchAll, add $or operator to include documents matching one or more fields
-        // keyValues = matchAll ? keyValues : {
-        //     $or: Object.keys(keyValues).map(key => {
-        //         const keyQ = {}
-        //         keyQ[key] = keyValues[key]
-        //         return keyQ
-        //     })
-        // }
-        const result = await this.searchRaw(keyValues, limit, skip, extraProps)
+    async search(selector = {}, limit = 0, skip = 0, asMap = true, extraProps) {
+        if (!isObj(selector) || Object.keys(selector).length === 0) return asMap ? new Map() : []
+        const result = await this.searchRaw(selector, limit, skip, extraProps)
         return !asMap ? result.docs : new Map(result.docs.map(doc => [doc._id, doc]))
     }
 

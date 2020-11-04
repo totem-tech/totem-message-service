@@ -26,5 +26,5 @@ export const handleGlAccounts = async (accountNumbers = [], callback) => {
         ]
     }
 
-    return callback(null, await glAccounts.search(selector, false, false, false, 0, 0, false, extraProps))
+    return callback(null, await glAccounts.search(selector, 0, 0, false, extraProps))
 }
