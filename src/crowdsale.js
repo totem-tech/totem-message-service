@@ -106,25 +106,29 @@ const generateAddress = async (derivationPath, seed = DOT_Seed_Address, netword 
 
 const getBTCAddress = async () => {
     // find the last used BTC address with serialNo
-    const result = await btcAddresses.search({ _id: { $gt: null }}, 10, 0, true, {
+    const result = await btcAddresses.search({ _id: { $gt: null }}, 1, 0, true, {
         sort: [{ serialNo: 'desc' }], // highest number first
     })
 
     const serialNo = result.size === 0
-        ? 0 // for first entry
-        : Array.from(result)[0][1].serialNo || 0
-    const next = await btcGenerated.get(`${serialNo || 0 }`)
+        ? -1 // for first entry
+        : Array.from(result)[0][1].serialNo
+    const serialNoInt = parseInt(serialNo + 1)
+    const next = await btcGenerated.get(`${serialNoInt}`)
     if (!next) throw messages.outOfBTCAddress
     // find the last used sequential btc address
-    return [next.address, parseInt(next._id)]
+    console.log({serialNoInt})
+    return [next.address, serialNoInt]
 }
 
 /**
  * @name    handleKyc
  * @summary handles KYC requests
  * 
- * @param   {Object}    kycData if not Object will only check if user has already done KYC.
- *                              See `handleCrowdsaleKyc.validationConf` for required fields
+ * @param   {Object|Boolean}    kycData if not Object will only check if user has already done KYC.
+ *                              See `handleCrowdsaleKyc.validationConf` for required fields.
+ *                              Use `true` to check if user has completed KYC.
+ *  
  * @param   {Function}  callback    arguments:
  *                                  @error      String|null
  *                                  @success    Boolean 
@@ -135,7 +139,7 @@ export async function handleCrowdsaleKyc(kycData, callback) {
 
     // check if user has already done KYC
     const kycEntry = await kyc.get(user.id)
-    if (kycEntry || !isObj(kycData)) return callback(null, !!kycEntry)
+    if (kycData === true || kycEntry) return callback(null, !!kycEntry)
 
     // validate KYC data
     const err = validateObj(kycData, handleCrowdsaleKyc.validationConf, true)

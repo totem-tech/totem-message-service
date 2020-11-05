@@ -120,7 +120,7 @@ const interceptHandler = (name, handler) => async function (...args) {
         }
     }
     // last argument is expected to be the function
-    const callback = args.slice(-1)
+    const callback = args.slice(-1)[0]
     const hasCallback = isFn(callback)
     let user
 
