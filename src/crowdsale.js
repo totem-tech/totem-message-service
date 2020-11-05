@@ -16,35 +16,64 @@ const dotAddresses = new CouchDBStorage(null, 'address-dot')
 // whitelisted Ethereum addresses
 const ethAddresses = new CouchDBStorage(null, 'address-eth')
 const messages = setTexts({
-    outOfBTCAddress: 'Uh oh! We are out of BTC deposit addresses! Totem team has been notified of this. Please try again later or use a different Blockchain.',
-    ethAddressInUse: 'This Ethereum address has already been whitelisted by another user. Please refrain from making any deposits using this address. IF YOU DO SO, YOU WILL NOT RECEIVE ANY TOKENS! Please use another Ethereum address or contact us using the support chat channel if you think this is an error.', 
-    identityAlreadyInUse: 'This identity has already been used by another user. Please use a different identity.',
-    kycNotDone: 'You have not submitted your KYC yet!'
+    alreadyAllocated: `
+        You have alredy been allocated deposit address for this blockchain.
+        Please contact us using the support chat channel if you think this is an error.
+    `,
+    ethAddressInUse: `
+        This Ethereum address has already been whitelisted by another user. 
+        Please refrain from making any deposits using this address.  
+        IF YOU DO SO, YOU WILL NOT RECEIVE ANY TOKENS! 
+        Please use another Ethereum address or contact us using the support chat channel if you think this is an error.
+    `, 
+    identityAlreadyInUse: `
+        This identity has already been used by another user. 
+        Please use a different identity.
+    `,
+    kycNotDone: 'You have not submitted your KYC yet!',
+    outOfBTCAddress: `
+        Uh oh! We are out of BTC deposit addresses!
+        Totem team has been notified of this.
+        Please try again later or use a different Blockchain.
+    `,
+    
 })
 // environment valirables
-const KYC_PublicKey = process.env.KYC_PublicKey
-const ETH_Smart_Contract = process.env.ETH_Smart_Contract
-const DOT_Seed_Address = process.env.DOT_Seed_Address
+const KYC_PublicKey = process.env.Crowdsale_KYC_PublicKey
+const ETH_Smart_Contract = process.env.Crowdsale_ETH_Smart_Contract
+const DOT_Seed_Address = process.env.Crowdsale_DOT_Seed_Address
+const algo = process.env.Crowdsale_Algo
+const algoBits = process.env.Crowdsale_Algo_Bits
 // validate environment variables
 const envErr = validateObj(
     {
         DOT_Seed_Address,
         ETH_Smart_Contract,
         KYC_PublicKey,
+        algo,
+        algoBits,
     },
     {
         KYC_PublicKey: {
-            required: false, // TODO change
+            required: false,
             type: TYPES.hash,
         },
         ETH_Smart_Contract: {
             ...commonConfs.ethAddress,
-            required: false, // TODO change
+            required: false,
         },
         DOT_Seed_Address: {
-            required: false, // TODO change
+            required: true,
             type: TYPES.identity,
-        }
+        },
+        algo: {
+            required: true,
+            type: TYPES.string,
+        },
+        algoBits: {
+            required: true,
+            type: TYPES.string,
+        },
     },
     true,
     true,
@@ -77,13 +106,14 @@ const generateAddress = async (derivationPath, seed = DOT_Seed_Address, netword 
 
 const getBTCAddress = async () => {
     // find the last used BTC address with serialNo
-    const result = await btcAddresses.search({}, 1, 0, true, {
+    const result = await btcAddresses.search({ _id: { $gt: null }}, 10, 0, true, {
         sort: [{ serialNo: 'desc' }], // highest number first
     })
+
     const serialNo = result.size === 0
         ? 0 // for first entry
-        : Array.from(result)[0][1].serialNo
-    const next = btcGenerated.get(`${serialNo}`)
+        : Array.from(result)[0][1].serialNo || 0
+    const next = await btcGenerated.get(`${serialNo || 0 }`)
     if (!next) throw messages.outOfBTCAddress
     // find the last used sequential btc address
     return [next.address, parseInt(next._id)]
@@ -134,8 +164,8 @@ handleCrowdsaleKyc.validationConf = Object.freeze({
     email: { maxLength: 128, required: true, type: TYPES.email },
     familyName: commonConfs.str3To64Required,
     givenName: commonConfs.str3To64Required,
-    identity: { requird: true, type: TYPES.identity }, // to be saved unencrypted
-    location: commonConfs.location,
+    identity: { required: true, type: TYPES.identity }, // to be saved unencrypted
+    location: { ...commonConfs.location, required: true },
     required: true,
     type: TYPES.object,
 })
@@ -146,7 +176,7 @@ handleCrowdsaleKyc.validationConf = Object.freeze({
  * @description user must be already logged in
  * 
  * @param   {String}    blockchain  accepted values:  'BTC', 'ETH', 'DOT' 
- * @param   {String}    ethAddress  required only if @blockchain === 'ETH'
+ * @param   {String}    ethAddress  required only if @blockchain === 'ETH'. Use `0x0` to check existing addresses.
  * @param   {Function}  callback    arguments:
  *                                  @error      String|null
  *                                  @address    String      : deposit address for the selected @blockchain
@@ -160,7 +190,6 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
     const isETH = blockchain === 'ETH'
     // check if user has already submitted KYC
     const { identity } = await kyc.get(user.id) || {}
-    console.log({identity})
     if (!identity) return callback(messages.kycNotDone)
     
     const addressDb = isDot
@@ -168,10 +197,19 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
         : isETH
             ? ethAddresses
             : btcAddresses
-    const uid = zinc(`${user.id}-${identity}`, 'shahashadhavebeen', iYouMeHeShe)
+    const uid = generateHash(
+        `${user.id}-${identity}`,
+        algo,
+        parseInt(algoBits) || undefined,
+    )
     let existingEntry = await addressDb.find({ uid: { $eq: uid } })
     // user has already received a deposit address for this blockchain
-    if (existingEntry) return callback(null, existingEntry.address)
+    if (ethAddress === '0x0' || existingEntry) return callback(
+        null,
+        isETH && existingEntry
+            ? ETH_Smart_Contract
+            : (existingEntry || {}).address,
+    )
 
     const newEntry = {
         uid,
@@ -186,12 +224,10 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
             // validate data
             break
         case 'BTC':
-            if (!newEntry.address) {
-                // for BTC
-                const [btcAddress, serialNo] = await getBTCAddress(uid)
-                newEntry.address = btcAddress
-                newEntry.serialNo = serialNo
-            }
+            // for BTC
+            const [btcAddress, serialNo] = await getBTCAddress(uid)
+            newEntry.address = btcAddress
+            newEntry.serialNo = serialNo
             err = validate({ blockchain, ethAddress }, handleCrowdsaleDAA.validationConf)
             if (err) return callback(err)
             break
@@ -204,16 +240,19 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
 
     if (err) return callback(err)
 
-    await addressDb.set(
-        newEntry.address,
-        newEntry,
-        false, // prevents any address being from using used twice or being overridden 
-    )
+    try {
+        await addressDb.set(
+            newEntry.address,
+            newEntry,
+            false, // prevents any address being from using used twice or being overridden
+        )
+    } catch (err) { 
+        //'Document update conflict'
+        if (err.statusCode === 409) return callback(messages.alreadyAllocated)
+    }
     callback(null, isETH ? ETH_Smart_Contract : newEntry.address)
 }
 handleCrowdsaleDAA.requireLogin = true
-const iYouMeHeShe = 512
-const zinc = generateHash
 handleCrowdsaleDAA.validationConf = Object.freeze({
     blockchain: {
         accept: [ 'BTC', 'ETH', 'DOT' ],
@@ -224,7 +263,6 @@ handleCrowdsaleDAA.validationConf = Object.freeze({
     required: true,
     type: TYPES.object,
 })
-
 
 // initialize
 setTimeout(async () => {
