@@ -114,11 +114,9 @@ const getBTCAddress = async () => {
         ? -1 // for first entry
         : Array.from(result)[0][1].serialNo
     const serialNoInt = parseInt(serialNo + 1)
-    const next = await btcGenerated.get(`${serialNoInt}`)
-    if (!next) throw messages.outOfBTCAddress
-    // find the last used sequential btc address
-    console.log({serialNoInt})
-    return [next.address, serialNoInt]
+    const { address } = await btcGenerated.get(`${serialNoInt}`) || {}
+    const err = !address && messages.outOfBTCAddress
+    return [err, address, serialNoInt]
 }
 
 /**
@@ -218,12 +216,13 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
     )
     let existingEntry = await addressDb.find({ uid: { $eq: uid } })
     // user has already received a deposit address for this blockchain
-    if (ethAddress === '0x0' || existingEntry) return callback(
-        null,
-        isETH && existingEntry
-            ? ETH_Smart_Contract
-            : (existingEntry || {}).address,
-    )
+    if (ethAddress === '0x0' || existingEntry) {
+        const address = isETH && existingEntry
+                ? ETH_Smart_Contract
+            : (existingEntry || {}).address
+         console.log({ address })
+        return callback( null, address )
+    }
 
     const newEntry = {
         uid,
@@ -239,7 +238,8 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
             break
         case 'BTC':
             // for BTC
-            const [btcAddress, serialNo] = await getBTCAddress(uid)
+            const [errBTC, btcAddress, serialNo] = await getBTCAddress(uid)
+            if (errBTC) return callback(errBTC)
             newEntry.address = btcAddress
             newEntry.serialNo = serialNo
             err = validate({ blockchain, ethAddress }, handleCrowdsaleDAA.validationConf)
