@@ -246,9 +246,11 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
             if (err) return callback(err)
             break
         case 'ETH':
+            // ethereum address has been used by another user!! or user pasted SC address
+            if (
+                ethAddress === ETH_Smart_Contract || await addressDb.get(ethAddress)
+            ) return callback(messages.ethAddressInUse)
             newEntry.address = ethAddress
-            // ethereum address has been used by another user!!
-            if (await addressDb.get(ethAddress)) return callback(messages.ethAddressInUse)
             break
     }
 
