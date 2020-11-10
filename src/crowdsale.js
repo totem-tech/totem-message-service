@@ -1,20 +1,20 @@
 import { execSync } from 'child_process'
 import CouchDBStorage from './CouchDBStorage'
 import { decrypt, encrypt } from './utils/naclHelper'
-import { generateHash, isFn, isObj, objCopy } from './utils/utils'
+import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from './utils/utils'
 import { TYPES, validate, validateObj } from './utils/validator'
 import { setTexts } from './language'
 import { commonConfs } from './notification'
 
-const kyc = new CouchDBStorage(null, 'kyc')
+const kyc = new CouchDBStorage(null, 'crowdsale_kyc')
 // list of pre-generated BTC addresses
-// key: serialNo, value: { address: string } 
-const btcGenerated = new CouchDBStorage(null, 'address-btc-generated') 
+// _id: serialNo, value: { address: string } 
+const btcGenerated = new CouchDBStorage(null, 'crowdsale_address-btc-generated') 
 // database for each supported blockchain with assigned deposit addresses
-const btcAddresses = new CouchDBStorage(null, 'address-btc') //create sort key for `index` property
-const dotAddresses = new CouchDBStorage(null, 'address-dot')
+const btcAddresses = new CouchDBStorage(null, 'crowdsale_address-btc') //create sort key for `index` property
+const dotAddresses = new CouchDBStorage(null, 'crowdsale_address-dot')
 // whitelisted Ethereum addresses
-const ethAddresses = new CouchDBStorage(null, 'address-eth')
+const ethAddresses = new CouchDBStorage(null, 'crowdsale_address-eth')
 const messages = setTexts({
     alreadyAllocated: `
         You have alredy been allocated deposit address for this blockchain.
@@ -160,19 +160,29 @@ export async function handleCrowdsaleKyc(kycData, callback) {
     //         true,
     //     )
     // })
+    kycData = objClean(kycData, handleCrowdsaleKyc.validKeys)
     await kyc.set(user.id, kycData)
-    callback(null, true)
+    callback(null, kycData)
 }
 handleCrowdsaleKyc.requireLogin = true
 handleCrowdsaleKyc.validationConf = Object.freeze({
-    email: { maxLength: 128, required: true, type: TYPES.email },
-    familyName: commonConfs.str3To64Required,
-    givenName: commonConfs.str3To64Required,
-    identity: { required: true, type: TYPES.identity }, // to be saved unencrypted
-    location: { ...commonConfs.location, required: true },
-    required: true,
-    type: TYPES.object,
+    // config: {
+        email: { maxLength: 128, required: true, type: TYPES.email },
+        familyName: commonConfs.str3To64Required,
+        givenName: commonConfs.str3To64Required,
+        identity: { required: true, type: TYPES.identity }, // to be saved unencrypted
+        location: {
+            // store location name for KYC?
+            // config: objWithoutKeys(commonConfs.location, 'name'), 
+            ...commonConfs.location,
+            required: true,
+            type: TYPES.object,
+        },
+    // },
+    // required: true,
+    // type: TYPES.object,
 })
+handleCrowdsaleKyc.validKeys = Object.keys(handleCrowdsaleKyc.validationConf)
 
 /**
  * @name        handleCrowdsaleDAA
