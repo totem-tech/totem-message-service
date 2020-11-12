@@ -2,6 +2,7 @@ import CouchDBStorage from './CouchDBStorage'
 import { arrUnique, isArr, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 import { TYPES, validateObj } from './utils/validator'
+import { handleNotification } from './notification'
 
 const users = new CouchDBStorage(null, 'users')
 export const clients = new Map()
@@ -18,6 +19,7 @@ const messages = setTexts({
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
     msgLengthExceeds: 'Maximum characters allowed',
+    referralSuccess: 'signed up using your referral code',
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
 // User IDs for use by the application ONLY.
@@ -232,7 +234,6 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     const client = this
     // prevent registered user is attemping to register again!
     const user = await getUserByClientId(client.id)
-    console.log({ user })
     if (user) return callback(messages.alreadyRegistered)
     
     const newUser = {
@@ -253,6 +254,17 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
     callback()
+
+    referredBy && handleNotification.call(
+        [client, newUser],
+        [referredBy],
+        'user',
+        'referralSuccess',
+        messages.referralSuccess,
+        null,
+        () => { }, // placeholder for required callback argument
+    )
+
 }
 handleRegister.validationConfig = {
     id: {

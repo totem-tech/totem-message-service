@@ -191,7 +191,7 @@ export const VALID_TYPES = Object.freeze({
                 projectName: { minLength: 3, required: true, type: TYPES.string },
                 workerAddress: { required: true, type: TYPES.identity },
             },
-            messageField: { ...commonConfs.str3To160, required: true },
+            messageField: commonConfs.str3To160Required,
         },
     },
     transfer: {
@@ -201,6 +201,11 @@ export const VALID_TYPES = Object.freeze({
             amountXTX: { maxLength: 18, minLength: 1, required: true, type: TYPES.integer },
         },
     },
+    user: {
+        referralSuccess: {
+            messageField: commonConfs.str3To160Required,
+        }
+    }
 })
 const validatorConfig = {
     recipients: {
