@@ -29,7 +29,11 @@ import {
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
-import { handleCrowdsaleDAA, handleCrowdsaleKyc } from './crowdsale'
+import {
+    handleCrowdsaleConstants,
+    handleCrowdsaleDAA,
+    handleCrowdsaleKyc,
+} from './crowdsale/index'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -73,6 +77,7 @@ const events = {
     'currency-list': handleCurrencyList,
 
     // Crowdsale
+    'crowdsale-constants': handleCrowdsaleConstants,
     'crowdsale-kyc': handleCrowdsaleKyc,
     'crowdsale-daa': handleCrowdsaleDAA,
 

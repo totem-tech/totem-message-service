@@ -1,20 +1,19 @@
 import { execSync } from 'child_process'
-import CouchDBStorage from './CouchDBStorage'
-import { decrypt, encrypt } from './utils/naclHelper'
-import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from './utils/utils'
-import { TYPES, validate, validateObj } from './utils/validator'
-import { setTexts } from './language'
-import { commonConfs } from './notification'
+import CouchDBStorage from '../CouchDBStorage'
+import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from '../utils/utils'
+import { TYPES, validate, validateObj } from '../utils/validator'
+import { setTexts } from '../language'
+import { commonConfs } from '../notification'
+import { get as getKYCEntry } from './kyc'
 
-const kyc = new CouchDBStorage(null, 'crowdsale_kyc')
 // list of pre-generated BTC addresses
 // _id: serialNo, value: { address: string } 
-const btcGenerated = new CouchDBStorage(null, 'crowdsale_address-btc-generated') 
+const dbBTCGenerated = new CouchDBStorage(null, 'crowdsale_address-btc-generated') 
 // database for each supported blockchain with assigned deposit addresses
-const btcAddresses = new CouchDBStorage(null, 'crowdsale_address-btc') //create sort key for `index` property
-const dotAddresses = new CouchDBStorage(null, 'crowdsale_address-dot')
+const dbBTCAddresses = new CouchDBStorage(null, 'crowdsale_address-btc') //create sort key for `index` property
+const dbDOTAddresses = new CouchDBStorage(null, 'crowdsale_address-dot')
 // whitelisted Ethereum addresses
-const ethAddresses = new CouchDBStorage(null, 'crowdsale_address-eth')
+const dbETHAddresses = new CouchDBStorage(null, 'crowdsale_address-eth')
 const messages = setTexts({
     alreadyAllocated: `
         You have alredy been allocated deposit address for this blockchain.
@@ -39,7 +38,6 @@ const messages = setTexts({
     
 })
 // environment valirables
-const KYC_PublicKey = process.env.Crowdsale_KYC_PublicKey
 const ETH_Smart_Contract = process.env.Crowdsale_ETH_Smart_Contract
 const DOT_Seed_Address = process.env.Crowdsale_DOT_Seed_Address
 const algo = process.env.Crowdsale_Algo
@@ -49,15 +47,10 @@ const envErr = validateObj(
     {
         DOT_Seed_Address,
         ETH_Smart_Contract,
-        KYC_PublicKey,
         algo,
         algoBits,
     },
     {
-        KYC_PublicKey: {
-            required: false,
-            type: TYPES.hash,
-        },
         ETH_Smart_Contract: {
             ...commonConfs.ethAddress,
             required: false,
@@ -79,6 +72,7 @@ const envErr = validateObj(
     true,
 )
 if (envErr) throw `Missing or invalid environment variable. ${envErr}`
+
 
 /**
  * @name    generateAddress
@@ -106,7 +100,7 @@ const generateAddress = async (derivationPath, seed = DOT_Seed_Address, netword 
 
 const getBTCAddress = async () => {
     // find the last used BTC address with serialNo
-    const result = await btcAddresses.search({ _id: { $gt: null }}, 1, 0, true, {
+    const result = await dbBTCAddresses.search({ _id: { $gt: null }}, 1, 0, true, {
         sort: [{ serialNo: 'desc' }], // highest number first
     })
 
@@ -114,73 +108,10 @@ const getBTCAddress = async () => {
         ? -1 // for first entry
         : Array.from(result)[0][1].serialNo
     const serialNoInt = parseInt(serialNo + 1)
-    const { address } = await btcGenerated.get(`${serialNoInt}`) || {}
+    const { address } = await dbBTCGenerated.get(`${serialNoInt}`) || {}
     const err = !address && messages.outOfBTCAddress
     return [err, address, serialNoInt]
 }
-
-/**
- * @name    handleKyc
- * @summary handles KYC requests
- * 
- * @param   {Object|Boolean}    kycData if not Object will only check if user has already done KYC.
- *                              See `handleCrowdsaleKyc.validationConf` for required fields.
- *                              Use `true` to check if user has completed KYC.
- *  
- * @param   {Function}  callback    arguments:
- *                                  @error      String|null
- *                                  @success    Boolean 
- */
-export async function handleCrowdsaleKyc(kycData, callback) {
-    const [_, user] = this
-    if (!isFn(callback) || !user) return
-
-    // check if user has already done KYC
-    const kycEntry = await kyc.get(user.id)
-    if (kycData === true || kycEntry) return callback(null, !!kycEntry)
-
-    // validate KYC data
-    const err = validateObj(kycData, handleCrowdsaleKyc.validationConf, true)
-    if (err) return callback(err, false)
-
-    // make sure no other user has already used this identity
-    const existingEntry = await kyc.find({ identity: { $eq: kycData.identity } })
-    if (existingEntry) return callback(messages.identityAlreadyInUse)
-    // TODO: encrypt each property of kycData (excluding identity and user ID)
-    // generate a throwaway sender keypair
-    // const tempKeypair = { privateKey:'0x0' }
-    // Object.keys(kycData).forEach(key => {
-    //     kycData[key] = encrypt(
-    //         kycData[key],
-    //         tempKeypair.privateKey,
-    //         KYC_PublicKey,
-    //         undefined,
-    //         true,
-    //     )
-    // })
-    kycData = objClean(kycData, handleCrowdsaleKyc.validKeys)
-    await kyc.set(user.id, kycData)
-    callback(null, kycData)
-}
-handleCrowdsaleKyc.requireLogin = true
-handleCrowdsaleKyc.validationConf = Object.freeze({
-    // config: {
-        email: { maxLength: 128, required: true, type: TYPES.email },
-        familyName: commonConfs.str3To64Required,
-        givenName: commonConfs.str3To64Required,
-        identity: { required: true, type: TYPES.identity }, // to be saved unencrypted
-        location: {
-            // store location name for KYC?
-            // config: objWithoutKeys(commonConfs.location, 'name'), 
-            ...commonConfs.location,
-            required: true,
-            type: TYPES.object,
-        },
-    // },
-    // required: true,
-    // type: TYPES.object,
-})
-handleCrowdsaleKyc.validKeys = Object.keys(handleCrowdsaleKyc.validationConf)
 
 /**
  * @name        handleCrowdsaleDAA
@@ -201,14 +132,14 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
     const isDot = blockchain === 'DOT'
     const isETH = blockchain === 'ETH'
     // check if user has already submitted KYC
-    const { identity } = await kyc.get(user.id) || {}
+    const { identity } = await getKYCEntry(user.id) || {}
     if (!identity) return callback(messages.kycNotDone)
     
     const addressDb = isDot
-        ? dotAddresses
+        ? dbDOTAddresses
         : isETH
-            ? ethAddresses
-            : btcAddresses
+            ? dbETHAddresses
+            : dbBTCAddresses
     const uid = generateHash(
         `${user.id}-${identity}`,
         algo,
@@ -290,6 +221,6 @@ setTimeout(async () => {
             name: 'serialNo-index',
         }
     ]
-    const db = await btcAddresses.getDB()
+    const db = await dbBTCAddresses.getDB()
     indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
 })

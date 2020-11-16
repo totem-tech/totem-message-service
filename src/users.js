@@ -14,7 +14,7 @@ const messages = setTexts({
     alreadyRegistered: 'You have already registered! Please contact support for instructions if you wish to get a new user ID.',
     idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
     idExists: 'User ID already taken',
-    invalidReferrerID: 'invalid referrer ID',
+    invalidReferralCode: 'invalid referral code',
     invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
@@ -227,35 +227,44 @@ export async function handleLogin(userId, secret, callback) {
  * @param   {String}    userId 
  * @param   {String}    secret 
  * @param   {String}    referredBy (optional) referrer user ID
- * @param   {Function}  callback  args => @err string: error message if login fails
+ * @param   {Function}  callback  args => @err string: error message if registration fails
  */
 export async function handleRegister(userId, secret, referredBy, callback) {
     if (!isFn(callback)) return
     const client = this
-    // prevent registered user is attemping to register again!
+    // prevent registered user's attempt to register again!
     const user = await getUserByClientId(client.id)
     if (user) return callback(messages.alreadyRegistered)
     
     const newUser = {
         id: userId,
         referredBy,
+        tsCreated: new Date(),
         secret,
     }
     const err = validateObj(newUser, handleRegister.validationConfig, true, true)
     if (err) return callback(err)
-    userId = userId.trim() // get rid of any leading and trailing spaces
+
+    // get rid of any leading and trailing spaces
+    userId = userId.trim()
     // check if user ID already exists
     if (await idExists([userId])) return callback(messages.idExists)
+
+    const isReferrerValid = referredBy && await idExists([referredBy])
     // check if referrer ID is valid
-    if (referredBy && !(await idExists([referredBy]))) return callback(messages.invalidReferrerID)
+    if (referredBy && !isReferrerValid) return callback(messages.invalidReferralCode)
         
+    // save user data to database
     await users.set(userId, newUser)
+    // add to websocket client list
     clients.set(client.id, client)
+    // add client ID to user's clientId list
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
     callback()
 
-    referredBy && handleNotification.call(
+    // notify referrer, if any
+    isReferrerValid && handleNotification.call(
         [client, newUser],
         [referredBy],
         'user',
@@ -264,7 +273,6 @@ export async function handleRegister(userId, secret, referredBy, callback) {
         null,
         () => { }, // placeholder for required callback argument
     )
-
 }
 handleRegister.validationConfig = {
     id: {
