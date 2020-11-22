@@ -10,7 +10,6 @@ import {
     keyInfoFromKeyData,
 } from './utils/naclHelper'
 import { isFn, isStr } from './utils/utils'
-import { getUserByClientId } from './users'
 import { setTexts } from './language'
 
 const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
@@ -60,17 +59,17 @@ const setVariables = () => {
     walletAddress = kp.address
     // walletAddress = keyPair.walletAddress
 
-    const encryptionKeyPair = encryptionKeypair(keyData)
+    const encryptPair = encryptionKeypair(keyData)
     // const keyPair = encryptionKeypair(keyData)
     // publicKey = encryptionKeyPair.publicKey
-    secretKey = encryptionKeyPair.secretKey
+    secretKey = encryptPair.secretKey
 
     const signatureKeyPair = signingKeyPair(keyData)
     // const signKeyPair = signingKeyPair(keyData)
     signPublicKey = signatureKeyPair.publicKey
     signSecretKey = signatureKeyPair.secretKey
 
-    encryption_keypair = encryptionKeyPair
+    encryption_keypair = encryptPair
     signature_keypair = signatureKeyPair
 
     // only print sensitive data if "printSensitiveData" environment variable is set to "YES" (case-sensitive)

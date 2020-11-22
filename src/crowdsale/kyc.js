@@ -1,19 +1,13 @@
 import CouchDBStorage from '../CouchDBStorage'
-import { decrypt, encrypt } from '../utils/naclHelper'
-import {isFn, objClean } from '../utils/utils'
+import { decrypt, encrypt, encryptionKeypair, keyInfoFromKeyData } from '../utils/naclHelper'
 import { TYPES, validate, validateObj } from '../utils/validator'
+import {isArr, isFn, isObj, isStr, isUint8Arr, objClean } from '../utils/utils'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
+import { bytesToHex } from 'web3-utils'
+import { hexToBytes } from '../utils/convert'
 
 const dbKYC = new CouchDBStorage(null, 'crowdsale_kyc')
-// // list of pre-generated BTC addresses
-// // _id: serialNo, value: { address: string } 
-// const dbBTCGenerated = new CouchDBStorage(null, 'crowdsale_address-btc-generated') 
-// // database for each supported blockchain with assigned deposit addresses
-// const dbBTCAddresses = new CouchDBStorage(null, 'crowdsale_address-btc') //create sort key for `index` property
-// const dbDOTAddresses = new CouchDBStorage(null, 'crowdsale_address-dot')
-// // whitelisted Ethereum addresses
-// const dbETHAddresses = new CouchDBStorage(null, 'crowdsale_address-eth')
 const messages = setTexts({
     alreadyAllocated: `
         You have alredy been allocated deposit address for this blockchain.
@@ -34,14 +28,48 @@ const messages = setTexts({
         Uh oh! We are out of BTC deposit addresses!
         Totem team has been notified of this.
         Please try again later or use a different Blockchain.
-    `,
-    
+    `,  
 })
 // environment valirables
-const KYC_PublicKey = process.env.Crowdsale_KYC_PublicKey
+const extEncrptKey = process.env.Crowdsale_ExtEncrptKey
+// use keydata to generate both encryption and sign keypair
+const keyData = process.env.Crowdsale_KeyData
 // validate environment variables
-const envErr = validate(KYC_PublicKey, { required: false, type: TYPES.hash })
-if (envErr) throw `Missing or invalid environment variable: Crowdsale_KYC_PublicKey. ${envErr}`
+const envErr = validateObj(
+    {
+        Crowdsale_ExtEncrptKey: extEncrptKey,
+        Crowdsale_KeyData: keyData,
+    },
+    {
+        // validation config
+        Crowdsale_ExtEncrptKey: {
+            maxLength: 66,
+            minLength: 66,
+            required: true,
+            type: TYPES.hex,
+        },
+        Crowdsale_KeyData: `${keyData}`.length > 192
+            ? {
+                // for PolkadotJS encoded string
+                maxLength: 236,
+                minLength: 236,
+                required: true,
+                type: TYPES.hex,
+            }
+            : {
+                // for legacy 007 keyData
+                maxLength: 192,
+                minLength: 192,
+                required: true,
+                type: TYPES.string,
+            },
+    },
+    false,
+    false,
+)
+if (envErr) throw new Error(`Crowdsale environment variable validation failed: \n${JSON.stringify(envErr, null, 4)}`)
+const encryptKeyPair = encryptionKeypair(keyData)
+const encryptProps = []
 
 export const get = id => dbKYC.get(id)
 
@@ -72,19 +100,13 @@ export async function handleCrowdsaleKyc(kycData, callback) {
     // make sure no other user has already used this identity
     const existingEntry = await dbKYC.find({ identity: { $eq: kycData.identity } })
     if (existingEntry) return callback(messages.identityAlreadyInUse)
-    // TODO: encrypt each property of kycData (excluding identity and user ID)
-    // generate a throwaway sender keypair
-    // const tempKeypair = { privateKey:'0x0' }
-    // Object.keys(kycData).forEach(key => {
-    //     kycData[key] = encrypt(
-    //         kycData[key],
-    //         tempKeypair.privateKey,
-    //         KYC_PublicKey,
-    //         undefined,
-    //         true,
-    //     )
-    // })
+    
     kycData = objClean(kycData, handleCrowdsaleKyc.validKeys)
+    const { sealed, nonce } = encryptObject(kycData, handleCrowdsaleKyc.keysToEncrypt)
+    kycData = {
+        ...sealed,
+        nonce: bytesToHex(nonce),
+    }
     await dbKYC.set(user.id, kycData)
     callback(null, kycData)
 }
@@ -102,4 +124,35 @@ handleCrowdsaleKyc.validationConf = Object.freeze({
         type: TYPES.object,
     },
 })
+handleCrowdsaleKyc.keysToEncrypt = [
+    'email',
+    'familyName',
+    'givenName',
+    'location',
+]
 handleCrowdsaleKyc.validKeys = Object.keys(handleCrowdsaleKyc.validationConf)
+
+const encryptObject = (obj, keys, nonce) => {
+    const sealed = { ...obj }
+    Object.keys(sealed)
+        .filter(x => !isArr(keys) ? true : keys.includes(x))
+        .forEach(key => {
+            if (nonce && !isUint8Arr(nonce)) {
+                // convert to bytes
+                nonce = hexToBytes(nonce)
+            }
+            const value = sealed[key]
+            const { sealed: valueEncrypted, nonce: nonce2 } = isObj(value)
+                ? encryptObject(value, null, nonce)
+                : encrypt(
+                    value,
+                    encryptKeyPair.secretKey,
+                    extEncrptKey,
+                    nonce,
+                    true,
+                )
+            sealed[key] = valueEncrypted
+            nonce = nonce || nonce2
+        })
+    return { sealed, nonce }
+}

@@ -52,7 +52,7 @@ const texts = setTexts({
     loginRequired: 'Please login or create an account if you have not already done so',
     runtimeError: `
         Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
-        You can also email us as support@totemaccounting.com. 
+        You can also email us at support@totemaccounting.com. 
         Someone from the Totem team will get back to you as soon as possible.
         Don't forget to mention the following Request ID
     `,

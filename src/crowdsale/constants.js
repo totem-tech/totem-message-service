@@ -1,11 +1,6 @@
 import { isFn } from '../utils/utils'
 
 // ToDo: Change values
-export const RATIO2XTX = {
-    BTC: 1442914053,
-    DOT: 40327188,
-    ETH: 396006,
-}
 export const LEVEL_MULTIPLIERS = [
     1.0000,
     3.0000,
@@ -17,23 +12,22 @@ export const LEVEL_MULTIPLIERS = [
     15.0000,
     17.0000,
 ]
-export const LEVEL_ENTRY_XTX = [
+export const LEVEL_ENTRY_USD = [
     0,
-    9082700,
-    181654000,
-    454135000,
-    908270000,
-    1362405000,
-    2270675000,
-    4541350000,
-    9082700000,
+    100,
+    1000 * 2,
+    1000 * 5,
+    1000 * 10,
+    1000 * 15,
+    1000 * 25,
+    1000 * 50,
+    1000 * 100,
 ]
 // start of level 9 (negotiable multiplier)
-export const ENTRY_NEGOTIATE_XTX = 90827000000
+export const ENTRY_NEGOTIATE_USD = 1000 * 200
 
 export const handleCrowdsaleConstants = callback => isFn(callback) && callback(null, {
-    ENTRY_NEGOTIATE_XTX,
+    ENTRY_NEGOTIATE_USD,
     LEVEL_MULTIPLIERS,
-    LEVEL_ENTRY_XTX,
-    RATIO2XTX,
+    LEVEL_ENTRY_USD,
 })
