@@ -4,7 +4,7 @@ import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from '..
 import { TYPES, validate, validateObj } from '../utils/validator'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
-import { get as getKYCEntry } from './kyc'
+import { get as getKYCEntry, isCrowdsaleActive } from './kyc'
 
 // list of pre-generated BTC addresses
 // _id: serialNo, value: { address: string } 
@@ -35,6 +35,7 @@ const messages = setTexts({
         Totem team has been notified of this.
         Please try again later or use a different Blockchain.
     `,
+    crowdsaleInactiveNotice: 'Crowdsale has not started yet!',
     
 })
 // environment valirables
@@ -128,6 +129,7 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
     
+    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
     let err
     const isDot = blockchain === 'DOT'
     const isETH = blockchain === 'ETH'
@@ -210,6 +212,15 @@ handleCrowdsaleDAA.validationConf = Object.freeze({
     required: true,
     type: TYPES.object,
 })
+
+
+export function handleCrowdsaleBalanceCheck(callback) {
+    const [_, user] = this
+    if (!isFn(callback) || !user) return
+
+    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
+}
+handleCrowdsaleBalanceCheck.requireLogin = true
 
 // initialize
 setTimeout(async () => {

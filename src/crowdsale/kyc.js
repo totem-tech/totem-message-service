@@ -28,12 +28,14 @@ const messages = setTexts({
         Uh oh! We are out of BTC deposit addresses!
         Totem team has been notified of this.
         Please try again later or use a different Blockchain.
-    `,  
+    `,
+    crowdsaleInactiveNotice: 'Crowdsale has not started yet!',
 })
 // environment valirables
 const extEncrptKey = process.env.Crowdsale_ExtEncrptKey
 // use keydata to generate both encryption and sign keypair
 const keyData = process.env.Crowdsale_KeyData
+export const isCrowdsaleActive = process.env.Crowdsale_Active === 'YES'
 // validate environment variables
 const envErr = validateObj(
     {
@@ -69,10 +71,20 @@ const envErr = validateObj(
 )
 if (envErr) throw new Error(`Crowdsale environment variable validation failed: \n${JSON.stringify(envErr, null, 4)}`)
 const encryptKeyPair = encryptionKeypair(keyData)
-const encryptProps = []
 
+/**
+ * 
+ * @param {*} id 
+ */
 export const get = id => dbKYC.get(id)
 
+/**
+ * @name    handleCrowdsaleIsActive
+ * @summary event handler to check if crowdsale is active
+ * 
+ * @param   {Function} callback 
+ */
+export const handleCrowdsaleIsActive = callback => isFn(callback) && callback(null, isCrowdsaleActive)
 /**
  * @name    handleKyc
  * @summary handles KYC requests
@@ -89,6 +101,7 @@ export async function handleCrowdsaleKyc(kycData, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
+    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
     // check if user has already done KYC
     const kycEntry = await dbKYC.get(user.id)
     if (kycData === true || kycEntry) return callback(null, !!kycEntry)
