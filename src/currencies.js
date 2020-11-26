@@ -8,19 +8,8 @@ const messages = setTexts({
     invalidRequest: 'Missing one or more of the required fields',
     notFound: 'Unsupported currency'
 })
-const getAll = async (ids = null, asMap = true, limit = 9999) => await currencies.getAll(ids, asMap, limit)
 
-// initialize
-setTimeout(async () => {
-    // create an index for the field `currency`, ignores if already exists
-    const indexDef = {
-        index: { fields: ['ISO'] },
-        name: 'ISO-index',
-    }
-    const tickers = arrSort(await getAll(null, false), 'ISO')
-    tickersHash = generateHash(tickers)
-    await (await currencies.getDB()).createIndex(indexDef)
-})
+const getAll = async (ids = null, asMap = true, limit = 9999) => await currencies.getAll(ids, asMap, limit)
 
 // convert currency using exchange rates stored in the database
 //
@@ -63,3 +52,15 @@ export const handleCurrencyList = async (hash, callback) => {
     const shouldUpdate = hash !== tickersHash
     callback(null, !shouldUpdate ? [] : await getAll(null, false))
 }
+
+// initialize
+setTimeout(async () => {
+    // create an index for the field `currency`, ignores if already exists
+    const indexDef = {
+        index: { fields: ['ISO'] },
+        name: 'ISO-index',
+    }
+    const tickers = arrSort(await getAll(null, false), 'ISO')
+    tickersHash = generateHash(tickers)
+    await (await currencies.getDB()).createIndex(indexDef)
+})

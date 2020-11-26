@@ -5,6 +5,8 @@ import { TYPES, validate, validateObj } from '../utils/validator'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
 import { get as getKYCEntry, isCrowdsaleActive } from './kyc'
+import BlockchairClient from '../utils/BlockchairClient'
+import { exit } from 'process'
 
 // list of pre-generated BTC addresses
 // _id: serialNo, value: { address: string } 
@@ -38,13 +40,16 @@ const messages = setTexts({
     crowdsaleInactiveNotice: 'Crowdsale has not started yet!',
     
 })
+const BALANCE_CHECK_DELAY = 60 * 60 * 1000 // 1 hour
 // environment valirables
 const ETH_Smart_Contract = process.env.Crowdsale_ETH_Smart_Contract
 const DOT_Seed_Address = process.env.Crowdsale_DOT_Seed_Address
 const algo = process.env.Crowdsale_Algo
 const algoBits = process.env.Crowdsale_Algo_Bits
+const apiKey = process.env.Blockchair_API_Key
+const bcClient = new BlockchairClient(apiKey)
 // validate environment variables
-const envErr = validateObj(
+let envErr = validateObj(
     {
         DOT_Seed_Address,
         ETH_Smart_Contract,
@@ -72,7 +77,49 @@ const envErr = validateObj(
     true,
     true,
 )
-if (envErr) throw `Missing or invalid environment variable. ${envErr}`
+if (envErr) {
+    console.error(`Missing or invalid environment variable. ${envErr}`)
+    exit(1)
+}
+// check if blockchair api key is valid by retrieving stats
+if (apiKey) {
+    bcClient.getAPIKeyStats()
+        .then(result => console.log('Blockchair API:', result.data))
+        .catch(envErr => {
+            console.error(`Failed to retrieve Blockchair API key stats. ${envErr}`)
+            exit(1)
+        })
+} else {
+    console.warn(
+        '-----------------------------------------'
+        + '\n| Using Blockchair.com API without key! |\n'
+        + '-----------------------------------------'
+    )
+}
+
+bcClient.getERC20HolderInfo(
+    [
+        '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
+        '0x70a41917365E772E41D404B3F7870CA8919b4fBe',
+    ],
+    '0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e'
+)
+    .then(x => console.log(JSON.stringify(x, null, 4)))
+    .catch(err => console.log({err}))
+
+// bcClient.getBalance([
+//     '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo',
+//     '35hK24tcLEWcgNA4JxpvbkNkoAcDGqQPsP',
+//     '1DoesntExist'
+// ], 'bitcoin')
+//     .then(console.log)
+//     .catch(console.log)
+//
+// bcClient.getBalance([
+//     '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
+// ], 'ethereum') // should throw error
+// .catch(console.log)
+    
 
 
 /**
@@ -112,6 +159,12 @@ const getBTCAddress = async () => {
     const { address } = await dbBTCGenerated.get(`${serialNoInt}`) || {}
     const err = !address && messages.outOfBTCAddress
     return [err, address, serialNoInt]
+}
+
+export async function handleCrowdsaleCheckBalance(callback) {
+    // retrieve most recent balance check history
+    // if it's within `BALANCE_CHECK_DELAY` return it as cache otherwise check balance using blockchair api
+
 }
 
 /**
