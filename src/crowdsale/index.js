@@ -1,9 +1,10 @@
 import { handleCrowdsaleKyc } from './kyc'
-import { handleCrowdsaleDAA } from './depositAddress'
+import { handleCrowdsaleBalanceCheck, handleCrowdsaleDAA } from './depositAddress'
 import { handleCrowdsaleConstants } from './constants'
 
-module.exports = {
-    handleCrowdsaleConstants,
-    handleCrowdsaleDAA,
-    handleCrowdsaleKyc,
+export const handlers = {
+    'crowdsale-check-balance': handleCrowdsaleBalanceCheck,
+    'crowdsale-constants': handleCrowdsaleConstants,
+    'crowdsale-kyc': handleCrowdsaleKyc,
+    'crowdsale-daa': handleCrowdsaleDAA,
 }

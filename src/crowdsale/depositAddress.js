@@ -1,12 +1,14 @@
 import { execSync } from 'child_process'
-import CouchDBStorage from '../CouchDBStorage'
+import BlockchairClient from '../utils/BlockchairClient'
 import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from '../utils/utils'
 import { TYPES, validate, validateObj } from '../utils/validator'
+import CouchDBStorage from '../CouchDBStorage'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
 import { get as getKYCEntry, isCrowdsaleActive } from './kyc'
-import BlockchairClient from '../utils/BlockchairClient'
+import { getBalance, getConnection, query } from './polkadot'
 import { exit } from 'process'
+import PromisE from '../utils/PromisE'
 
 // list of pre-generated BTC addresses
 // _id: serialNo, value: { address: string } 
@@ -45,7 +47,7 @@ const BALANCE_CHECK_DELAY = 60 * 60 * 1000 // 1 hour
 const ETH_Smart_Contract = process.env.Crowdsale_ETH_Smart_Contract
 const DOT_Seed_Address = process.env.Crowdsale_DOT_Seed_Address
 const algo = process.env.Crowdsale_Algo
-const algoBits = process.env.Crowdsale_Algo_Bits
+const algoBits = parseInt(process.env.Crowdsale_Algo_Bits) || undefined
 const apiKey = process.env.Blockchair_API_Key
 const bcClient = new BlockchairClient(apiKey)
 // validate environment variables
@@ -70,8 +72,8 @@ let envErr = validateObj(
             type: TYPES.string,
         },
         algoBits: {
-            required: true,
-            type: TYPES.string,
+            required: false,
+            type: TYPES.number,
         },
     },
     true,
@@ -92,20 +94,20 @@ if (apiKey) {
 } else {
     console.warn(
         '-----------------------------------------'
-        + '\n| Using Blockchair.com API without key! |\n'
+        + '\n| Using Blockchair API without API key! |\n'
         + '-----------------------------------------'
     )
 }
 
-bcClient.getERC20HolderInfo(
-    [
-        '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
-        '0x70a41917365E772E41D404B3F7870CA8919b4fBe',
-    ],
-    '0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e'
-)
-    .then(x => console.log(JSON.stringify(x, null, 4)))
-    .catch(err => console.log({err}))
+// bcClient.getERC20HolderInfo(
+//     [
+//         '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
+//         '0x70a41917365E772E41D404B3F7870CA8919b4fBe',
+//     ],
+//     '0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e'
+// )
+//     .then(x => console.log(JSON.stringify(x, null, 4)))
+//     .catch(err => console.log({err}))
 
 // bcClient.getBalance([
 //     '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo',
@@ -161,11 +163,60 @@ const getBTCAddress = async () => {
     return [err, address, serialNoInt]
 }
 
+export const generateUID = (userId, identity) => generateHash(
+    `${userId}-${identity}`,
+    algo,
+    algoBits,
+)
+
 export async function handleCrowdsaleCheckBalance(callback) {
+    if (!callback) return
+    const [_, user] = this
     // retrieve most recent balance check history
     // if it's within `BALANCE_CHECK_DELAY` return it as cache otherwise check balance using blockchair api
 
+    // check if user has already submitted KYC
+    const { identity } = await getKYCEntry(user.id) || {}
+    if (!identity) return callback(messages.kycNotDone)
+
+    // use identity to retrieve all deposit addresses for the user
+    const uid = generateUID(user.id, identity)
+    console.log({ uid })
+    const addresses = await PromisE.all(
+        [
+            dbBTCAddresses,
+            dbDOTAddresses,
+            dbETHAddresses,
+        ]
+            .map(db => db.find({ uid: { $eq: uid } }))
+    )
+    const chains = [
+        'BTC',
+        'DOT',
+        'ETH',
+    ]
+    const balances = {}
+    for (let i = 0; i < chains.length; i++) {
+        const address = addresses[i]
+        if (!address) continue
+        const chain = chains[i]
+        switch (chain) {
+            case 'BTC':
+                balances[chain] = await bcClient.getBalance(address)
+                break;
+            case 'DOT': 
+                balances[chain] = await getBalance(address, true)
+                break
+            case 'ETH':
+                balances[chain] = await bcClient.getERC20HolderInfo(address, ETH_Smart_Contract)
+                break
+        }
+    }
+
+    console.log({ addresses, balances })
+            
 }
+handleCrowdsaleCheckBalance.requireLogin = true
 
 /**
  * @name        handleCrowdsaleDAA
@@ -195,11 +246,7 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
         : isETH
             ? dbETHAddresses
             : dbBTCAddresses
-    const uid = generateHash(
-        `${user.id}-${identity}`,
-        algo,
-        parseInt(algoBits) || undefined,
-    )
+    const uid = generateUID(user.id, identity)
     let existingEntry = await addressDb.find({ uid: { $eq: uid } })
     // user has already received a deposit address for this blockchain
     if (ethAddress === '0x0' || existingEntry) {
