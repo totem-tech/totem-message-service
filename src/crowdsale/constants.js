@@ -24,10 +24,10 @@ export const LEVEL_ENTRY_USD = [
     1000 * 100,
 ]
 // start of level 9 (negotiable multiplier)
-export const ENTRY_NEGOTIATE_USD = 1000 * 200
+export const Level_NEGOTIATE_Entry_USD = 1000 * 200
 
 export const handleCrowdsaleConstants = callback => isFn(callback) && callback(null, {
-    ENTRY_NEGOTIATE_USD,
+    Level_NEGOTIATE_Entry_USD,
     LEVEL_MULTIPLIERS,
     LEVEL_ENTRY_USD,
 })

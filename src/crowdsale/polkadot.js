@@ -1,9 +1,9 @@
-/*
- * Connection to Polkadot network
- */
 import ioClient from 'socket.io-client'
 import PromisE from '../utils/PromisE'
 import { isArr } from '../utils/utils'
+import { execSync } from 'child_process'
+import { TYPES, validate } from '../utils/validator'
+
 let connectPromise, polkadotMSClient
 const PolkadotMS_URL = process.env.PolkadotMS_URL || ''
 
@@ -27,6 +27,37 @@ const connect = async () => {
     console.log('Connected to PolkadotMS')
     return client
 }
+
+/**
+ * @name    generateAddress
+ * @summary generates a Polkadot address using @seed (or address of the seed) and a specific as derivation path
+ *          that only the owner of the @seed can access.
+ * 
+ * @param   {String} derivationPath URI derivation path excluding initial '/'
+ * @param   {String} seed           
+ * @param   {String} network        Default: 'polkadot'
+ * 
+ * @returns {String} identity or empty string if generation failed
+ * 
+ * @example
+ * ```javascript
+ * // Generate a DOT address using Alice's address as the seed and Bob's address as derivation path:
+ * const alice = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'
+ * const bob = '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
+ * // Alice is the only one who has the access to the private key of this generated address
+ * const bobsNewAddress = await generateAddress(bob, alice, 'polkadot')
+ * ```
+ */
+export const generateAddress = async (derivationPath, seed, netword = 'polkadot') => { 
+    const cmdStr = `docker run --rm parity/subkey:latest inspect "${seed}/${derivationPath}" --network ${netword}`
+        + ' | grep -i ss58' // print only the line with generated address
+    const depositAddress = (await execSync(cmdStr) || '')
+        .toString()
+        // exract Polkadot address by getting rid of unwanted texts and spaces
+       .replace(/Address|SS58|\:|\ |\n/gi, '')
+    const err = validate(depositAddress, { required: true, type: TYPES.identity })
+    return err ? '' : depositAddress
+} 
 
 /**
  * @name    getBalance

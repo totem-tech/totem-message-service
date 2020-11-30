@@ -6,7 +6,7 @@ import CouchDBStorage from '../CouchDBStorage'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
 import { get as getKYCEntry, isCrowdsaleActive } from './kyc'
-import { getBalance, getConnection, query } from './polkadot'
+import { getBalance, generateAddress as generateDOTAddress } from './polkadot'
 import { exit } from 'process'
 import PromisE from '../utils/PromisE'
 
@@ -42,7 +42,6 @@ const messages = setTexts({
     crowdsaleInactiveNotice: 'Crowdsale has not started yet!',
     
 })
-const BALANCE_CHECK_DELAY = 60 * 60 * 1000 // 1 hour
 // environment valirables
 const ETH_Smart_Contract = process.env.Crowdsale_ETH_Smart_Contract
 const DOT_Seed_Address = process.env.Crowdsale_DOT_Seed_Address
@@ -83,6 +82,32 @@ if (envErr) {
     console.error(`Missing or invalid environment variable. ${envErr}`)
     exit(1)
 }
+
+// bcClient.getERC20HolderInfo(
+//     [ // random address for testing
+//         '0xC2cA8977e5C582F938C30F7A5328Ac1D101BD564',
+//     ],
+//     //'0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e' // kick contract
+//     '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984' // UNI contract
+// )
+//     .then(x => console.log(JSON.stringify(x, null, 4)))
+//     .catch(err => console.log({err}))
+
+// bcClient.getBalance([ // random addresses for testing only
+//     '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo',
+//     '35hK24tcLEWcgNA4JxpvbkNkoAcDGqQPsP',
+//     '1DoesntExist',
+//     '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+//     '3APX1so1oLzpXicRpbDxZGoF2DBfXkJjtd',
+// ], 'bitcoin')
+//     .then(console.log)
+//     .catch(console.log)
+
+// bcClient.getBalance([
+//     '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
+// ], 'ethereum') // should throw error
+// .catch(console.log)
+
 // check if blockchair api key is valid by retrieving stats
 if (apiKey) {
     bcClient.getAPIKeyStats()
@@ -99,55 +124,16 @@ if (apiKey) {
     )
 }
 
-// bcClient.getERC20HolderInfo(
-//     [
-//         '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
-//         '0x70a41917365E772E41D404B3F7870CA8919b4fBe',
-//     ],
-//     '0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e'
-// )
-//     .then(x => console.log(JSON.stringify(x, null, 4)))
-//     .catch(err => console.log({err}))
-
-// bcClient.getBalance([
-//     '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo',
-//     '35hK24tcLEWcgNA4JxpvbkNkoAcDGqQPsP',
-//     '1DoesntExist'
-// ], 'bitcoin')
-//     .then(console.log)
-//     .catch(console.log)
-//
-// bcClient.getBalance([
-//     '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
-// ], 'ethereum') // should throw error
-// .catch(console.log)
-    
-
-
 /**
- * @name    generateAddress
- * @summary generates a Polkadot address using `DOT_Seed_Address` as seed and @identity as derivation path
+ * @name    getBTCAddress
+ * @summary retrieve the next unassigned BTC address
  * 
- * @param   {String} derivationPath URI derivation path excluding initial '/'
- * @param   {String} seed           Default: @DOT_Seed_Address
- * @param   {String} network        Default: 'polkadot'
- * 
- * @returns {String} identity or empty string if generation failed
+ * @returns {Array} [
+ *                      0: @err         String: error message, if no more unassigned BTC address availabe
+ *                      1: @address     String: unassigned BTC address
+ *                      2: @serialNoInt Number: serial number of the BTC address
+ *                  ]
  */
-const generateAddress = async (derivationPath, seed = DOT_Seed_Address, netword = 'polkadot') => { 
-    const cmdStr = `docker run --rm parity/subkey:latest inspect "${seed}/${derivationPath}" --network ${netword}`
-        + ' | grep -i ss58' // print only the line with generated address
-    const depositAddress = (await execSync(cmdStr) || '')
-        .toString()
-        // exract Polkadot address by getting rid of unwanted texts and spaces
-       .replace(/Address|SS58|\:|\ |\n/gi, '')
-    const err = validate(depositAddress, { required: true, type: TYPES.identity })
-    return err ? '' : depositAddress
-} 
-// test with Alice
-// generateAddress('5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY')
-//     .then(console.log, console.log)
-
 const getBTCAddress = async () => {
     // find the last used BTC address with serialNo
     const result = await dbBTCAddresses.search({ _id: { $gt: null }}, 1, 0, true, {
@@ -169,9 +155,22 @@ export const generateUID = (userId, identity) => generateHash(
     algoBits,
 )
 
-export async function handleCrowdsaleCheckBalance(callback) {
-    if (!callback) return
+/**
+ * @name    handleCrowdsaleCheckDeposits
+ * @summary handle request to check deposits and allocate XTX if new deposits found
+ * 
+ * @param {Function} callback   arguments =>
+ *                              @err    String: error message if request fails
+ *                              @result Object
+ *                                  @result.deposits    Object: deposit amounts for each assigned deposit address
+ *                                  @result.lastChecked String: timestamp of last time deposits' checked
+ */
+export async function handleCrowdsaleCheckDeposits(callback) {
     const [_, user] = this
+    if (!isFn(callback) || !user) return
+
+    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
+
     // retrieve most recent balance check history
     // if it's within `BALANCE_CHECK_DELAY` return it as cache otherwise check balance using blockchair api
 
@@ -182,7 +181,7 @@ export async function handleCrowdsaleCheckBalance(callback) {
     // use identity to retrieve all deposit addresses for the user
     const uid = generateUID(user.id, identity)
     console.log({ uid })
-    const addresses = await PromisE.all(
+    const entries = await PromisE.all(
         [
             dbBTCAddresses,
             dbDOTAddresses,
@@ -195,28 +194,68 @@ export async function handleCrowdsaleCheckBalance(callback) {
         'DOT',
         'ETH',
     ]
-    const balances = {}
+    const deposits = {}
+    let lastChecked, balanceChanged
     for (let i = 0; i < chains.length; i++) {
-        const address = addresses[i]
+        let { address, balance = 0, tsLastChecked } = entries[i] || {}
         if (!address) continue
+        const useCache = tsLastChecked
+            && (new Date().getSeconds() - new Date(tsLastChecked).getSeconds()) > 60 * 30 // 30 minutes
         const chain = chains[i]
-        switch (chain) {
-            case 'BTC':
-                balances[chain] = await bcClient.getBalance(address)
-                break;
-            case 'DOT': 
-                balances[chain] = await getBalance(address, true)
-                break
-            case 'ETH':
-                balances[chain] = await bcClient.getERC20HolderInfo(address, ETH_Smart_Contract)
-                break
+        
+        if (useCache) {
+            deposits[chain] = balance
+        } else {
+            tsLastChecked = new Date()
+            let result
+            switch (chain) {
+                case 'BTC':
+                    result = await bcClient.getBalance(address)
+                    // round the number to appropriate decimal places
+                    result = await convertTo('BTC', 'BTC', result.data[address] || 0)
+                    // parse rounded amount back to number
+                    deposits[chain] = result[2]
+                    break;
+                case 'DOT': 
+                    result = await getBalance(address, true)
+                    // round the number to appropriate decimal places
+                    result = await convertTo('DOT', 'DOT', result)
+                    // parse rounded amount back to number
+                    deposits[chain] = parseFloat(result[2])
+                    break
+                case 'ETH':
+                    result = await bcClient.getERC20HolderInfo(address, ETH_Smart_Contract)
+                    // balance rounded to appropriate decimal places
+                    deposits[chain] = (result[address] || {}).balance_approximate || 0
+
+                    // ToDo: check for number of confirmations?
+                    break
+            }
+            balanceChanged = balanceChanged || (deposits[chain] && deposits[chain] > balance)
         }
+        // use the latest timestamp as lastChecked
+        lastChecked = !lastChecked
+            ? tsLastChecked // first time check
+            : new Date(tsLastChecked) > new Date(lastChecked)
+                ? tsLastChecked
+                : lastChecked
     }
 
-    console.log({ addresses, balances })
-            
+    console.log({ entries, deposits })
+
+    if (balanceChanged) {
+        // trigger lock creation
+        console.log('------------------------- New Deposits Found--------------\n',
+            JSON.stringify({
+                user: user.id,
+                deposits,
+                lastChecked,
+            })
+        )
+    }
+    callback(null, { deposits, lastChecked })
 }
-handleCrowdsaleCheckBalance.requireLogin = true
+handleCrowdsaleCheckDeposits.requireLogin = true
 
 /**
  * @name        handleCrowdsaleDAA
@@ -266,7 +305,7 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
             err = validate(blockchain, handleCrowdsaleDAA.validationConf.blockchain)
             if (err) return callback(err)
             // generate address if Polkadot, otherwise, get the next unused already generated BTC address
-            newEntry.address = await generateAddress(identity, DOT_Seed_Address, 'polkadot')
+            newEntry.address = await generateDOTAddress(identity, DOT_Seed_Address, 'polkadot')
             // validate data
             break
         case 'BTC':
@@ -312,15 +351,6 @@ handleCrowdsaleDAA.validationConf = Object.freeze({
     required: true,
     type: TYPES.object,
 })
-
-
-export function handleCrowdsaleBalanceCheck(callback) {
-    const [_, user] = this
-    if (!isFn(callback) || !user) return
-
-    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
-}
-handleCrowdsaleBalanceCheck.requireLogin = true
 
 // initialize
 setTimeout(async () => {
