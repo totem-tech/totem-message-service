@@ -14,7 +14,7 @@ import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
 import { handleCurrencyConvert, handleCurrencyList } from './currencies'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
+import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
 import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
 import { handleMessage, handleMessageGetRecent, handleMessageGroupName } from './messages'
 import { handleProject, handleProjectsByHashes } from './projects'
@@ -235,6 +235,8 @@ async function migrate(fileNames) {
 
         const result = await db.setAll(data, !allowUpdates.includes(dbName))
         const okIds = result.map(({ ok, id }) => ok && id).filter(Boolean)
+        // for re-generate hashes of translations for each language
+        if (dbName === 'translations' && okIds.length) setupLang()
         // remove saved entries
         okIds.forEach(id => data.delete(id))
         // update JSON file to remove migrated entries
