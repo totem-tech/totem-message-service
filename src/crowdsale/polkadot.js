@@ -57,7 +57,7 @@ export const generateAddress = async (derivationPath, seed, netword = 'polkadot'
        .replace(/Address|SS58|\:|\ |\n/gi, '')
     const err = validate(depositAddress, { required: true, type: TYPES.identity })
     return err ? '' : depositAddress
-} 
+}
 
 /**
  * @name    getBalance
@@ -127,11 +127,16 @@ const query = async (func, args = [], multi = false) => {
         }
     })
 }
-
-// // test by checking Alice and Bob's balances
-// getBalance(
-// [
-//     '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-//     '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
-// ]
-// ).then(console.log).catch(() => { })
+// test by checking Alice and Bob's balances
+const ping = () => {
+    getBalance([
+        '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        // '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
+    ])
+        .then(result => {
+            console.log('PolkadotMS ping success', result)
+            // setTimeout(() => ping(), 1000 * 60 * 60)
+        })
+        .catch(err => console.log('PolkadotMS ping error: ', err))
+}
+ping()

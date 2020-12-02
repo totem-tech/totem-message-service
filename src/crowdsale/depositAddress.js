@@ -1,13 +1,13 @@
-import { execSync } from 'child_process'
+import { exit } from 'process'
 import BlockchairClient from '../utils/BlockchairClient'
 import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from '../utils/utils'
 import { TYPES, validate, validateObj } from '../utils/validator'
 import CouchDBStorage from '../CouchDBStorage'
+import { convertTo } from '../currencies'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
 import { get as getKYCEntry, isCrowdsaleActive } from './kyc'
 import { getBalance, generateAddress as generateDOTAddress } from './polkadot'
-import { exit } from 'process'
 import PromisE from '../utils/PromisE'
 
 // list of pre-generated BTC addresses
@@ -180,6 +180,7 @@ export async function handleCrowdsaleCheckDeposits(callback) {
 
     // use identity to retrieve all deposit addresses for the user
     const uid = generateUID(user.id, identity)
+    console.log(user.id, identity)
     console.log({ uid })
     const entries = await PromisE.all(
         [
@@ -212,22 +213,23 @@ export async function handleCrowdsaleCheckDeposits(callback) {
                 case 'BTC':
                     result = await bcClient.getBalance(address)
                     // round the number to appropriate decimal places
-                    result = await convertTo('BTC', 'BTC', result.data[address] || 0)
+                    const [_1, _2, roundedBTC] = await convertTo('BTC', 'BTC', result.data[address] || 0)
                     // parse rounded amount back to number
-                    deposits[chain] = result[2]
-                    break;
+                    deposits[chain] = eval(roundedBTC) || 0
+                    break
                 case 'DOT': 
-                    result = await getBalance(address, true)
+                    const dotBalance = await getBalance(address, true)
+                    console.log({dotBalance})
                     // round the number to appropriate decimal places
-                    result = await convertTo('DOT', 'DOT', result)
+                    const [_3, _4, roundedDot] = await convertTo('DOT', 'DOT', dotBalance)
                     // parse rounded amount back to number
-                    deposits[chain] = parseFloat(result[2])
+                    console.log({roundedDot})
+                    deposits[chain] = eval(roundedDot) || 0
                     break
                 case 'ETH':
                     result = await bcClient.getERC20HolderInfo(address, ETH_Smart_Contract)
                     // balance rounded to appropriate decimal places
                     deposits[chain] = (result[address] || {}).balance_approximate || 0
-
                     // ToDo: check for number of confirmations?
                     break
             }
