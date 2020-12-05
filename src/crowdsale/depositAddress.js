@@ -165,7 +165,7 @@ export const generateUID = (userId, identity) => generateHash(
  *                                  @result.deposits    Object: deposit amounts for each assigned deposit address
  *                                  @result.lastChecked String: timestamp of last time deposits' checked
  */
-export async function handleCrowdsaleCheckDeposits(callback) {
+export async function handleCrowdsaleCheckDeposits(cached = true, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
@@ -180,15 +180,13 @@ export async function handleCrowdsaleCheckDeposits(callback) {
 
     // use identity to retrieve all deposit addresses for the user
     const uid = generateUID(user.id, identity)
-    console.log(user.id, identity)
-    console.log({ uid })
+    const dbs = [
+        dbBTCAddresses,
+        dbDOTAddresses,
+        dbETHAddresses,
+    ]
     const entries = await PromisE.all(
-        [
-            dbBTCAddresses,
-            dbDOTAddresses,
-            dbETHAddresses,
-        ]
-            .map(db => db.find({ uid: { $eq: uid } }))
+        dbs.map(db => db.find({ uid: { $eq: uid } }))
     )
     const chains = [
         'BTC',
@@ -196,34 +194,40 @@ export async function handleCrowdsaleCheckDeposits(callback) {
         'ETH',
     ]
     const deposits = {}
+    const total = entries.reduce((sum, entry = {}) => sum + (entry.balance || 0), 0)
     let lastChecked, balanceChanged
     for (let i = 0; i < chains.length; i++) {
-        let { address, balance = 0, tsLastChecked } = entries[i] || {}
+        const entry = entries[i]
+        let { address, balance = 0, tsLastChecked } = entry || {}
         if (!address) continue
-        const useCache = tsLastChecked
-            && (new Date().getSeconds() - new Date(tsLastChecked).getSeconds()) > 60 * 30 // 30 minutes
+        const diffSeconds = new Date().getSeconds() - new Date(tsLastChecked).getSeconds()
+        const useCache = cached || (!!tsLastChecked && diffSeconds < 60 * 30) // 30 minutes
         const chain = chains[i]
         
         if (useCache) {
-            deposits[chain] = balance
+            deposits[chain] = balance || 0
         } else {
+            console.log('\nchekcing deposit', chain, address)
             tsLastChecked = new Date()
             let result
             switch (chain) {
                 case 'BTC':
                     result = await bcClient.getBalance(address)
+                    const btcBalance = (result.data[address] || 0) / Math.pow(10, 8)
                     // round the number to appropriate decimal places
-                    const [_1, _2, roundedBTC] = await convertTo('BTC', 'BTC', result.data[address] || 0)
+                    const [_1, _2, roundedBTC] = await convertTo('BTC', 'BTC', btcBalance)
+                    console.log(chain, _2, roundedBTC)
+                    console.log(JSON.stringify(result, null, 4))
                     // parse rounded amount back to number
                     deposits[chain] = eval(roundedBTC) || 0
                     break
                 case 'DOT': 
                     const dotBalance = await getBalance(address, true)
-                    console.log({dotBalance})
                     // round the number to appropriate decimal places
-                    const [_3, _4, roundedDot] = await convertTo('DOT', 'DOT', dotBalance)
+                    const [errDot, _4, roundedDot] = await convertTo('DOT', 'DOT', dotBalance/Math.pow(10, 10))
+                    if (errDot) throw errDot
                     // parse rounded amount back to number
-                    console.log({roundedDot})
+                    console.log({roundedDot, dotBalance})
                     deposits[chain] = eval(roundedDot) || 0
                     break
                 case 'ETH':
@@ -234,26 +238,32 @@ export async function handleCrowdsaleCheckDeposits(callback) {
                     break
             }
             balanceChanged = balanceChanged || (deposits[chain] && deposits[chain] > balance)
+            // use the latest timestamp as lastChecked
+            lastChecked = !lastChecked
+                ? tsLastChecked // first time check
+                : tsLastChecked && new Date(tsLastChecked) > new Date(lastChecked)
+                    ? tsLastChecked
+                    : lastChecked
         }
-        // use the latest timestamp as lastChecked
-        lastChecked = !lastChecked
-            ? tsLastChecked // first time check
-            : new Date(tsLastChecked) > new Date(lastChecked)
-                ? tsLastChecked
-                : lastChecked
     }
-
-    console.log({ entries, deposits })
-
-    if (balanceChanged) {
-        // trigger lock creation
+    const newTotal = Object.values(deposits).reduce((sum, balance) => sum + balance || 0, 0)
+    if (total !== newTotal) {
+        // ToDo: trigger lock creation
         console.log('------------------------- New Deposits Found--------------\n',
             JSON.stringify({
                 user: user.id,
                 deposits,
                 lastChecked,
-            })
+            }, null, 4)
         )
+    }
+    if (!cached && lastChecked) {
+        console.log('update timstamp', lastChecked)
+        entries.forEach((entry, i) => entry && dbs[i].set(entry._id,{
+            ...entry,
+            tsLastChecked: lastChecked,
+            balance: deposits[chains[i]]
+        }))
     }
     callback(null, { deposits, lastChecked })
 }

@@ -3,6 +3,7 @@ import PromisE from '../utils/PromisE'
 import { isArr } from '../utils/utils'
 import { execSync } from 'child_process'
 import { TYPES, validate } from '../utils/validator'
+import { exit } from 'process'
 
 let connectPromise, polkadotMSClient
 const PolkadotMS_URL = process.env.PolkadotMS_URL || ''
@@ -48,8 +49,8 @@ const connect = async () => {
  * const bobsNewAddress = await generateAddress(bob, alice, 'polkadot')
  * ```
  */
-export const generateAddress = async (derivationPath, seed, netword = 'polkadot') => { 
-    const cmdStr = `docker run --rm parity/subkey:latest inspect "${seed}/${derivationPath}" --network ${netword}`
+export const generateAddress = async (derivationPath, seed, network = 'polkadot') => { 
+    const cmdStr = `docker run --rm parity/subkey:latest inspect "${seed}/${derivationPath}" --network ${network}`
         + ' | grep -i ss58' // print only the line with generated address
     const depositAddress = (await execSync(cmdStr) || '')
         .toString()
@@ -111,9 +112,9 @@ export const getBalance = async (address, freeBalance = true) => {
  * // Expected result: Array of Numbers
  * ```
  */
-const query = async (func, args = [], multi = false) => {
+const query = async (func, args = [], multi = false, timeout = 10000) => {
     const client = await connect()
-    return new PromisE((resolve, reject) => {
+    return new PromisE.timeout((resolve, reject) => {
         try {
             client.emit(
                 'query',
@@ -125,7 +126,7 @@ const query = async (func, args = [], multi = false) => {
         } catch (err) { 
             reject(err)
         }
-    })
+    }, timeout)
 }
 // test by checking Alice and Bob's balances
 const ping = () => {
@@ -137,6 +138,6 @@ const ping = () => {
             console.log('PolkadotMS ping success', result)
             // setTimeout(() => ping(), 1000 * 60 * 60)
         })
-        .catch(err => console.log('PolkadotMS ping error: ', err))
+        .catch(err => console.log('PolkadotMS ping failed: \n', err) | exit(1))
 }
 ping()
