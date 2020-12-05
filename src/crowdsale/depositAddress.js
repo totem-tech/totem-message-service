@@ -200,14 +200,14 @@ export async function handleCrowdsaleCheckDeposits(cached = true, callback) {
         const entry = entries[i]
         let { address, balance = 0, tsLastChecked } = entry || {}
         if (!address) continue
-        const diffSeconds = new Date().getSeconds() - new Date(tsLastChecked).getSeconds()
-        const useCache = cached || (!!tsLastChecked && diffSeconds < 60 * 30) // 30 minutes
+        const timedout = ((new Date() - new Date(tsLastChecked || '')) / 1000) >= 1800 // 30 minutes
         const chain = chains[i]
-        
+        // allow checking balance every 30 minutes if user has not deposited yet
+        const useCache = (tsLastChecked && !timedout) || (balance && cached)
         if (useCache) {
             deposits[chain] = balance || 0
         } else {
-            console.log('\nchekcing deposit', chain, address)
+            console.log('\nchecking deposit', chain, address)
             tsLastChecked = new Date()
             let result
             switch (chain) {
@@ -377,3 +377,6 @@ setTimeout(async () => {
     const db = await dbBTCAddresses.getDB()
     indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
 })
+
+
+// setTimeout(() => console.log(new Date()), 120000);

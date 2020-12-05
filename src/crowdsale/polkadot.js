@@ -18,6 +18,8 @@ const connect = async () => {
     if (connectPromise && (connectPromise.resolved || connectPromise.pending)) {
         return await connectPromise
     }
+
+    console.log({PolkadotMS_URL})
     connectPromise = new PromisE(function (resolve, reject) {
         polkadotMSClient = ioClient(PolkadotMS_URL, { secure: true, rejectUnauthorized: false })
         polkadotMSClient.on('connect', () => resolve(polkadotMSClient))
@@ -130,6 +132,7 @@ const query = async (func, args = [], multi = false, timeout = 10000) => {
 }
 // test by checking Alice and Bob's balances
 const ping = () => {
+    console.log('Pinging PolkadotMS...')
     getBalance([
         '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         // '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
