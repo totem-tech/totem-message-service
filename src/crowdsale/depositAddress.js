@@ -378,5 +378,5 @@ setTimeout(async () => {
     indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
 })
 
-
-// setTimeout(() => console.log(new Date()), 120000);
+// trigger a daily check??
+// setTimeout(() => console.log('meaw', new Date()), 120000);

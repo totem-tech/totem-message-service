@@ -19,7 +19,6 @@ const messages = setTexts({
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
     msgLengthExceeds: 'Maximum characters allowed',
-    referralSuccess: 'signed up using your referral code',
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
 // User IDs for use by the application ONLY.
@@ -261,15 +260,15 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     // add client ID to user's clientId list
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
-    callback()
+    callback(null)
 
     // notify referrer, if any
     isReferrerValid && handleNotification.call(
-        [client, newUser],
+        [client, newUser, true],
         [referredBy],
-        'user',
+        'chat',
         'referralSuccess',
-        messages.referralSuccess,
+        null,
         null,
         () => { }, // placeholder for required callback argument
     )

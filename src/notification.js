@@ -95,6 +95,17 @@ Object.keys(commonConfs).forEach(key =>
 //                      @data       object : extra information, can be specific to the module
 //                      @message    string : message to be displayed, unless invitation type has custom view
 export const VALID_TYPES = Object.freeze({
+    chat: {
+        referralSuccess: {
+            // prevent any user to send this type of notification
+            // Only the application itself should be able to send this notification
+            validate: function () {
+                const [_c, _u, isSystem] = this
+                console.log({user: _u})
+                return !isSystem
+            },
+        }
+    },
     identity: {
         // user1 recommends user2 to share their identity with user3
         introduce: {
@@ -201,11 +212,6 @@ export const VALID_TYPES = Object.freeze({
             amountXTX: { maxLength: 18, minLength: 1, required: true, type: TYPES.integer },
         },
     },
-    user: {
-        referralSuccess: {
-            messageField: commonConfs.str3To160Required,
-        }
-    }
 })
 const validatorConfig = {
     recipients: {
@@ -321,7 +327,7 @@ handleNotificationSetStatus.requireLogin = true
 // @callback    function : params: (@err string) 
 export async function handleNotification(recipients, type, childType, message, data, callback) {
     if (!isFn(callback)) return
-    const [client, user] = this
+    const [_, user] = this
     const senderId = user.id
 
     let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
@@ -363,7 +369,7 @@ export async function handleNotification(recipients, type, childType, message, d
 
     // if notification type has a handler function execute it
     const id = uuid.v1()
-    err = isFn(config.validate) && await config.validate.call(client, id, senderId, recipients, data, message)
+    err = isFn(config.validate) && await config.validate.call(this, id, senderId, recipients, data, message)
     if (err) return callback(err)
 
     const tsCreated = (new Date()).toISOString()
