@@ -71,8 +71,8 @@ export default class CouchDBStorage {
     }
 
     // find the first item matching criteria
-    async find(selector) {
-        const docs = await this.search(selector, 1, 0, false)
+    async find(selector, extraProps) {
+        const docs = await this.search(selector, 1, 0, false, extraProps)
         return docs[0]
     }
 
@@ -133,23 +133,30 @@ export default class CouchDBStorage {
         return await db.find(query)
     }
 
-    // create or update document
-    // 
-    // Params: 
-    // @id              string: (optional) if exists, will update document
-    // @value           object
-    // @allowOverride   boolean: whether to automatically check if `@id` already exists.
-    //                       If false, will CouchDB will throw error if @id` already exists
-    //                              and correct`@value._rev` value not supplied.
-    //
-    // Returns          object
-    async set(id, value, allowOverride = true) {
+    /**
+     * @name    set 
+     * @summary create or update document
+     * 
+     * 
+     * @param   {String}    id              string: (optional) if exists, will update document
+     * @param   {Object}    value           object
+     * @param   {Boolean}   allowOverride   (optional) whether to automatically check if `@id` already exists.
+     *                                      If false, will CouchDB will throw error if @id` already exists
+     *                                      and correct`@value._rev` value not supplied.
+     *                                      Default: true
+     * @param   {Boolean}   merge           (optional) valid only if @allowOverride is truthy
+     * 
+     *
+     * @returns {Object}
+     */
+    async set(id, value, allowOverride = true, merge = false) {
         id = isStr(id) ? id : uuid.v1()
         const db = await this.getDB()
         const existingDoc = allowOverride && await this.get(id)
         if (existingDoc) {
             // attach `_rev` to execute an update operation
             value._rev = existingDoc._rev
+            value = !merge ? value : {...existingDoc, ...value }
         }
         return await db.insert(value, id)
     }

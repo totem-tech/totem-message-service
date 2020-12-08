@@ -164,7 +164,7 @@ export async function handleFaucetRequest(address, callback) {
     requests[index].blockHash = blockHash
     requests[index].inProgress = false
 
-    !!faucetServerErr && console.log(`Faucet request failed. Error: ${faucetServerErr}`)
+    !!faucetServerErr && console.log(`Faucet request failed. `,faucetServerErr)
     // get back to the user
     callback(faucetServerErr, blockHash)
 

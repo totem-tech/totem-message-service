@@ -4,6 +4,7 @@ import { isArr } from '../utils/utils'
 import { execSync } from 'child_process'
 import { TYPES, validate } from '../utils/validator'
 import { exit } from 'process'
+import { isCrowdsaleActive } from './kyc'
 
 let connectPromise, polkadotMSClient
 const PolkadotMS_URL = process.env.PolkadotMS_URL || ''
@@ -116,7 +117,7 @@ export const getBalance = async (address, freeBalance = true) => {
  */
 const query = async (func, args = [], multi = false, timeout = 10000) => {
     const client = await connect()
-    return new PromisE.timeout((resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
         try {
             client.emit(
                 'query',
@@ -128,19 +129,25 @@ const query = async (func, args = [], multi = false, timeout = 10000) => {
         } catch (err) { 
             reject(err)
         }
-    }, timeout)
+    })
+    return new PromisE.timeout(promise, timeout)
 }
-// test by checking Alice and Bob's balances
-const ping = () => {
-    console.log('Pinging PolkadotMS...')
-    getBalance([
-        '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        // '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
-    ])
-        .then(result => {
-            console.log('PolkadotMS ping success', result)
-            // setTimeout(() => ping(), 1000 * 60 * 60)
-        })
-        .catch(err => console.log('PolkadotMS ping failed: \n', err) | exit(1))
-}
-ping()
+// // test by checking Alice and Bob's balances
+// const ping = () => {
+//     console.log('Pinging PolkadotMS...')
+//     getBalance([
+//         '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+//         // '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
+//     ])
+//         .then(result => {
+//             console.log('PolkadotMS ping success', result)
+//             // setTimeout(() => ping(), 1000 * 60 * 60)
+//         })
+//         .catch(err => console.log('PolkadotMS ping failed: \n', err) | exit(1))
+// }
+// ping()
+
+if (isCrowdsaleActive) PromisE.timeout(connect(), 5000).catch(err => {
+    console.error('Failed to connect to Polkadot Access MS. Error:\n', err)
+    exit(1)
+})

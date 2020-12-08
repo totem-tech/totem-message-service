@@ -18,6 +18,10 @@ const dbBTCAddresses = new CouchDBStorage(null, 'crowdsale_address-btc') //creat
 const dbDOTAddresses = new CouchDBStorage(null, 'crowdsale_address-dot')
 // whitelisted Ethereum addresses
 const dbETHAddresses = new CouchDBStorage(null, 'crowdsale_address-eth')
+// history of all locks created
+const lockHistory = new CouchDBStorage(null, 'crowdsale_lock-history')
+// userIds queued to be funded XTX in the form of locks, should already have confirmed deposits
+const lockQueue = new CouchDBStorage(null, 'crowdsale_lock-queue')
 const messages = setTexts({
     alreadyAllocated: `
         You have alredy been allocated deposit address for this blockchain.
@@ -49,6 +53,19 @@ const algo = process.env.Crowdsale_Algo
 const algoBits = parseInt(process.env.Crowdsale_Algo_Bits) || undefined
 const apiKey = process.env.Blockchair_API_Key
 const bcClient = new BlockchairClient(apiKey)
+const NUM_CONFIRMATIONS_ETH = 12
+let lockInProgressUserId // userId in the queue that is being processed
+// keep both `dbs` and `chains` in correct sequence
+const dbs = [
+    dbBTCAddresses,
+    dbDOTAddresses,
+    dbETHAddresses,
+]
+const chains = [
+    'BTC',
+    'DOT',
+    'ETH',
+]
 // validate environment variables
 let envErr = validateObj(
     {
@@ -168,104 +185,37 @@ export const generateUID = (userId, identity) => generateHash(
 export async function handleCrowdsaleCheckDeposits(cached = true, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
-
     if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
 
-    // retrieve most recent balance check history
-    // if it's within `BALANCE_CHECK_DELAY` return it as cache otherwise check balance using blockchair api
-
     // check if user has already submitted KYC
-    const { identity } = await getKYCEntry(user.id) || {}
+    const userId = user.id
+    const { identity } = await getKYCEntry(userId) || {}
     if (!identity) return callback(messages.kycNotDone)
 
-    // use identity to retrieve all deposit addresses for the user
-    const uid = generateUID(user.id, identity)
-    const dbs = [
-        dbBTCAddresses,
-        dbDOTAddresses,
-        dbETHAddresses,
-    ]
-    const entries = await PromisE.all(
-        dbs.map(db => db.find({ uid: { $eq: uid } }))
-    )
-    const chains = [
-        'BTC',
-        'DOT',
-        'ETH',
-    ]
-    const deposits = {}
-    const total = entries.reduce((sum, entry = {}) => sum + (entry.balance || 0), 0)
-    let lastChecked, balanceChanged
-    for (let i = 0; i < chains.length; i++) {
-        const entry = entries[i]
-        let { address, balance = 0, tsLastChecked } = entry || {}
-        if (!address) continue
-        const timedout = ((new Date() - new Date(tsLastChecked || '')) / 1000) >= 1800 // 30 minutes
-        const chain = chains[i]
-        // allow checking balance every 30 minutes if user has not deposited yet
-        const useCache = (tsLastChecked && !timedout) || (balance && cached)
-        if (useCache) {
-            deposits[chain] = balance || 0
-        } else {
-            console.log('\nchecking deposit', chain, address)
-            tsLastChecked = new Date()
-            let result
-            switch (chain) {
-                case 'BTC':
-                    result = await bcClient.getBalance(address)
-                    const btcBalance = (result.data[address] || 0) / Math.pow(10, 8)
-                    // round the number to appropriate decimal places
-                    const [_1, _2, roundedBTC] = await convertTo('BTC', 'BTC', btcBalance)
-                    console.log(chain, _2, roundedBTC)
-                    console.log(JSON.stringify(result, null, 4))
-                    // parse rounded amount back to number
-                    deposits[chain] = eval(roundedBTC) || 0
-                    break
-                case 'DOT': 
-                    const dotBalance = await getBalance(address, true)
-                    // round the number to appropriate decimal places
-                    const [errDot, _4, roundedDot] = await convertTo('DOT', 'DOT', dotBalance/Math.pow(10, 10))
-                    if (errDot) throw errDot
-                    // parse rounded amount back to number
-                    console.log({roundedDot, dotBalance})
-                    deposits[chain] = eval(roundedDot) || 0
-                    break
-                case 'ETH':
-                    result = await bcClient.getERC20HolderInfo(address, ETH_Smart_Contract)
-                    // balance rounded to appropriate decimal places
-                    deposits[chain] = (result[address] || {}).balance_approximate || 0
-                    // ToDo: check for number of confirmations?
-                    break
-            }
-            balanceChanged = balanceChanged || (deposits[chain] && deposits[chain] > balance)
-            // use the latest timestamp as lastChecked
-            lastChecked = !lastChecked
-                ? tsLastChecked // first time check
-                : tsLastChecked && new Date(tsLastChecked) > new Date(lastChecked)
-                    ? tsLastChecked
-                    : lastChecked
+    const {
+        amountChanged,
+        depositAddresses,
+        deposits,
+        lastChecked,
+    } = await loadBalances(userId, identity, cached, false)
+    if (amountChanged) {
+        const queueEntry = await lockQueue.get(userId)
+        // add user id to the queue if not already in the queue or if previous attempt failed
+        if (!queueEntry || queueEntry.status === 'error') {
+            await lockQueue.set(
+                userId,
+                {
+                    identity,
+                    status: 'pending',
+                    tsAdded: new Date(),
+                    userId,
+                },
+                true,
+            )
+            !lockInProgressUserId && processLockQueue()
         }
     }
-    const newTotal = Object.values(deposits).reduce((sum, balance) => sum + balance || 0, 0)
-    if (total !== newTotal) {
-        // ToDo: trigger lock creation
-        console.log('------------------------- New Deposits Found--------------\n',
-            JSON.stringify({
-                user: user.id,
-                deposits,
-                lastChecked,
-            }, null, 4)
-        )
-    }
-    if (!cached && lastChecked) {
-        console.log('update timstamp', lastChecked)
-        entries.forEach((entry, i) => entry && dbs[i].set(entry._id,{
-            ...entry,
-            tsLastChecked: lastChecked,
-            balance: deposits[chains[i]]
-        }))
-    }
-    callback(null, { deposits, lastChecked })
+    callback(null, { amountChanged, depositAddresses, deposits, lastChecked })
 }
 handleCrowdsaleCheckDeposits.requireLogin = true
 
@@ -330,10 +280,9 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
             if (err) return callback(err)
             break
         case 'ETH':
+            const denyAddress = ethAddress === ETH_Smart_Contract || await addressDb.get(ethAddress)
             // ethereum address has been used by another user!! or user pasted SC address
-            if (
-                ethAddress === ETH_Smart_Contract || await addressDb.get(ethAddress)
-            ) return callback(messages.ethAddressInUse)
+            if (denyAddress) return callback(messages.ethAddressInUse)
             newEntry.address = ethAddress
             break
     }
@@ -341,11 +290,8 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
     if (err) return callback(err)
 
     try {
-        await addressDb.set(
-            newEntry.address,
-            newEntry,
-            false, // prevents any address being from using used twice or being overridden
-        )
+        // allows only one entry per address
+        await addressDb.set(newEntry.address, newEntry, false)
     } catch (err) { 
         //'Document update conflict'
         if (err.statusCode === 409) return callback(messages.alreadyAllocated)
@@ -364,6 +310,184 @@ handleCrowdsaleDAA.validationConf = Object.freeze({
     type: TYPES.object,
 })
 
+const loadBalances = async (userId, identity, cached, force) => {
+    // use identity to retrieve all deposit addresses for the user
+    const uid = generateUID(userId, identity)
+
+    const entries = await PromisE.all(
+        dbs.map(db => db.find({ uid: { $eq: uid } }))
+    )
+    const deposits = {}
+    const depositAddresses = {}
+    let lastChecked, amountChanged
+    for (let i = 0; i < chains.length; i++) {
+        const entry = entries[i]
+        const db = dbs[i]
+        let { address, balance = 0, tsLastChecked } = entry || {}
+        if (!address) continue
+
+        const timedout = ((new Date() - new Date(tsLastChecked || '')) / 1000) >= 1800 // 30 minutes
+        const chain = chains[i]
+        depositAddresses[chain] = address
+        // allow checking balance every 30 minutes if user has not deposited yet
+        const useCache = !!tsLastChecked && (!timedout || !!balance && cached)
+        // console.log({useCache, cached, force, tsLastChecked})
+        if (!force && useCache) {
+            deposits[chain] = balance || 0
+            continue
+        }
+
+        console.log('\nCrowdsale: checking deposit', chain, address)
+        let result
+        tsLastChecked = new Date()
+        switch (chain) {
+            case 'BTC':
+                result = await bcClient.getBalance(address)
+                const btcBalance = (result.data[address] || 0) / Math.pow(10, 8)
+                // round the number to appropriate decimal places
+                const [errBtc, _2, roundedBTC] = await convertTo('BTC', 'BTC', btcBalance)
+                if (errBtc) throw new Error(errBtc)
+                // parse rounded amount back to number
+                deposits[chain] = eval(roundedBTC) || 0
+                break
+            case 'DOT': 
+                const dotBalance = (await getBalance(address, true))/Math.pow(10, 10)
+                // round the number to appropriate decimal places
+                const [errDot, _4, roundedDot] = await convertTo('DOT', 'DOT', dotBalance)
+                if (errDot) throw new Error(errDot)
+                // parse rounded amount back to number
+                deposits[chain] = eval(roundedDot) || 0
+                break
+            case 'ETH':
+                result = await bcClient.getERC20HolderInfo(address, ETH_Smart_Contract, 1, 0, true, false)
+                const addressData = result.data[address]
+                const lastBlockNum = (result.context || {}).state
+                const lastTxBlockNum = (addressData && addressData.transactions[0] || {}).block_id
+                const isConfirmed = lastBlockNum - lastTxBlockNum >= NUM_CONFIRMATIONS_ETH
+                if (!addressData || !lastBlockNum || !lastTxBlockNum || !isConfirmed) { 
+                    // address was not returned in the result
+                    deposits[chain] = 0
+                    break
+                }
+                // balance is already rounded to appropriate decimal places
+                deposits[chain] = addressData.address.balance_approximate || 0
+                break
+        }
+        // use the latest timestamp as lastChecked
+        lastChecked = !lastChecked
+            ? tsLastChecked // first time check
+            : tsLastChecked && new Date(tsLastChecked) > new Date(lastChecked)
+                ? tsLastChecked
+                : lastChecked
+        
+        // update entry
+        await db.set(address, {
+            ...entry,
+            balance: deposits[chains[i]],
+            funded: false,
+            tsLastChecked: lastChecked,
+            tsUpdated: lastChecked,
+        }, null)
+        if (balance === deposits[chain]) continue
+
+        amountChanged = true
+        console.log('Crowdsale: [NEW DEPOSIT RECEIVED]', { chain, address, amount: deposits[chain] })
+    }
+
+    return {
+        amountChanged,
+        depositAddresses,
+        deposits,
+        lastChecked,
+        uid,
+    }
+}
+
+// to make sure database hasn't been corrupted check for deposited balances and locks again 
+// and then generate new locks if necessary
+// For it to be a queue
+const processLockQueue = async (force = false) => { 
+    return 
+    const next = await lockQueue.find({
+        'status': {
+            $in: [
+                'pending',
+                // only re-attempt on application startup
+                force && 'error',
+                force && 'loading',
+            ].filter(Boolean),
+        }
+    })
+
+    // No more queued item left or item is currently being processed.
+    // Forced should only be used only on application load.
+    // Allow previously errored item to be re-processed
+    if (!next || next.status === 'loading' && !force) return
+
+    // // Set in-progress status and save to database
+    next.status = 'loading'
+    await lockQueue.set(next.userId, { ...next, tsUpdated: new Date() }, null)
+    const { identity, userId } = next
+
+
+    // try {
+        await setLock(userId, identity)
+    //     // on success save lock history
+    //     //success && lockHistory.set(uuid.v1(), )
+    // } catch (err) {
+        
+    // }
+    
+    // remove item from lockQueue
+    lockQueue.delete(userId)
+    processLockQueue(force)
+}
+
+const retrieveLocks = async (identity) => {
+    
+    return []
+}
+const updateAddressEntry = async (chain, uid, newData = {}) => {
+}
+const setLock = async (userId, identity, amountTotalXTX = 0) => {
+    const {
+        amountChanged,
+        depositAddresses,
+        deposits,
+        lastChecked,
+    } = await loadBalances(userId, identity, false, true)
+    const existingLocks = await retrieveLocks(identity)
+    const lockedXTX = 0 // ToDo: sum up existingLocks 
+    if (amountTotalXTX <= lockedXTX) return
+    /*
+    ....
+    .
+    .
+    . determine how much new amount to be locked and duration based on multiplier level
+    .
+    ....
+    */
+    // set each address as funded
+    for (let i = 0; i < chains.length; i++) {
+        const chain = chains[i]
+        const address = depositAddresses[chain]
+        if (!address) continue
+
+        // mark address entry as funded and update timestamp
+        const db = dbs[chains.indexOf(chain)]
+        await db.set(
+            address,
+            {
+                funded: true,
+                tsUpdated: new Date(),
+            },
+            true,
+            true,
+        )
+    }
+    return true       
+}
+
 // initialize
 setTimeout(async () => {
     // create an index for the field `serialNo` on `address-btc` database, ignores if already exists
@@ -376,6 +500,9 @@ setTimeout(async () => {
     ]
     const db = await dbBTCAddresses.getDB()
     indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
+
+    // process any pending lock on application startup 
+    isCrowdsaleActive && processLockQueue(true)
 })
 
 // trigger a daily check??
