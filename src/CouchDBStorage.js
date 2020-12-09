@@ -137,22 +137,22 @@ export default class CouchDBStorage {
      * @name    set 
      * @summary create or update document
      * 
-     * 
-     * @param   {String}    id              string: (optional) if exists, will update document
-     * @param   {Object}    value           object
-     * @param   {Boolean}   allowOverride   (optional) whether to automatically check if `@id` already exists.
-     *                                      If false, will CouchDB will throw error if @id` already exists
-     *                                      and correct`@value._rev` value not supplied.
-     *                                      Default: true
-     * @param   {Boolean}   merge           (optional) valid only if @allowOverride is truthy
-     * 
+     * @param   {String}    id         (optional) if exists, will update document
+     * @param   {Object}    value      
+     * @param   {Boolean}   override   (optional) whether to allow override of existing document.
+     *                                 If truthy, will automatically check if `@id` already exists.
+     *                   If false and `@id` exists and correct `@value._rev` not supplied, CouchDB will throw error.
+     *                                 Default: true
+     * @param   {Boolean}   merge      (optional) whether to merge `@value` with exiting entry.
+     *                                 Only applicable if `@override` is truthy.
+     *                                 Default: false 
      *
      * @returns {Object}
      */
-    async set(id, value, allowOverride = true, merge = false) {
+    async set(id, value, override = true, merge = false) {
         id = isStr(id) ? id : uuid.v1()
         const db = await this.getDB()
-        const existingDoc = allowOverride && await this.get(id)
+        const existingDoc = override && await this.get(id)
         if (existingDoc) {
             // attach `_rev` to execute an update operation
             value._rev = existingDoc._rev

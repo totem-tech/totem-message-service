@@ -54,6 +54,7 @@ const algoBits = parseInt(process.env.Crowdsale_Algo_Bits) || undefined
 const apiKey = process.env.Blockchair_API_Key
 const bcClient = new BlockchairClient(apiKey)
 const NUM_CONFIRMATIONS_ETH = 12
+const CACHE_DURATION_MS = 1000 * 60 * 30 // 30 minutes
 let lockInProgressUserId // userId in the queue that is being processed
 // keep both `dbs` and `chains` in correct sequence
 const dbs = [
@@ -99,31 +100,6 @@ if (envErr) {
     console.error(`Missing or invalid environment variable. ${envErr}`)
     exit(1)
 }
-
-// bcClient.getERC20HolderInfo(
-//     [ // random address for testing
-//         '0xC2cA8977e5C582F938C30F7A5328Ac1D101BD564',
-//     ],
-//     //'0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e' // kick contract
-//     '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984' // UNI contract
-// )
-//     .then(x => console.log(JSON.stringify(x, null, 4)))
-//     .catch(err => console.log({err}))
-
-// bcClient.getBalance([ // random addresses for testing only
-//     '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo',
-//     '35hK24tcLEWcgNA4JxpvbkNkoAcDGqQPsP',
-//     '1DoesntExist',
-//     '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-//     '3APX1so1oLzpXicRpbDxZGoF2DBfXkJjtd',
-// ], 'bitcoin')
-//     .then(console.log)
-//     .catch(console.log)
-
-// bcClient.getBalance([
-//     '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
-// ], 'ethereum') // should throw error
-// .catch(console.log)
 
 // check if blockchair api key is valid by retrieving stats
 if (apiKey) {
@@ -202,16 +178,13 @@ export async function handleCrowdsaleCheckDeposits(cached = true, callback) {
         const queueEntry = await lockQueue.get(userId)
         // add user id to the queue if not already in the queue or if previous attempt failed
         if (!queueEntry || queueEntry.status === 'error') {
-            await lockQueue.set(
+            await lockQueue.set(userId, {
+                ...queueEntry,
+                identity,
+                status: 'pending',
+                tsAdded: new Date(),
                 userId,
-                {
-                    identity,
-                    status: 'pending',
-                    tsAdded: new Date(),
-                    userId,
-                },
-                true,
-            )
+            })
             !lockInProgressUserId && processLockQueue()
         }
     }
@@ -326,7 +299,7 @@ const loadBalances = async (userId, identity, cached, force) => {
         let { address, balance = 0, tsLastChecked } = entry || {}
         if (!address) continue
 
-        const timedout = ((new Date() - new Date(tsLastChecked || '')) / 1000) >= 1800 // 30 minutes
+        const timedout = (new Date() - new Date(tsLastChecked || '')) >= CACHE_DURATION_MS // 30 minutes
         const chain = chains[i]
         depositAddresses[chain] = address
         // allow checking balance every 30 minutes if user has not deposited yet
@@ -387,7 +360,7 @@ const loadBalances = async (userId, identity, cached, force) => {
             funded: false,
             tsLastChecked: lastChecked,
             tsUpdated: lastChecked,
-        }, null)
+        })
         if (balance === deposits[chain]) continue
 
         amountChanged = true
@@ -407,6 +380,7 @@ const loadBalances = async (userId, identity, cached, force) => {
 // and then generate new locks if necessary
 // For it to be a queue
 const processLockQueue = async (force = false) => { 
+    console.log('processLockQueue')
     return 
     const next = await lockQueue.find({
         'status': {
@@ -505,5 +479,28 @@ setTimeout(async () => {
     isCrowdsaleActive && processLockQueue(true)
 })
 
-// trigger a daily check??
-// setTimeout(() => console.log('meaw', new Date()), 120000);
+// Samples for testing
+// bcClient.getERC20HolderInfo(
+//     [ // random address for testing
+//         '0xC2cA8977e5C582F938C30F7A5328Ac1D101BD564',
+//     ],
+//     //'0xc12d1c73ee7dc3615ba4e37e4abfdbddfa38907e' // kick contract
+//     '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984' // UNI contract
+// )
+//     .then(x => console.log(JSON.stringify(x, null, 4)))
+//     .catch(err => console.log({err}))
+
+// bcClient.getBalance([ // random addresses for testing only
+//     '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo',
+//     '35hK24tcLEWcgNA4JxpvbkNkoAcDGqQPsP',
+//     '1DoesntExist',
+//     '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+//     '3APX1so1oLzpXicRpbDxZGoF2DBfXkJjtd',
+// ], 'bitcoin')
+//     .then(console.log)
+//     .catch(console.log)
+
+// bcClient.getBalance([
+//     '0xf4268e7BB26B26B7D9E54c63b484cE501BFdc1FA',
+// ], 'ethereum') // should throw error
+// .catch(console.log)
