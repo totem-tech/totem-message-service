@@ -1,7 +1,7 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { arrUnique, isArr, isFn, isStr } from './utils/utils'
-import { setTexts } from './language'
 import { TYPES, validateObj } from './utils/validator'
+import { setTexts } from './language'
 import { handleNotification } from './notification'
 
 const users = new CouchDBStorage(null, 'users')
@@ -205,7 +205,9 @@ export async function handleLogin(userId, secret, callback) {
     // prevent login with a reserved id
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
     const client = this
+    console.log('Retrieving user information')
     const user = await users.get(userId)
+    console.log('Retrieved', {user})
     const valid = user && user.secret === secret
     console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
     if (!valid) return callback(messages.loginFailed)

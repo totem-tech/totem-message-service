@@ -1,4 +1,4 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { isFn } from './utils/utils'
 
 const glAccounts = new CouchDBStorage(null, 'gl-accounts')

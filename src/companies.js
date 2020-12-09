@@ -1,4 +1,4 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { mapJoin, isFn, isHash, isObj, hasValue, objClean, isAddress } from './utils/utils'
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'

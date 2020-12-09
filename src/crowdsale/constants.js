@@ -1,6 +1,5 @@
 import { isFn } from '../utils/utils'
 
-// ToDo: Change values
 export const LEVEL_MULTIPLIERS = [
     1.0000,
     3.0000,

@@ -1,6 +1,6 @@
-import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
-import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr, objClean, objReadOnly } from './utils/utils'
+import CouchDBStorage from './utils/CouchDBStorage'
+import { isFn, isObj, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, idExists, RESERVED_IDS } from './users'
 import { TYPES, validateObj } from './utils/validator'

@@ -1,6 +1,6 @@
 
-import CouchDBStorage from './CouchDBStorage'
 import ioClient from 'socket.io-client'
+import CouchDBStorage from './utils/CouchDBStorage'
 import {
     encrypt,
     encryptionKeypair,

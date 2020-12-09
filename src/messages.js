@@ -1,5 +1,5 @@
 import request from 'request'
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'

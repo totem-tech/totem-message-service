@@ -1,9 +1,9 @@
+import { execSync } from 'child_process'
+import { exit } from 'process'
 import ioClient from 'socket.io-client'
 import PromisE from '../utils/PromisE'
 import { isArr } from '../utils/utils'
-import { execSync } from 'child_process'
 import { TYPES, validate } from '../utils/validator'
-import { exit } from 'process'
 import { isCrowdsaleActive } from './kyc'
 
 let connectPromise, polkadotMSClient

@@ -1,4 +1,4 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { arrSort, generateHash, isFn, isStr, isValidNumber } from './utils/utils'
 import { setTexts } from './language'
 import { TYPES, validateObj } from './utils/validator'

@@ -1,8 +1,7 @@
-import CouchDBStorage from './CouchDBStorage'
-import { isArr, isDefined, isFn, isObj, objClean } from './utils/utils'
+import CouchDBStorage from './utils/CouchDBStorage'
+import { isArr, isFn, isObj, objClean } from './utils/utils'
 import { authorizeData } from './blockchain'
 import { setTexts } from './language'
-import { getUserByClientId } from './users'
 
 const projects = new CouchDBStorage(null, 'projects')
 // Must-have properties

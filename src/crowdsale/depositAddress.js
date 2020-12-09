@@ -1,8 +1,8 @@
 import { exit } from 'process'
 import BlockchairClient from '../utils/BlockchairClient'
-import { generateHash, isFn, isObj, objClean, objCopy, objWithoutKeys } from '../utils/utils'
+import CouchDBStorage from '../utils/CouchDBStorage'
+import { generateHash, isFn } from '../utils/utils'
 import { TYPES, validate, validateObj } from '../utils/validator'
-import CouchDBStorage from '../CouchDBStorage'
 import { convertTo } from '../currencies'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
@@ -227,7 +227,6 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
         const address = isETH && existingEntry
                 ? ETH_Smart_Contract
             : (existingEntry || {}).address
-         console.log({ address })
         return callback( null, address )
     }
 
@@ -304,7 +303,6 @@ const loadBalances = async (userId, identity, cached, force) => {
         depositAddresses[chain] = address
         // allow checking balance every 30 minutes if user has not deposited yet
         const useCache = !!tsLastChecked && (!timedout || !!balance && cached)
-        // console.log({useCache, cached, force, tsLastChecked})
         if (!force && useCache) {
             deposits[chain] = balance || 0
             continue

@@ -1,4 +1,4 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { clearClutter, generateHash, isStr, isFn } from './utils/utils'
 
 const translations = new CouchDBStorage(null, 'translations')
