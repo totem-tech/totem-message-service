@@ -378,7 +378,6 @@ const loadBalances = async (userId, identity, cached, force) => {
 // and then generate new locks if necessary
 // For it to be a queue
 const processLockQueue = async (force = false) => { 
-    console.log('processLockQueue')
     return 
     const next = await lockQueue.find({
         'status': {

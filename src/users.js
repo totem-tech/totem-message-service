@@ -25,7 +25,9 @@ const messages = setTexts({
 export const SYSTEM_IDS = Object.freeze([
     'everyone',
     'here',
-    'me'
+    'me',
+    'support',
+    'trollbox',
 ])
 export const ROLE_SUPPORT = 'support'
 // User IDs reserved for Totem
@@ -34,20 +36,17 @@ export const RESERVED_IDS = Object.freeze([
     'accounting',
     'admin',
     'administrator',
+    'bitcoin',
+    'blockchain',
+    'ethereum',
+    'contact',
+    'help',
     'live',
-    'support',
+    'polkadot',
     'totem',
-    'trollbox',
+    'totemaccounting',
+    'totemlive',
 ])
-// initialize
-setTimeout(async () => {
-    // create an index for the field `roles`, ignores if already exists
-    const indexDefs = [{
-        index: { fields: ['roles'] },
-        name: 'roles-index',
-    }]
-    indexDefs.forEach(async (def) => await (await users.getDB()).createIndex(def))
-})
 
 // Broadcast message to all users except ignoreClientIds
 //
@@ -56,7 +55,7 @@ setTimeout(async () => {
 // @eventName        string: websocket event name
 // @params           array:  parameters to be supplied to the client
 export const broadcast = (ignoreClientIds, eventName, params) => {
-    if (!isStr(eventName)) return;
+    if (!isStr(eventName)) return
     ignoreClientIds = isArr(ignoreClientIds) ? ignoreClientIds : [ignoreClientIds]
     const clientIds = Array.from(clients).map(([clientId]) => clientId)
         .filter(id => ignoreClientIds.indexOf(id) === -1)
@@ -204,13 +203,13 @@ export async function handleLogin(userId, secret, callback) {
     if (!isFn(callback)) return
     // prevent login with a reserved id
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
+    
     const client = this
-    console.log('Retrieving user information')
     const user = await users.get(userId)
-    console.log('Retrieved', {user})
     const valid = user && user.secret === secret
-    console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
+    console.info(`Login ${!valid ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
     if (!valid) return callback(messages.loginFailed)
+
     const { roles = [] } = user
     const clientIds = userClientIds.get(user.id) || []
     clientIds.push(client.id)
@@ -302,3 +301,12 @@ handleRegister.validationConfig = {
         type: TYPES.string,
     },
 }
+
+setTimeout(async () => {
+    // create an index for the field `roles`, ignores if already exists
+    const indexDefs = [{
+        index: { fields: ['roles'] },
+        name: 'roles-index',
+    }]
+    indexDefs.forEach(async (def) => await (await users.getDB()).createIndex(def))
+})

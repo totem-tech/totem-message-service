@@ -143,7 +143,7 @@ const interceptHandler = (name, handler) => async function (...args) {
             `interceptHandler: uncaught error on event "${name}" handler.`,
         ].join('\n'))
         // print the error stack trace
-        console.log(err.stack)
+        console.log(`${err}`, err.stack)
 
         if (!DISCORD_WEBHOOK_URL) return
 
