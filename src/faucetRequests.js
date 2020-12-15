@@ -1,4 +1,3 @@
-import { exit } from 'process'
 import ioClient from 'socket.io-client'
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
@@ -6,7 +5,6 @@ import {
     encryptionKeypair,
     signingKeyPair,
     newSignature,
-    verifySignature,
     keyInfoFromKeyData,
 } from './utils/naclHelper'
 import { isFn, isStr } from './utils/utils'
@@ -54,28 +52,27 @@ const setVariables = () => {
 
     // Key pairs of this server
     KEY_DATA = process.env.keyData
-    const kp = keyInfoFromKeyData(KEY_DATA)
-
     const encryptPair = encryptionKeypair(KEY_DATA)
     // const keyPair = encryptionKeypair(keyData)
     // publicKey = encryptionKeyPair.publicKey
     SECRET_KEY = encryptPair.secretKey
 
-    const signatureKeyPair = signingKeyPair(KEY_DATA)
+    const signKeyPair = signingKeyPair(KEY_DATA)
     // const signKeyPair = signingKeyPair(keyData)
-    SIGN_PUBLIC_KEY = signatureKeyPair.publicKey
-    SIGN_SECRET_KEY = signatureKeyPair.secretKey
+    SIGN_PUBLIC_KEY = signKeyPair.publicKey
+    SIGN_SECRET_KEY = signKeyPair.secretKey
 
     // only print sensitive data if "printSensitiveData" environment variable is set to "YES" (case-sensitive)
     if (!printData) return
 
     console.log('serverName: ', serverName, '\n')
     console.log('keyData: ', KEY_DATA, '\n')
-    console.log('walletAddress: ', kp.address, '\n') // only to check if keydata/encoded text is correct
-    console.log('Encryption KeyPair base64 encoded: \n' + JSON.stringify(encryptPair, null, 4), '\n')
-    console.log('Signature KeyPair base64 encoded: \n' + JSON.stringify(signatureKeyPair, null, 4), '\n')
+    // only to check if keydata/encoded text is correct
+    console.log('walletAddress: ', keyInfoFromKeyData(KEY_DATA).address, '\n') 
+    console.log('Encryption KeyPair: ', encryptPair, '\n')
+    console.log('Signature KeyPair: ', signKeyPair, '\n')
     console.log('external_serverName: ', EXTERNAL_SERVER_NAME)
-    console.log('external_publicKey base64 encoded: ', EXTERNAL_PUBLIC_KEY, '\n')
+    console.log('external_publicKey: ', EXTERNAL_PUBLIC_KEY, '\n')
 }
 
 const envErr = setVariables()

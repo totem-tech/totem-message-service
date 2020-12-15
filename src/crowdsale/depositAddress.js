@@ -282,7 +282,7 @@ handleCrowdsaleDAA.validationConf = Object.freeze({
     type: TYPES.object,
 })
 
-const loadBalances = async (userId, identity, cached, force) => {
+const loadBalances = async(userId, identity, cached = false, force = false) => {
     // use identity to retrieve all deposit addresses for the user
     const uid = generateUID(userId, identity)
 
@@ -470,7 +470,10 @@ setTimeout(async () => {
         }
     ]
     const db = await dbBTCAddresses.getDB()
-    indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
+    indexDefs.forEach(def =>
+        db.createIndex(def)
+            .catch(() => { }) // ignore errors
+    )
 
     // process any pending lock on application startup 
     isCrowdsaleActive && processLockQueue(true)
