@@ -6,6 +6,7 @@ import { isArr } from '../utils/utils'
 import { TYPES, validate } from '../utils/validator'
 import { isCrowdsaleActive } from './kyc'
 
+const TIMEOUT = 10000
 let connectPromise, polkadotMSClient
 const PolkadotMS_URL = process.env.PolkadotMS_URL || ''
 
@@ -16,13 +17,17 @@ const PolkadotMS_URL = process.env.PolkadotMS_URL || ''
  * @returns {SocketIOClient.Socket} websocket client
  */
 const connect = async () => {
-    if (connectPromise && (connectPromise.resolved || connectPromise.pending)) {
-        return await connectPromise
-    }
+    const isConnecting = connectPromise && (connectPromise.resolved || connectPromise.pending)
+    if (isConnecting) return await connectPromise
 
     console.log({PolkadotMS_URL})
     connectPromise = new PromisE(function (resolve, reject) {
-        polkadotMSClient = ioClient(PolkadotMS_URL, { secure: true, rejectUnauthorized: false })
+        polkadotMSClient = ioClient(PolkadotMS_URL, {
+            secure: true,
+            rejectUnauthorized: false,
+            timeout: TIMEOUT,
+            transports: ['websocket'],
+        })
         polkadotMSClient.on('connect', () => resolve(polkadotMSClient))
         polkadotMSClient.on('connect_error', err => reject(err))
     })
@@ -133,21 +138,21 @@ const query = async (func, args = [], multi = false, timeout = 10000) => {
     return new PromisE.timeout(promise, timeout)
 }
 // // test by checking Alice and Bob's balances
-// const ping = () => {
-//     console.log('Pinging PolkadotMS...')
-//     getBalance([
-//         '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-//         // '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
-//     ])
-//         .then(result => {
-//             console.log('PolkadotMS ping success', result)
-//             // setTimeout(() => ping(), 1000 * 60 * 60)
-//         })
-//         .catch(err => console.log('PolkadotMS ping failed: \n', err) | exit(1))
-// }
-// ping()
+const ping = () => {
+    console.log('Pinging PolkadotMS...')
+    getBalance([
+        '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        // '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty'
+    ])
+        .then(result => {
+            console.log('PolkadotMS ping success', result)
+            // setTimeout(() => ping(), 1000 * 60 * 60)
+        })
+        .catch(err => console.log('PolkadotMS ping failed: \n', err) | exit(1))
+}
 
-if (isCrowdsaleActive) PromisE.timeout(connect(), 5000).catch(err => {
+// Connect to 
+if (!!PolkadotMS_URL) PromisE.timeout(connect(), TIMEOUT + 1000).catch(err => {
     console.error('Failed to connect to Polkadot Access MS. Error:\n', err)
     exit(1)
 })

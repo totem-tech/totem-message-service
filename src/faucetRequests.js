@@ -21,9 +21,24 @@ const TIMEOUT_DURATION = 0 //15 * 60 * 1000 // 15 minutes in milliseconds. if ch
 // Environment variables
 const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:3002'
 let KEY_DATA, SECRET_KEY, SIGN_PUBLIC_KEY, SIGN_SECRET_KEY, EXTERNAL_PUBLIC_KEY, EXTERNAL_SERVER_NAME
+let shouldLogError = false // whether to send connection error to discord
 // connect to faucet server
-const faucetClient = ioClient(FAUCET_SERVER_URL, { secure: true, rejectUnauthorized: false })
-
+const faucetClient = ioClient(FAUCET_SERVER_URL, {
+    rejectUnauthorized: false,
+    secure: true,
+    timeout: 5000,
+    transports: ['websocket'],
+})
+console.log({FAUCET_SERVER_URL})
+faucetClient.on('connect', (err) => {
+    shouldLogError = true
+})
+faucetClient.on('connect_error', (err) => {
+    // send message to discord error logger channel
+    // if(shouldLogError) 
+    shouldLogError = false
+    console.log('Faucet client connection error: ', err)
+})
 // Error messages
 const texts = setTexts({
     fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period',

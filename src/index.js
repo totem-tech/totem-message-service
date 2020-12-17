@@ -41,7 +41,7 @@ const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO.listen(server)
+const socket = socketIO(server)
 // Error messages
 const texts = setTexts({
     loginRequired: 'Please login or create an account if you have not already done so',
@@ -156,9 +156,10 @@ const interceptHandler = (name, handler) => async function (...args) {
             user ? `**UserID:** ${user.id}` : '',
         ].join('\n')
         request({
-            url: DISCORD_WEBHOOK_URL,
-            method: "POST",
             json: true,
+            method: 'POST',
+            timeout: 30000,
+            url: DISCORD_WEBHOOK_URL,
             body: {
                 avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
                 content,
