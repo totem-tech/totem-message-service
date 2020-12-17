@@ -104,7 +104,7 @@ if (envErr) {
 // check if blockchair api key is valid by retrieving stats
 if (apiKey) {
     bcClient.getAPIKeyStats()
-        .then(result => console.log('Blockchair API:', result.data))
+        .then(result => console.log('Blockchair API stats:', result.data))
         .catch(envErr => {
             console.error(`Failed to retrieve Blockchair API key stats. ${envErr}`)
             exit(1)

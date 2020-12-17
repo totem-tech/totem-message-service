@@ -4,7 +4,6 @@ import ioClient from 'socket.io-client'
 import PromisE from '../utils/PromisE'
 import { isArr } from '../utils/utils'
 import { TYPES, validate } from '../utils/validator'
-import { isCrowdsaleActive } from './kyc'
 
 const TIMEOUT = 10000
 let connectPromise, polkadotMSClient
@@ -20,8 +19,8 @@ const connect = async () => {
     const isConnecting = connectPromise && (connectPromise.resolved || connectPromise.pending)
     if (isConnecting) return await connectPromise
 
-    console.log({PolkadotMS_URL})
     connectPromise = new PromisE(function (resolve, reject) {
+        console.log('Connecting to PolkadotMS')
         polkadotMSClient = ioClient(PolkadotMS_URL, {
             secure: true,
             rejectUnauthorized: false,

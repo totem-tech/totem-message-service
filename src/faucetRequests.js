@@ -23,21 +23,22 @@ const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:30
 let KEY_DATA, SECRET_KEY, SIGN_PUBLIC_KEY, SIGN_SECRET_KEY, EXTERNAL_PUBLIC_KEY, EXTERNAL_SERVER_NAME
 let shouldLogError = false // whether to send connection error to discord
 // connect to faucet server
+console.log('Connecting to faucet server')
 const faucetClient = ioClient(FAUCET_SERVER_URL, {
     rejectUnauthorized: false,
     secure: true,
     timeout: 5000,
     transports: ['websocket'],
 })
-console.log({FAUCET_SERVER_URL})
-faucetClient.on('connect', (err) => {
+faucetClient.on('connect', () => {
     shouldLogError = true
+    console.log('Connected to faucet server')
 })
 faucetClient.on('connect_error', (err) => {
     // send message to discord error logger channel
     // if(shouldLogError) 
     shouldLogError = false
-    console.log('Faucet client connection error: ', err)
+    console.log('Faucet client connection failed: ', err)
 })
 // Error messages
 const texts = setTexts({

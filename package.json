@@ -52,6 +52,7 @@
     "@polkadot/util": "^3.2.1",
     "@polkadot/util-crypto": "^3.2.1",
     "@polkadot/wasm-crypto": "^0.14.1",
+    "abort-controller": "^3.0.0",
     "babel-cli": "^6.26.0",
     "babel-core": "^6.26.3",
     "babel-loader": "^8.0.6",

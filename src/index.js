@@ -13,6 +13,7 @@ import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
 import { handleCurrencyConvert, handleCurrencyList } from './currencies'
+import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
 import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
@@ -29,7 +30,6 @@ import {
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
-import { handlers as crowdsaleHanders } from './crowdsale/index'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -177,6 +177,7 @@ server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocke
 
 // attempt to establish a connection to database and exit application if fails
 try {
+    console.log('Connecting to CouchDB')
     getConnection(couchDBUrl)
     console.log('Connected to CouchDB')
 } catch (e) {
