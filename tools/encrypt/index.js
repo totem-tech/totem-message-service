@@ -41,10 +41,13 @@ const FILE_NAME = process.env.FILE_NAME
 // If the same name used, will override input file.
 const FILE_NAME_OUTPUT = process.env.FILE_NAME_OUTPUT || `${FILE_NAME.replace('.json', '')}_encrypted.json`
 
- // @NONCE string (hex): (optional) used for TweetNacl Box Encryption. 
- // Required if value is not an object. In that case, nonce will not be stored in the output file. (Keep it safe)
- // If falsy, will generate new nonce for each value and will be stored along with the output as `__nonce` property.
+// @NONCE string (hex): (optional) used for TweetNacl Box Encryption. 
+// Required if value is not an object. In that case, nonce will not be stored in the output file. (Keep it safe)
+// If falsy, will generate new nonce for each value and will be stored along with the output as `@NONCE_KEY` property.
 const NONCE = process.env.NONCE
+
+// @NONCE_KEY string: (optional) name of the property to store the nonce.
+const NONCE_KEY = process.env.NONCE_KEY || '__nonce'
 
 // @PROPERTY_NAMES string: (optional) comma separated string.
 // Defines which properties to encrypt (if value is an object).
@@ -134,9 +137,11 @@ const encryptValue = (value, nonce) => {
 
 console.log({
     FILE_NAME,
+    FILE_NAME_OUTPUT,
     encryptionType: isBox ? 'Box' : 'SecretKey/SecretBox',
-    keypair,
+    // keypair,
 })
+
 // output storage
 // const output = new DataStorage(FILE_NAME_OUTPUT)
 // encrypt data
@@ -147,10 +152,10 @@ const dataEncrypted = Array.from(data)
                 ? PROPERTY_NAMES
                 : Object.keys(value)
             // if nonce supplied use it. otherwise, genereate new nonce for this value only
-            value.__nonce = NONCE || newNonce(true)
-            keys.filter(x => x !== '__nonce')
+            value[NONCE_KEY] = NONCE || newNonce(true)
+            keys.filter(x => x !== NONCE_KEY) // prevent nonce being encrypted
                 .forEach(key => {
-                    const { encrypted } = encryptValue(value[key], value.__nonce)
+                    const { encrypted } = encryptValue(value[key], value[NONCE_KEY])
                     if (!encrypted) throw new Error('Encryption failed!')
                     value[key] = encrypted
                 })
