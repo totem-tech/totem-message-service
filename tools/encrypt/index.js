@@ -47,7 +47,9 @@ const FILE_NAME_OUTPUT = process.env.FILE_NAME_OUTPUT || `${FILE_NAME.replace('.
 const NONCE = process.env.NONCE
 
 // @NONCE_KEY string: (optional) name of the property to store the nonce.
-const NONCE_KEY = process.env.NONCE_KEY || '__nonce'
+const NONCE_KEY = process.env.NONCE_KEY || 'nonce'
+
+const FILE_OVERRIDE = process.env.FILE_OVERRIDE === 'YES'
 
 // @PROPERTY_NAMES string: (optional) comma separated string.
 // Defines which properties to encrypt (if value is an object).
@@ -142,8 +144,6 @@ console.log({
     // keypair,
 })
 
-// output storage
-// const output = new DataStorage(FILE_NAME_OUTPUT)
 // encrypt data
 const dataEncrypted = Array.from(data)
     .map(([key, value]) => {
@@ -171,4 +171,4 @@ const dataEncrypted = Array.from(data)
 
 // save encrypted data to output file
 new DataStorage(FILE_NAME_OUTPUT)
-    .setAll(new Map(dataEncrypted))
+    .setAll(new Map(dataEncrypted, FILE_OVERRIDE))
