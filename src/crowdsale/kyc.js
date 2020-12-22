@@ -1,11 +1,11 @@
-import CouchDBStorage from '../utils/CouchDBStorage'
-import { decrypt, encrypt, encryptionKeypair } from '../utils/naclHelper'
-import { TYPES, validate, validateObj } from '../utils/validator'
-import {isArr, isFn, isObj, isUint8Arr, objClean } from '../utils/utils'
-import { setTexts } from '../language'
-import { commonConfs } from '../notification'
 import { bytesToHex } from 'web3-utils'
 import { hexToBytes } from '../utils/convert'
+import CouchDBStorage from '../utils/CouchDBStorage'
+import { decrypt, encrypt, encryptionKeypair, encryptObj } from '../utils/naclHelper'
+import {isArr, isFn, isObj, isUint8Arr, objClean } from '../utils/utils'
+import { TYPES, validateObj } from '../utils/validator'
+import { setTexts } from '../language'
+import { commonConfs } from '../notification'
 
 const dbKYC = new CouchDBStorage(null, 'crowdsale_kyc')
 const messages = setTexts({
@@ -35,7 +35,7 @@ const messages = setTexts({
 const extEncrptKey = process.env.Crowdsale_ExtEncrptKey
 // use keydata to generate both encryption and sign keypair
 const keyData = process.env.Crowdsale_KeyData
-export const isCrowdsaleActive = process.env.Crowdsale_Active === 'YES'
+export const isCrowdsaleActive = async () => process.env.Crowdsale_Active === 'YES'
 // validate environment variables
 const envErr = validateObj(
     {
@@ -70,11 +70,22 @@ const envErr = validateObj(
     false,
 )
 if (envErr) throw new Error(`Crowdsale environment variable validation failed: \n${JSON.stringify(envErr, null, 4)}`)
-const encryptKeyPair = encryptionKeypair(keyData)
+const keypair = encryptionKeypair(keyData)
 
+export const decryptData = (sealed, nonce, publicKey = keypair.publicKey) => decrypt(
+    sealed,
+    nonce,
+    publicKey,
+    keypair.secretKey,
+    true,
+)
 /**
+ * @name    get
+ * @summary get KYC entry by ID
  * 
- * @param {*} id 
+ * @param   {String} id 
+ * 
+ * @returns {Object}
  */
 export const get = id => dbKYC.get(id)
 
@@ -84,7 +95,8 @@ export const get = id => dbKYC.get(id)
  * 
  * @param   {Function} callback 
  */
-export const handleCrowdsaleIsActive = callback => isFn(callback) && callback(null, isCrowdsaleActive)
+export const handleCrowdsaleIsActive = async(callback) => isFn(callback) && callback(null, await isCrowdsaleActive())
+
 /**
  * @name    handleKyc
  * @summary handles KYC requests
@@ -101,21 +113,32 @@ export async function handleCrowdsaleKyc(kycData, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
-    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
+    if (!await isCrowdsaleActive()) return callback(messages.crowdsaleInactiveNotice)
+
     // check if user has already done KYC
     const kycEntry = await dbKYC.get(user.id)
     if (kycData === true || kycEntry) return callback(null, !!kycEntry)
 
     // validate KYC data
-    const err = validateObj(kycData, handleCrowdsaleKyc.validationConf, true)
+    const { keysToEncrypt, validationConf, validKeys } = handleCrowdsaleKyc
+    const err = validateObj(kycData, validationConf, true)
     if (err) return callback(err, false)
-
+    
+    const { identity } = kycData
     // make sure no other user has already used this identity
-    const existingEntry = await dbKYC.find({ identity: { $eq: kycData.identity } })
+    const existingEntry = await dbKYC.find({ identity: { $eq: identity } })
     if (existingEntry) return callback(messages.identityAlreadyInUse)
     
-    kycData = objClean(kycData, handleCrowdsaleKyc.validKeys)
-    const { sealed, nonce } = encryptObject(kycData, handleCrowdsaleKyc.keysToEncrypt)
+    kycData = objClean(kycData, validKeys)
+    const { sealed, nonce } = encryptObj(
+        {
+            ...kycData,
+            identity_: identity,
+        },
+        keypair.secretKey,
+        extEncrptKey,
+        keysToEncrypt,
+    )
     kycData = {
         ...sealed,
         nonce: bytesToHex(nonce),
@@ -142,30 +165,6 @@ handleCrowdsaleKyc.keysToEncrypt = [
     'familyName',
     'givenName',
     'location',
+    'identity_', // `identity_` to be encrypted and `identity` is plaintext version
 ]
 handleCrowdsaleKyc.validKeys = Object.keys(handleCrowdsaleKyc.validationConf)
-
-const encryptObject = (obj, keys, nonce) => {
-    const sealed = { ...obj }
-    Object.keys(sealed)
-        .filter(x => !isArr(keys) ? true : keys.includes(x))
-        .forEach(key => {
-            if (nonce && !isUint8Arr(nonce)) {
-                // convert to bytes
-                nonce = hexToBytes(nonce)
-            }
-            const value = sealed[key]
-            const { sealed: valueEncrypted, nonce: nonce2 } = isObj(value)
-                ? encryptObject(value, null, nonce)
-                : encrypt(
-                    value,
-                    encryptKeyPair.secretKey,
-                    extEncrptKey,
-                    nonce,
-                    true,
-                )
-            sealed[key] = valueEncrypted
-            nonce = nonce || nonce2
-        })
-    return { sealed, nonce }
-}

@@ -1,14 +1,14 @@
 import { exit } from 'process'
 import BlockchairClient from '../utils/BlockchairClient'
 import CouchDBStorage from '../utils/CouchDBStorage'
+import PromisE from '../utils/PromisE'
 import { generateHash, isFn } from '../utils/utils'
 import { TYPES, validate, validateObj } from '../utils/validator'
 import { convertTo } from '../currencies'
 import { setTexts } from '../language'
 import { commonConfs } from '../notification'
-import { get as getKYCEntry, isCrowdsaleActive } from './kyc'
+import { decryptData, get as getKYCEntry, isCrowdsaleActive } from './kyc'
 import { getBalance, generateAddress as generateDOTAddress } from './polkadot'
-import PromisE from '../utils/PromisE'
 
 // list of pre-generated BTC addresses
 // _id: serialNo, value: { address: string } 
@@ -137,9 +137,17 @@ const getBTCAddress = async () => {
         ? -1 // for first entry
         : Array.from(result)[0][1].serialNo
     const serialNoInt = parseInt(serialNo + 1)
-    const { address } = await dbBTCGenerated.get(`${serialNoInt}`) || {}
+    const { address, nonce } = await dbBTCGenerated.get(`${serialNoInt}`) || {}
     const err = !address && messages.outOfBTCAddress
-    return [err, address, serialNoInt]
+    const addressDecryted = decryptData(address, nonce)
+    
+    if (!addressDecryted) throw new Error('Failed to assign BTC address. Decryption failed!')
+
+    return [
+        err,
+        addressDecryted,
+        serialNoInt,
+    ]
 }
 
 export const generateUID = (userId, identity) => generateHash(
@@ -161,7 +169,7 @@ export const generateUID = (userId, identity) => generateHash(
 export async function handleCrowdsaleCheckDeposits(cached = true, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
-    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
+    if (!await isCrowdsaleActive()) return callback(messages.crowdsaleInactiveNotice)
 
     // check if user has already submitted KYC
     const userId = user.id
@@ -207,7 +215,7 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
     
-    if (!isCrowdsaleActive) return callback(messages.crowdsaleInactiveNotice)
+    if (!await isCrowdsaleActive()) return callback(messages.crowdsaleInactiveNotice)
     let err
     const isDot = blockchain === 'DOT'
     const isETH = blockchain === 'ETH'
@@ -476,7 +484,7 @@ setTimeout(async () => {
     )
 
     // process any pending lock on application startup 
-    isCrowdsaleActive && processLockQueue(true)
+    await isCrowdsaleActive() && processLockQueue(true)
 })
 
 // Samples for testing

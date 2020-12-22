@@ -150,7 +150,7 @@ export async function handleDisconnect() {
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
     userClientIds.set(user.id, arrUnique(clientIds))
-    console.info('Client disconnected: userId', user.id, ' | Client ID: ', client.id)
+    console.info('Client disconnected | User ID:', user.id, ' | Client ID: ', client.id)
 
     if (!onlineSupportUsers.get(user.id) || clientIds.length > 0) return
     // user is not online
