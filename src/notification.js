@@ -68,7 +68,8 @@ export const commonConfs = {
     str3To64Required: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
 }
-commonConfs.location = { // validation config for a location
+// validation config for a location
+commonConfs.location = {
     config: {
         addressLine1: commonConfs.str3To64Required,
         addressLine2: { ...commonConfs.str3To64Required, required: false },

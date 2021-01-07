@@ -242,32 +242,40 @@ export async function handleCrowdsaleDAA(blockchain, ethAddress, callback) {
         uid,
         tsCreated: new Date(),
     }
+
+    // validate blockchain 
+    err = validate(blockchain, {
+        accept: chains,
+        required: true,
+        type: TYPES.string,
+    })
+    if (err) return callback(err)
+
     switch (blockchain) {
         case 'DOT':
-            err = validate(blockchain, handleCrowdsaleDAA.validationConf.blockchain)
-            if (err) return callback(err)
             // generate address if Polkadot, otherwise, get the next unused already generated BTC address
             newEntry.address = await generateDOTAddress(identity, DOT_Seed_Address, 'polkadot')
-            // validate data
             break
         case 'BTC':
             // for BTC
             const [errBTC, btcAddress, serialNo] = await getBTCAddress(uid)
             if (errBTC) return callback(errBTC)
+
             newEntry.address = btcAddress
             newEntry.serialNo = serialNo
-            err = validate({ blockchain, ethAddress }, handleCrowdsaleDAA.validationConf)
-            if (err) return callback(err)
             break
         case 'ETH':
+            // validate ethereum address
+            err = validate(ethAddress, { ...commonConfs.ethAddress, required: true })
+            if (err) return callback(err)
+
             const denyAddress = ethAddress === ETH_Smart_Contract || await addressDb.get(ethAddress)
             // ethereum address has been used by another user!! or user pasted SC address
             if (denyAddress) return callback(messages.ethAddressInUse)
+
             newEntry.address = ethAddress
             break
     }
-
-    if (err) return callback(err)
 
     try {
         // allows only one entry per address
@@ -286,8 +294,6 @@ handleCrowdsaleDAA.validationConf = Object.freeze({
         type: TYPES.string,
     },
     ethAddress: commonConfs.ethAddress,
-    required: true,
-    type: TYPES.object,
 })
 
 const loadBalances = async(userId, identity, cached = false, force = false) => {

@@ -31,45 +31,62 @@ const messages = setTexts({
     `,
     crowdsaleInactiveNotice: 'Crowdsale has not started yet!',
 })
-// environment valirables
-const extEncrptKey = process.env.Crowdsale_ExtEncrptKey
+// ENVIRONMENT VARIABLES
+// TotemLiveAssociation's PublicKey
+const publicKeyTLA = process.env.Crowdsale_TLA_PublicKey
 // use keydata to generate both encryption and sign keypair
 const keyData = process.env.Crowdsale_KeyData
+// ToDo: use block number to determine whether crowdsale is active or over
+// use null for pending, and false when crowdsale is over
 export const isCrowdsaleActive = async () => process.env.Crowdsale_Active === 'YES'
+// validation configuration for encrypted data
+const encryptedHex = {
+    minLength: 50,
+    maxLength: 256,
+    required: true,
+    type: TYPES.hex,
+}
+const encryptedLocation = {
+    config: Object.keys(commonConfs.location.config)
+        .reduce((conf, key) => {
+            const { required } = commonConfs.location.config[key]
+            conf[key] = { ...encryptedHex, required }
+            return conf
+        }, {}),
+    required: true,
+    type: TYPES.object,
+}
+const publicKeyHex ={
+    maxLength: 66,
+    minLength: 66,
+    required: true,
+    type: TYPES.hex,
+}
+const isOO7KeyData = `${keyData}`.length <= 192
 // validate environment variables
 const envErr = validateObj(
     {
-        Crowdsale_ExtEncrptKey: extEncrptKey,
-        Crowdsale_KeyData: keyData,
+        publicKeyTLA, //Crowdsale_TLA_PublicKey: 
+        keyData, //Crowdsale_KeyData: 
     },
     {
         // validation config
-        Crowdsale_ExtEncrptKey: {
-            maxLength: 66,
-            minLength: 66,
-            required: true,
-            type: TYPES.hex,
+        publicKeyTLA: {
+            ...publicKeyHex,
+            label: 'Crowdsale_TLA_PublicKey',
         },
-        Crowdsale_KeyData: `${keyData}`.length > 192
-            ? {
-                // for PolkadotJS encoded string
-                maxLength: 236,
-                minLength: 236,
-                required: true,
-                type: TYPES.hex,
-            }
-            : {
-                // for legacy 007 keyData
-                maxLength: 192,
-                minLength: 192,
-                required: true,
-                type: TYPES.string,
-            },
+        keyData: {
+            label: 'Crowdsale_KeyData',
+            maxLength: isOO7KeyData ? 192 : 236,
+            minLength: isOO7KeyData ? 192 : 236,
+            required: true,
+            type: isOO7KeyData ? TYPES.string : TYPES.hex,
+        },
     },
-    false,
-    false,
+    true,
+    true,
 )
-if (envErr) throw new Error(`Crowdsale environment variable validation failed: \n${JSON.stringify(envErr, null, 4)}`)
+if (envErr) throw new Error(`Missing or invalid environment variable. \n${envErr}`)
 const keypair = encryptionKeypair(keyData)
 
 export const decryptData = (sealed, nonce, publicKey = keypair.publicKey) => decrypt(
@@ -95,15 +112,15 @@ export const get = id => dbKYC.get(id)
  * 
  * @param   {Function} callback 
  */
-export const handleCrowdsaleIsActive = async(callback) => isFn(callback) && callback(null, await isCrowdsaleActive())
+export const handleCrowdsaleIsActive = async (callback) => isFn(callback) && callback(null, await isCrowdsaleActive())
 
 /**
  * @name    handleKyc
  * @summary handles KYC requests
  * 
- * @param   {Object|Boolean}    kycData if not Object will only check if user has already done KYC.
- *                              See `handleCrowdsaleKyc.validationConf` for required fields.
- *                              Use `true` to check if user has completed KYC.
+ * @param   {Object|Boolean}        kycData if not Object will only check if user has already done KYC.
+ *                                  See `handleCrowdsaleKyc.validationConf` for required fields.
+ *                                  Use `true` to check if user has completed KYC.
  *  
  * @param   {Function}  callback    arguments:
  *                                  @error      String|null
@@ -113,6 +130,7 @@ export async function handleCrowdsaleKyc(kycData, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
+    // check if crowdsale is in progress and accepting registration 
     if (!await isCrowdsaleActive()) return callback(messages.crowdsaleInactiveNotice)
 
     // check if user has already done KYC
@@ -120,51 +138,49 @@ export async function handleCrowdsaleKyc(kycData, callback) {
     if (kycData === true || kycEntry) return callback(null, !!kycEntry)
 
     // validate KYC data
-    const { keysToEncrypt, validationConf, validKeys } = handleCrowdsaleKyc
+    const { validationConf, validKeys } = handleCrowdsaleKyc
     const err = validateObj(kycData, validationConf, true)
     if (err) return callback(err, false)
     
     const { identity } = kycData
-    // make sure no other user has already used this identity
     const existingEntry = await dbKYC.find({ identity: { $eq: identity } })
+    // make sure no other user has already used this identity
     if (existingEntry) return callback(messages.identityAlreadyInUse)
     
+    // get rid of any unwated properties
     kycData = objClean(kycData, validKeys)
-    const { sealed, nonce } = encryptObj(
-        {
-            ...kycData,
-            identity_: identity,
-        },
-        keypair.secretKey,
-        extEncrptKey,
-        keysToEncrypt,
-    )
-    kycData = {
-        ...sealed,
-        nonce: bytesToHex(nonce),
-    }
+    // encrypt user's identity and store both encrypted and paintext versions for future validation.
+    // Encryption key pair from `Crowdsale_KeyData` is both the sender and the recipient.
+    // This is to ensure the identity in the database hasn't been altered by anyone.
+    // In addition to the encrypted identity, the plaintext will also be stored for checking balances without decrypting every time.
+    // However, the encrypted identity will be decrypted before distributing allocation to make sure data is correct.
+    const [encrypted] = encryptObj(kycData, keypair.secretKey, keypair.publicKey, ['identity'])
+    kycData.identityEncrypted = encrypted.identity
+
+    // save to database
     await dbKYC.set(user.id, kycData)
-    callback(null, kycData)
+    callback(null, true)
 }
 handleCrowdsaleKyc.requireLogin = true
 handleCrowdsaleKyc.validationConf = Object.freeze({
-    email: { maxLength: 128, required: true, type: TYPES.email },
-    familyName: commonConfs.str3To64Required,
-    givenName: commonConfs.str3To64Required,
-    identity: { required: true, type: TYPES.identity }, // to be saved unencrypted
-    location: {
-        // store location name for KYC?
-        // config: objWithoutKeys(commonConfs.location, 'name'), 
-        ...commonConfs.location,
-        required: true,
-        type: TYPES.object,
-    },
+    // allow longer email address
+    email: { ...encryptedHex, maxLength: 512 },
+    familyName: encryptedHex,
+    givenName: encryptedHex,
+    // save identity as plain-text
+    identity: { required: true, type: TYPES.identity },
+    location: encryptedLocation,
+    // save user's public key as plain-text
+    publicKey: publicKeyHex,
 })
-handleCrowdsaleKyc.keysToEncrypt = [
-    'email',
-    'familyName',
-    'givenName',
-    'location',
-    'identity_', // `identity_` to be encrypted and `identity` is plaintext version
-]
 handleCrowdsaleKyc.validKeys = Object.keys(handleCrowdsaleKyc.validationConf)
+
+/**
+ * @name    handleCrowdsaleKycPublicKey
+ * @summary get Totem Live Association's encryption public key
+ * 
+ * @param   {Function} callback arguments:
+ *                              @err        string
+ *                              @publicKey  string
+ */
+export const handleCrowdsaleKycPublicKey = callback => isFn(callback) && callback(null, publicKeyTLA)
