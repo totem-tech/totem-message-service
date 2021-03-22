@@ -1,4 +1,4 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import fetch from 'node-fetch'
 import { isFn, generateHash } from './utils/utils'
 

@@ -1,7 +1,8 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { arrUnique, isArr, isFn, isStr } from './utils/utils'
-import { setTexts } from './language'
 import { TYPES, validateObj } from './utils/validator'
+import { setTexts } from './language'
+import { handleNotification } from './notification'
 
 const users = new CouchDBStorage(null, 'users')
 export const clients = new Map()
@@ -13,7 +14,7 @@ const messages = setTexts({
     alreadyRegistered: 'You have already registered! Please contact support for instructions if you wish to get a new user ID.',
     idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
     idExists: 'User ID already taken',
-    invalidReferrerID: 'invalid referrer ID',
+    invalidReferralCode: 'invalid referral code',
     invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
@@ -24,7 +25,9 @@ const messages = setTexts({
 export const SYSTEM_IDS = Object.freeze([
     'everyone',
     'here',
-    'me'
+    'me',
+    'support',
+    'trollbox',
 ])
 export const ROLE_SUPPORT = 'support'
 // User IDs reserved for Totem
@@ -33,20 +36,17 @@ export const RESERVED_IDS = Object.freeze([
     'accounting',
     'admin',
     'administrator',
+    'bitcoin',
+    'blockchain',
+    'ethereum',
+    'contact',
+    'help',
     'live',
-    'support',
+    'polkadot',
     'totem',
-    'trollbox',
+    'totemaccounting',
+    'totemlive',
 ])
-// initialize
-setTimeout(async () => {
-    // create an index for the field `roles`, ignores if already exists
-    const indexDefs = [{
-        index: { fields: ['roles'] },
-        name: 'roles-index',
-    }]
-    indexDefs.forEach(async (def) => await (await users.getDB()).createIndex(def))
-})
 
 // Broadcast message to all users except ignoreClientIds
 //
@@ -55,7 +55,7 @@ setTimeout(async () => {
 // @eventName        string: websocket event name
 // @params           array:  parameters to be supplied to the client
 export const broadcast = (ignoreClientIds, eventName, params) => {
-    if (!isStr(eventName)) return;
+    if (!isStr(eventName)) return
     ignoreClientIds = isArr(ignoreClientIds) ? ignoreClientIds : [ignoreClientIds]
     const clientIds = Array.from(clients).map(([clientId]) => clientId)
         .filter(id => ignoreClientIds.indexOf(id) === -1)
@@ -94,7 +94,7 @@ export const getSupportUsers = async () => {
         // select all messages to/from current user
         'roles': { '$all': [ROLE_SUPPORT] }
     }
-    return await users.search(selector, true, true, false, 99, 0, false)
+    return await users.search(selector, 99, 0, false)
 }
 
 // findUserByClientId seeks out user ID by connected client ID
@@ -150,7 +150,7 @@ export async function handleDisconnect() {
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
     userClientIds.set(user.id, arrUnique(clientIds))
-    console.info('Client disconnected: userId', user.id, ' | Client ID: ', client.id)
+    console.info('Client disconnected | User ID:', user.id, ' | Client ID: ', client.id)
 
     if (!onlineSupportUsers.get(user.id) || clientIds.length > 0) return
     // user is not online
@@ -203,11 +203,13 @@ export async function handleLogin(userId, secret, callback) {
     if (!isFn(callback)) return
     // prevent login with a reserved id
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
+    
     const client = this
     const user = await users.get(userId)
     const valid = user && user.secret === secret
-    console.info('Login ' + (!valid ? 'failed' : 'success') + ' | ID:', userId, '| Client ID: ', client.id)
+    console.info(`Login ${!valid ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
     if (!valid) return callback(messages.loginFailed)
+
     const { roles = [] } = user
     const clientIds = userClientIds.get(user.id) || []
     clientIds.push(client.id)
@@ -225,34 +227,52 @@ export async function handleLogin(userId, secret, callback) {
  * @param   {String}    userId 
  * @param   {String}    secret 
  * @param   {String}    referredBy (optional) referrer user ID
- * @param   {Function}  callback  args => @err string: error message if login fails
+ * @param   {Function}  callback  args => @err string: error message if registration fails
  */
 export async function handleRegister(userId, secret, referredBy, callback) {
     if (!isFn(callback)) return
     const client = this
-    // prevent registered user is attemping to register again!
+    // prevent registered user's attempt to register again!
     const user = await getUserByClientId(client.id)
-    console.log({ user })
     if (user) return callback(messages.alreadyRegistered)
     
     const newUser = {
         id: userId,
         referredBy,
+        tsCreated: new Date(),
         secret,
     }
     const err = validateObj(newUser, handleRegister.validationConfig, true, true)
     if (err) return callback(err)
-    userId = userId.trim() // get rid of any leading and trailing spaces
+
+    // get rid of any leading and trailing spaces
+    userId = userId.trim()
     // check if user ID already exists
     if (await idExists([userId])) return callback(messages.idExists)
+
+    const isReferrerValid = referredBy && await idExists([referredBy])
     // check if referrer ID is valid
-    if (referredBy && !(await idExists([referredBy]))) return callback(messages.invalidReferrerID)
+    if (referredBy && !isReferrerValid) return callback(messages.invalidReferralCode)
         
+    // save user data to database
     await users.set(userId, newUser)
+    // add to websocket client list
     clients.set(client.id, client)
+    // add client ID to user's clientId list
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
-    callback()
+    callback(null)
+
+    // notify referrer, if any
+    isReferrerValid && handleNotification.call(
+        [client, newUser, true],
+        [referredBy],
+        'chat',
+        'referralSuccess',
+        null,
+        null,
+        () => { }, // placeholder for required callback argument
+    )
 }
 handleRegister.validationConfig = {
     id: {
@@ -281,3 +301,12 @@ handleRegister.validationConfig = {
         type: TYPES.string,
     },
 }
+
+setTimeout(async () => {
+    // create an index for the field `roles`, ignores if already exists
+    const indexDefs = [{
+        index: { fields: ['roles'] },
+        name: 'roles-index',
+    }]
+    indexDefs.forEach(async (def) => await (await users.getDB()).createIndex(def))
+})

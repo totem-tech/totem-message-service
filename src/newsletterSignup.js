@@ -1,5 +1,5 @@
 import { TYPES, validateObj } from './utils/validator'
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { setTexts } from './language'
 import { isFn, objClean } from './utils/utils'
 

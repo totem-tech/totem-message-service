@@ -1,6 +1,6 @@
-import CouchDBStorage from './CouchDBStorage'
 import uuid from 'uuid'
-import { arrUnique, isArr, isFn, isObj, objHasKeys, isStr, objClean, objReadOnly } from './utils/utils'
+import CouchDBStorage from './utils/CouchDBStorage'
+import { isFn, isObj, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, idExists, RESERVED_IDS } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -51,15 +51,15 @@ const messages = setTexts({
     invalidParams: 'Invalid or missing required parameters',
     invalidUserId: 'Invalid User ID supplied',
 })
-let strict = false
-export const commonConfs = objReadOnly({
+export const commonConfs = {
     ethAddress: {
-        customMessages: { hex: messages.ethAddressError },
+        chainType: 'ethereum',
+        customMessages: { identity: messages.ethAddressError },
         // number of characters required including '0x'
         minLength: 42, 
         maxLength: 42,
         required: true,
-        type: TYPES.hex,
+        type: TYPES.identity,
     },
     identity: { required: true, type: TYPES.identity },
     idHash: { required: true, type: TYPES.hash },
@@ -67,8 +67,9 @@ export const commonConfs = objReadOnly({
     str3To160Required: { maxLength: 160, minLength: 3, required: true, type: TYPES.string },
     str3To64Required: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
-}, () => strict, true)
-commonConfs.location = { // validation config for a location
+}
+// validation config for a location
+commonConfs.location = {
     config: {
         addressLine1: commonConfs.str3To64Required,
         addressLine2: { ...commonConfs.str3To64Required, required: false },
@@ -81,7 +82,9 @@ commonConfs.location = { // validation config for a location
     required: false,
     type: TYPES.object,
 }
-strict = true
+Object.keys(commonConfs).forEach(key =>
+    commonConfs[key] = objReadOnly(commonConfs[key], true, true)
+)
 
 // @validate function: callback function to be executed before adding a notification.
 //                      Must return error string if any error occurs or notification should be void.
@@ -93,6 +96,17 @@ strict = true
 //                      @data       object : extra information, can be specific to the module
 //                      @message    string : message to be displayed, unless invitation type has custom view
 export const VALID_TYPES = Object.freeze({
+    chat: {
+        referralSuccess: {
+            // prevent any user to send this type of notification
+            // Only the application itself should be able to send this notification
+            validate: function () {
+                const [_c, _u, isSystem] = this
+                console.log({user: _u})
+                return !isSystem
+            },
+        }
+    },
     identity: {
         // user1 recommends user2 to share their identity with user3
         introduce: {
@@ -189,7 +203,7 @@ export const VALID_TYPES = Object.freeze({
                 projectName: { minLength: 3, required: true, type: TYPES.string },
                 workerAddress: { required: true, type: TYPES.identity },
             },
-            messageField: { ...commonConfs.str3To160, required: true },
+            messageField: commonConfs.str3To160Required,
         },
     },
     transfer: {
@@ -259,9 +273,6 @@ export async function handleNotificationGetRecent(tsLastReceived, callback) {
     // retrieve latest notifications
     let result = (await notifications.search(
         selector,
-        true,
-        true,
-        false,
         UNRECEIVED_LIMIT,
         0,
         true,
@@ -317,7 +328,7 @@ handleNotificationSetStatus.requireLogin = true
 // @callback    function : params: (@err string) 
 export async function handleNotification(recipients, type, childType, message, data, callback) {
     if (!isFn(callback)) return
-    const [client, user] = this
+    const [_, user] = this
     const senderId = user.id
 
     let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
@@ -359,7 +370,7 @@ export async function handleNotification(recipients, type, childType, message, d
 
     // if notification type has a handler function execute it
     const id = uuid.v1()
-    err = isFn(config.validate) && await config.validate.call(client, id, senderId, recipients, data, message)
+    err = isFn(config.validate) && await config.validate.call(this, id, senderId, recipients, data, message)
     if (err) return callback(err)
 
     const tsCreated = (new Date()).toISOString()

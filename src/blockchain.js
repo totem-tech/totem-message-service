@@ -28,6 +28,26 @@ export const recordTypes = {
 }
 
 /**
+ * @name                authorizeData
+ * @summary             Authorize off-chain data using BONSAI token from blockchain
+ * @param {String}      recordId ID of the record
+ * @param {String|*}    record  data used to generate BONSAI token for validation. 
+ *                          Non-string values will be converted to string.
+ * 
+ * @returns         false/string: if valid, will return false othewise , error message.
+ */
+export const authorizeData = async (recordId, record) => {
+    const token = generateHash(record)
+    const { api } = await getConnection()
+    const tokenX = await query(
+        api,
+        api.query.bonsai.isValidRecord,
+        recordId,
+    )
+    return token !== tokenX && messages.authFailed
+}
+
+/**
  * @name            getConnection
  * @summary         connection to Blockchain
  * @param {String}  nodeUrl 
@@ -50,24 +70,4 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
     connection.provider = provider
     connectionPromsie = null
     return connection
-}
-
-/**
- * @name                authorizeData
- * @summary             Authorize off-chain data using BONSAI token from blockchain
- * @param {String}      recordId ID of the record
- * @param {String|*}    record  data used to generate BONSAI token for validation. 
- *                          Non-string values will be converted to string.
- * 
- * @returns         false/string: if valid, will return false othewise , error message.
- */
-export const authorizeData = async (recordId, record) => {
-    const token = generateHash(record)
-    const { api } = await getConnection()
-    const tokenX = await query(
-        api,
-        api.query.bonsai.isValidRecord,
-        recordId,
-    )
-    return token !== tokenX && messages.authFailed
 }

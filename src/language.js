@@ -1,23 +1,24 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { clearClutter, generateHash, isStr, isFn } from './utils/utils'
 
 const translations = new CouchDBStorage(null, 'translations')
 let hashes = new Map()
 const buildMode = process.env.BuildMode === 'TRUE'
 const build = { enList: [] }
-const texts = setTexts({
+const messages = setTexts({
     invalidLang: 'Invalid/unsupported language code'
 })
 // store a hash of all texts for each language
 // the hash will be used to determine whether client already has the latest version of translation
-setTimeout(async () => {
+export const setup = async () => {
     hashes = new Map(
         Array.from(await translations.getAll())
-            .map(([code, { texts }]) =>
-                [code, generateHash(texts)]
-            )
+            .map(([code, { texts }]) => [
+                code,
+                generateHash(texts)
+            ])
     )
-})
+}
 
 export const handleLanguageErrorMessages = callback => isFn(callback) && callback(null, build.enList)
 
@@ -32,10 +33,10 @@ export const handleLanguageErrorMessages = callback => isFn(callback) && callbac
 export async function handleLanguageTranslations(langCode, textsHash, callback) {
     if (!isFn(callback)) return
 
-    if (!isStr(langCode)) return callback(texts.invalidLang)
+    if (!isStr(langCode)) return callback(messages.invalidLang)
 
     const { texts } = (await translations.get(langCode.toUpperCase())) || {}
-    if (!texts) return callback(texts.invalidLang)
+    if (!texts) return callback(messages.invalidLang)
 
     // client hash the latest version of translations. return empty null to indicate no update required
     const serverHash = hashes.get(langCode)
@@ -56,3 +57,5 @@ export function setTexts(texts = {}) {
     build.enList = build.enList.sort()
     return texts
 }
+
+setTimeout(setup)
