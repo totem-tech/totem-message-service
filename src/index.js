@@ -13,7 +13,7 @@ import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
 import { handleCurrencyConvert, handleCurrencyList } from './currencies'
-import { handlers as crowdsaleHanders } from './crowdsale/index'
+// import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
 import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
@@ -72,7 +72,7 @@ const events = {
     'currency-list': handleCurrencyList,
 
     // Crowdsale
-    ...crowdsaleHanders,
+    // ...crowdsaleHanders,
 
     // Faucet request
     'faucet-request': handleFaucetRequest,
