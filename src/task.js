@@ -1,8 +1,8 @@
-import CouchDBStorage from './CouchDBStorage'
-import { setTexts } from './language'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { isFn, objClean, isArr, arrUnique } from './utils/utils'
 import { TYPES, validateObj, validate } from './utils/validator'
 import { authorizeData, recordTypes } from './blockchain'
+import { setTexts } from './language'
 
 // Tasks database
 const storage = new CouchDBStorage(null, 'task')

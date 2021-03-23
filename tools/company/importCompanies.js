@@ -1,13 +1,13 @@
 import csv from 'csvtojson'
 import uuid from 'uuid'
-import { objClean, deferred, generateHash, textCapitalize, arrSort } from '../src/utils/utils'
+import { objClean, deferred, generateHash, textCapitalize, arrSort } from '../../src/utils/utils'
 import readline from 'readline'
 import fs from 'fs'
 import CouchDBStorage, { getConnection as getDBConnection } from '../src/CouchDBStorage'
-import { keyring as kr } from '../src/utils/polkadotHelper'
-import { getConnection } from '../src/blockchain'
-import { handleCountries } from '../src/countries'
-import DataStorage from '../../totem-ui/src/utils/DataStorage'
+import { keyring as kr } from '../../src/utils/polkadotHelper'
+import { getConnection } from '../../src/blockchain'
+import { handleCountries } from '../../src/countries'
+import DataStorage from '../../../totem-ui/src/utils/DataStorage'
 
 const url = process.env.CouchDB_URL
 const dbConnection = getDBConnection(url)

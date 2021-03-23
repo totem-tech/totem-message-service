@@ -1,14 +1,14 @@
 import request from 'request'
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import uuid from 'uuid'
 import { arrUnique, isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_IDS, ROLE_SUPPORT } from './users'
+import { TYPES, validateObj } from './utils/validator'
 
-const storage = new CouchDBStorage(null, 'messages')
+const chatMessages = new CouchDBStorage(null, 'messages')
 const TROLLBOX = 'trollbox' // for trollbox
 const TROLLBOX_ALT = 'everyone'
-const msgMaxLength = 160
 const RECENT_MESSAGE_LIMIT = 1000
 const DISCORD_WEBHOOK_URL_SUPPORT = process.env.DISCORD_WEBHOOK_URL_SUPPORT
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
@@ -16,11 +16,10 @@ const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 // Error messages
 const texts = setTexts({
     invalidRequest: 'Invalid request',
-    invalidUserID: 'Invalid User ID',
-    loginOrRegister: 'Login/registration required',
-    msgLengthExceeds: 'Maximum characters allowed',
-    groupNameRequired: 'Group name required',
-    nonGroupName: 'Cannot set name for one to one conversation'
+    invalidRecipientIds: 'One or more recipient ID is invalid',
+    groupName: 'Group Name',
+    groupNameNotAllowed: 'Cannot set name for one to one conversation',
+    recipients: 'recipients',
 })
 
 // initialize
@@ -37,33 +36,38 @@ setTimeout(async () => {
             name: 'receiverIds_timestamp-index',
         }
     ]
-    indexDefs.forEach(async (def) => await (await storage.getDB()).createIndex(def))
+    indexDefs.forEach(async (def) => await (await chatMessages.getDB()).createIndex(def))
 })
 
-// handle private, group and trollbox messages
-//
-// Params:
-// @receiverIds array: receiving User IDs without '@' sign
-// @message     string: encrypted or plain text message
-// @encrypted   bool: determines whether @message requires decryption
-// @callback    function: Arguments =>
-//                  @error  string: will include a message if invalid/failed request
+/**
+ * @name    handleMessage
+ * @summary handle event for private, group and trollbox chat messages
+ * 
+ * @param   {Array}     receiverIds recipient User IDs without '@' sign
+ * @param   {String}    message     encrypted or plain text message 
+ * @param   {Boolean}   encrypted   whether the @message is encrypted
+ * @param   {Function}  callback    Arguments =>
+ *                                  @error  string: will include a message if invalid/failed request
+ */
 export async function handleMessage(receiverIds = [], message = '', encrypted = false, callback) {
-    if (!isFn(callback)) return
-    if (!isStr(message) || message.trim().length === 0) return
-    if (message.length > msgMaxLength) return callback(texts.msgLengthExceeds)
     const [_, user] = this
+    if (!isFn(callback) || !user) return
+
     const event = 'message'
     const timestamp = new Date().toISOString()
-    if (!user) return callback(texts.loginOrRegister)
-
     const senderId = user.id
+    // convert single to array
     receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
+    const err = validateObj({ message, receiverIds }, handleMessage.validationConf, true, true)
+    if (err) return callback(err)
+
+    // include sender to make sure senders other devices receive the message as well
     receiverIds = arrUnique([...receiverIds, senderId]).sort()
     const args = [message, senderId, receiverIds, encrypted, timestamp]
     const isTrollbox = receiverIds.includes(TROLLBOX) || receiverIds.includes(TROLLBOX_ALT)
     const isSupportMsg = receiverIds.includes(ROLE_SUPPORT)
     const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
+    
     if (isTrollbox) {
         // handle trollbox messages
         args[2] = [TROLLBOX]
@@ -71,6 +75,8 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         broadcast([], event, args)
         return callback(null, timestamp)
     } else if (isSupportMsg) {
+        // makes sure support message isn't sent to trollbox even if user includes it
+        receiverIds = receiverIds.filter(id => ![TROLLBOX, TROLLBOX_ALT].includes(id))
         // handle support messages
         if (userIsSupport) {
             // exclude support member's ID as special system user ID "support" will take care of it
@@ -83,11 +89,8 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         }
         args[2] = receiverIds
     }
-    const prohibitedIds = RESERVED_IDS.filter(id => id !== ROLE_SUPPORT)
-    // handle private p2p or group message
-    const reservedIds = receiverIds.filter(id => prohibitedIds.includes(id))
-    if (reservedIds.length > 0) return callback(`${texts.invalidUserID}: ${reservedIds.join(', ')}`)
-    const { id } = await storage.set(null, {
+
+    const { id } = await chatMessages.set(null, {
         encrypted,
         message,
         receiverIds,
@@ -96,16 +99,13 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     })
     args[5] = id
 
-    let emitIds = [...receiverIds]
+    let userIds = [...receiverIds]
     if (isSupportMsg) {
         // include all support members
         const supportUsers = await getSupportUsers()
-        emitIds = arrUnique([
-            ...emitIds.filter(id => id !== ROLE_SUPPORT),
-            ...supportUsers.map(u => u.id),
-        ])
+        userIds = arrUnique([ ...userIds, ...supportUsers.map(u => u.id) ])
     }
-    emitToUsers(emitIds, event, args)
+    emitToUsers(userIds, event, args)
     callback(null, timestamp, id)
     if (!DISCORD_WEBHOOK_URL_SUPPORT || !isSupportMsg || userIsSupport) return
 
@@ -122,18 +122,37 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     }, err => err && console.log('Discord Webhook: failed to send support message. ', err))
 }
 handleMessage.requireLogin = true
+handleMessageGetRecent.validationConf = {
+    message: {
+        maxLength: 160,
+        required: true,
+        type: TYPES.string,
+    },
+    receiverIds: {
+        customMessages: {
+            reject: texts.invalidRecipientIds,
+        },
+        label: texts.recipients,
+        minLength: 1,
+        reject: RESERVED_IDS.filter(id => ![ROLE_SUPPORT, TROLLBOX, TROLLBOX_ALT].includes(id)),
+        required: true,
+        type: TYPES.array,
+        unique: true,
+    },
+}
 
-// get user's most recent messsages. Maximum of 1000
-//
-// Params:
-// @lastMessageTS   string: (optional) timestamp of the most recent message sent or received
-// @callback        function: args =>
-//                      @err        string: error message, if any
-//                      @messages   array: array of messages
+/**
+ * @name    handleMessageGetRecent
+ * @summary get user's most recent messsages. Maximum of 1000 
+ * 
+ * @param   {String}    lastMessageTS UTC timestamp
+ * @param   {*}         callback      Arguments =>
+ *                          @err        string: error message, if any
+ *                          @messages   array: array of messages
+ */
 export async function handleMessageGetRecent(lastMessageTS, callback) {
-    if (!isFn(callback)) return
     const [_, user] = this
-    if (!user) return callback(texts.loginOrRegister)
+    if (!isFn(callback) || !user) return
     const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
     let selector = {
         // select all messages to/from current user
@@ -150,27 +169,25 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     }
 
     const extraProps = { 'sort': [{ 'timestamp': 'asc' }] }
-    const result = await storage.search(selector, true, true, false, RECENT_MESSAGE_LIMIT, 0, false, extraProps)
+    const result = await chatMessages.search(selector, RECENT_MESSAGE_LIMIT, 0, false, extraProps)
     callback(null, result)
 }
 handleMessageGetRecent.requireLogin = true
 
-// set group name. anyone within the group can set group name.
-//
-// Params:
-// @receiverIds     array:
+/**
+ * @name    handleMessageGroupName
+ * @summary handle event to set a name for group conversation. Anyone within the group can set name.
+ * 
+ * @param   {Array}     receiverIds 
+ * @param   {String}    name 
+ * @param   {Function}  callback 
+ */
 export async function handleMessageGroupName(receiverIds, name, callback) {
-    if (!isFn(callback)) return
     const [_, user] = this
-    const reservedIds = receiverIds.filter(id => RESERVED_IDS.includes(id))
-    if (reservedIds.length > 0) return callback(`${texts.invalidUserID}: ${reservedIds.join(', ')}`)
-    if (!user) return callback(texts.loginOrRegister)
-    if (!isStr(name) || !name) return callback(texts.groupNameRequired)
-
+    if (!isFn(callback) || !user) return
     const senderId = user.id
-    receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
-    receiverIds = arrUnique([...receiverIds, senderId]).sort()
-    if (receiverIds.length <= 2) return callback(texts.nonGroupName)
+    const err = validateObj({ receiverIds, name }, handleMessageGroupName.validationConf, true, true)
+    if (err) return callback(err)
 
     const action = {
         data: [name],
@@ -179,7 +196,7 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
     const timestamp = new Date()
     const message = ''
     const encrypted = false
-    const { id } = await storage.set(null, {
+    const { id } = await chatMessages.set(null, {
         action,
         encrypted,
         message,
@@ -194,3 +211,24 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
     callback()
 }
 handleMessageGroupName.requireLogin = true
+handleMessageGroupName.validationConf = {
+    name: {
+        label: texts.groupName,
+        maxLength: 32,
+        minLength: 3,
+        required: true,
+        type: TYPES.string,
+    },
+    receiverIds: {
+        customMessages: {
+            minLength: texts.groupNameNotAllowed,
+            reject: texts.invalidRecipientIds,
+        },
+        label: texts.recipients,
+        minLength: 2,
+        reject: RESERVED_IDS,
+        required: true,
+        type: TYPES.array,
+        unique: true,
+    },
+}

@@ -1,9 +1,8 @@
-import CouchDBStorage from './CouchDBStorage'
+import CouchDBStorage from './utils/CouchDBStorage'
 import { mapJoin, isFn, isHash, isObj, hasValue, objClean, isAddress } from './utils/utils'
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'
 import { setTexts } from './language'
-import { getUserByClientId } from './users'
 
 const companies = new CouchDBStorage(null, 'companies') // disable caching
 // Must-have properties
@@ -108,7 +107,7 @@ export async function handleCompanySearch(query, searchParentIdentity = false, c
         for (let i = 0; i < selectors.length; i++) {
             if (result.size > 0 && !combine) return result
             const selector = selectors[i]
-            result = mapJoin(result, await companies.search(selector, true, true, false, RESULT_LIMIT))
+            result = mapJoin(result, await companies.search(selector, RESULT_LIMIT))
         }
         return result
     }

@@ -8,13 +8,14 @@ import socketIO from 'socket.io'
 import request from 'request'
 import uuid from 'uuid'
 import { isFn, isArr } from './utils/utils'
-import CouchDBStorage, { getConnection } from './CouchDBStorage'
+import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
 import { handleCurrencyConvert, handleCurrencyList } from './currencies'
+// import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts } from './language'
+import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
 import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
 import { handleMessage, handleMessageGetRecent, handleMessageGroupName } from './messages'
 import { handleProject, handleProjectsByHashes } from './projects'
@@ -29,26 +30,24 @@ import {
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
-import { handleDAA, handleKyc } from './DAA'
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
-const DISCORD_WEBHOOK_URL_SUPPORT = process.env.DISCORD_WEBHOOK_URL_SUPPORT
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
 const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const migrateFiles = process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO.listen(server)
+const socket = socketIO(server)
 // Error messages
 const texts = setTexts({
     loginRequired: 'Please login or create an account if you have not already done so',
     runtimeError: `
         Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
-        You can also email us as support@totemaccounting.com. 
+        You can also email us at support@totemaccounting.com. 
         Someone from the Totem team will get back to you as soon as possible.
         Don't forget to mention the following Request ID
     `,
@@ -72,9 +71,8 @@ const events = {
     'currency-convert': handleCurrencyConvert,
     'currency-list': handleCurrencyList,
 
-    // KYC && DAA
-    'KYC': handleKyc,
-    'DAA': handleDAA,
+    // Crowdsale
+    // ...crowdsaleHanders,
 
     // Faucet request
     'faucet-request': handleFaucetRequest,
@@ -114,13 +112,13 @@ const interceptHandler = (name, handler) => async function (...args) {
     if (name === 'message') {
         // pass on extra information along with the client
         client._data = {
-            DISCORD_WEBHOOK_URL_SUPPORT,
+            DISCORD_WEBHOOK_URL,
             DISCORD_WEBHOOK_AVATAR_URL,
             DISCORD_WEBHOOK_USERNAME,
         }
     }
     // last argument is expected to be the function
-    const callback = args.slice(-1)
+    const callback = args.slice(-1)[0]
     const hasCallback = isFn(callback)
     let user
 
@@ -140,11 +138,12 @@ const interceptHandler = (name, handler) => async function (...args) {
 
         // Print error meta data
         console.log([
-            `interceptHandler: uncaught error on event "${name}" handler.`,
+            '', // adds an empty line before
             `RequestID: ${requestId}.`,
-            // print the error stack trace
-            `Error: ${err}`,
+            `interceptHandler: uncaught error on event "${name}" handler.`,
         ].join('\n'))
+        // print the error stack trace
+        console.log(`${err}`, err.stack)
 
         if (!DISCORD_WEBHOOK_URL) return
 
@@ -157,9 +156,10 @@ const interceptHandler = (name, handler) => async function (...args) {
             user ? `**UserID:** ${user.id}` : '',
         ].join('\n')
         request({
-            url: DISCORD_WEBHOOK_URL,
-            method: "POST",
             json: true,
+            method: 'POST',
+            timeout: 30000,
+            url: DISCORD_WEBHOOK_URL,
             body: {
                 avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
                 content,
@@ -177,6 +177,7 @@ server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocke
 
 // attempt to establish a connection to database and exit application if fails
 try {
+    console.log('Connecting to CouchDB')
     getConnection(couchDBUrl)
     console.log('Connected to CouchDB')
 } catch (e) {
@@ -235,6 +236,8 @@ async function migrate(fileNames) {
 
         const result = await db.setAll(data, !allowUpdates.includes(dbName))
         const okIds = result.map(({ ok, id }) => ok && id).filter(Boolean)
+        // for re-generate hashes of translations for each language
+        if (dbName === 'translations' && okIds.length) setupLang()
         // remove saved entries
         okIds.forEach(id => data.delete(id))
         // update JSON file to remove migrated entries
