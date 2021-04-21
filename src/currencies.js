@@ -1,14 +1,25 @@
 import CouchDBStorage from './utils/CouchDBStorage'
-import { arrSort, generateHash, isFn, isStr, isValidNumber } from './utils/utils'
+import { arrSort, generateHash, isFn } from './utils/utils'
 import { setTexts } from './language'
 import { TYPES, validateObj } from './utils/validator'
 
 const currencies = new CouchDBStorage(null, 'currencies')
 let tickersHash = '' // hash of sorted array of supported currency tickers
+const hour = 60 * 60 * 1000
 const messages = setTexts({
     invalidRequest: 'Missing one or more of the required fields',
     notFound: 'Unsupported currency'
 })
+
+/**
+ * @name    autoUpdateHash
+ * @summary auto update hash of currencies list
+ */
+const autoUpdateHash = async () => {
+    const tickers = arrSort(await getAll(null, false), 'ISO')
+    tickersHash = generateHash(tickers)
+    setTimeout(autoUpdateHash, hour)
+}
 
 /**
  * @name    handleCurrencyConvert
@@ -114,7 +125,6 @@ setTimeout(async () => {
         index: { fields: ['ISO'] },
         name: 'ISO-index',
     }
-    const tickers = arrSort(await getAll(null, false), 'ISO')
-    tickersHash = generateHash(tickers)
     await (await currencies.getDB()).createIndex(indexDef)
+    autoUpdateHash()
 })

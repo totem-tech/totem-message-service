@@ -22,14 +22,19 @@ const messages = setTexts({
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
 // User IDs for use by the application ONLY.
+export const ROLE_SUPPORT = 'support'
 export const SYSTEM_IDS = Object.freeze([
-    'everyone',
     'here',
     'me',
+    // catch-all type support user ID
     'support',
+    // Troll bolx user IDs
+    'everyone',
     'trollbox',
+    // User ID for the Totem price aggregator micro service
+    // This will be used to trigger currency list hash update
+    'price_aggregator',
 ])
-export const ROLE_SUPPORT = 'support'
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([
     ...SYSTEM_IDS,
