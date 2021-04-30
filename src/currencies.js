@@ -19,11 +19,11 @@ const messages = setTexts({
 const autoUpdateHash = async () => {
     console.log(new Date(), 'Updating currencies cache')
     try {
-        currenciesPromise = getAll(null, false)
+        currenciesPromise = await getAll(null, false)
         currenciesHash = generateHash(arrSort(await currenciesPromise, 'ISO'))
         setTimeout(autoUpdateHash, autoRefreshDelay)
     } catch (err) {
-        console.log(new Date(), 'Failed to update cache', err)
+        console.error(new Date(), 'Failed to update currencies cache', err)
     }
 }
 
