@@ -2,8 +2,10 @@ import CouchDBStorage from './utils/CouchDBStorage'
 import { arrSort, generateHash, isFn } from './utils/utils'
 import { setTexts } from './language'
 import { TYPES, validateObj } from './utils/validator'
+import PromisE from './utils/PromisE'
 
 const currencies = new CouchDBStorage(null, 'currencies')
+const dailyHistoryDB = new CouchDBStorage(null, 'currency_price_history_daily')
 let currenciesHash // hash of sorted array of supported currencies
 let currenciesPromise
 const autoRefreshDelay = 60 * 60 * 1000
@@ -61,7 +63,7 @@ export const convertTo = async (from, to, amount) => {
         ? amount // conversion not required
         : (fromCurrency.ratioOfExchange / toCurrency.ratioOfExchange) * amount
     const rounded = convertedAmount.toFixed(parseFloat(toCurrency.decimals))
-    
+
     return [null, convertedAmount, rounded]
 }
 convertTo.validationConf = {
@@ -122,16 +124,39 @@ export const handleCurrencyList = async (hash, callback) => {
     if (!isFn(callback)) return
     // whether or not client needs to update the list of tickers
     if (hash === currenciesHash) return callback(null, [])
-    callback(null,  await currenciesPromise)
+    callback(null, await currenciesPromise)
 }
 
 // initialize
 setTimeout(async () => {
-    // create an index for the field `currency`, ignores if already exists
-    const indexDef = {
-        index: { fields: ['ISO'] },
-        name: 'ISO-index',
-    }
-    await (await currencies.getDB()).createIndex(indexDef)
+    const db = await currencies.getDB()
+    const dbH = await dailyHistoryDB.getDB()
+    const indexes = [
+        {
+            index: { fields: ['currency'] },
+            name: 'currency-index',
+        },
+        {
+            index: { fields: ['name'] },
+            name: 'name-index',
+        },
+        {
+            index: { fields: ['type'] },
+            name: 'type-index',
+        },
+    ]
+    const indexes2 = [
+        {
+            index: { fields: [{ 'date': 'desc' }] },
+            name: 'date-index',
+        },
+        {
+            index: { fields: [{ 'ticker': 'desc' }] },
+            name: 'ticker-index',
+        },
+    ]
+    // create indexes. Ignore if already exists
+    await PromisE.all(indexes.map(index => db.createIndex(index)))
+    await PromisE.all(indexes2.map(index => dbH.createIndex(index)))
     autoUpdateHash()
 })

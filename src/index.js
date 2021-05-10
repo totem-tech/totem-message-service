@@ -39,7 +39,7 @@ const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
 const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
-const migrateFiles = process.env.MigrateFiles
+const importFiles = process.env.ImportFiles || process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO(server)
 // Error messages
@@ -100,7 +100,7 @@ const events = {
     // Project
     'project': handleProject,
     'projects-by-hashes': handleProjectsByHashes,
-    
+
     // Task 
     'task': handleTask,
     'task-get-by-id': handleTaskGetById,
@@ -184,12 +184,12 @@ try {
     console.log('CouchDB: connection failed. Error:\n', e)
     process.exit(1)
 }
-if (!!migrateFiles) setTimeout(() => migrate(migrateFiles), 1000)
+if (!!importFiles) setTimeout(() => importToDB(importFiles), 1000)
 
-// Migrate JSON file storage to CouchDB.
+// Import data from JSON file storage to CouchDB.
 // Existing entries will be ignored and will remain in the JSON file.
 // Successfully stored entries will be removed from JSON file.
-async function migrate(fileNames) {
+async function importToDB(fileNames) {
     const filesAr = fileNames.split(',')
         // only include json file names
         .filter(x => x.endsWith('.json'))
@@ -227,20 +227,45 @@ async function migrate(fileNames) {
         )
 
         // wrap array value in an object as required by couchdb
-        if (!!arrKeys[dbName]) Array.from(data).forEach(([id, arr]) => {
-            if (!isArr(arr)) return
-            const value = {}
-            value[arrKeys[dbName] || 'array'] = arr
-            data.set(id, value)
-        })
+        if (!!arrKeys[dbName]) Array.from(data)
+            .forEach(([id, arr]) => {
+                if (!isArr(arr)) return
+                const value = {}
+                value[arrKeys[dbName] || 'array'] = arr
+                data.set(id, value)
+            })
 
+        // database specific modifications before submission
+        switch (dbName) {
+            case 'currencies':
+                // convert ratioOfExchange and decimals to integer
+                Array.from(data)
+                    .forEach(([_, value]) => {
+                        value.ratioOfExchange = parseInt(value.ratioOfExchange)
+                        value.decimals = parseInt(value.decimals)
+                        value.sequence = parseInt(value.sequence)
+                    })
+                break
+        }
+
+        // insert data into database
         const result = await db.setAll(data, !allowUpdates.includes(dbName))
-        const okIds = result.map(({ ok, id }) => ok && id).filter(Boolean)
-        // for re-generate hashes of translations for each language
-        if (dbName === 'translations' && okIds.length) setupLang()
-        // remove saved entries
+        // IDs of successful inserts
+        const okIds = result
+            .map(({ ok, id }) => ok && id)
+            .filter(Boolean)
+
+        // database specifc post-save actions 
+        switch (dbName) {
+            case 'translations':
+                // re-generate hashes of translated texts for each language
+                okIds.length && setupLang()
+                break
+        }
+
+        // remove saved entries from the JSON file
         okIds.forEach(id => data.delete(id))
-        // update JSON file to remove migrated entries
+        // update JSON file to remove imported entries
         jsonStorage.setAll(data)
         console.log(`${file} => saved: ${okIds.length}. Ignored existing: ${total - okIds.length}`)
     }
