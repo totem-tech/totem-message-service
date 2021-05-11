@@ -39,7 +39,7 @@ const autoUpdateHash = async () => {
  * 
  * @returns {Array}     [
  *                          @err                String: error message if any,
- *                          @convertedAmount    Number:
+ *                          @convertedAmount    Number: converted amount without rounding
  *                          @rounded            String: converted amount rounded to appropriate decimal places
  *                      ]
  */
@@ -62,7 +62,7 @@ export const convertTo = async (from, to, amount) => {
     const rounded = convertedAmount.toFixed(parseFloat(decimals + 2))
 
     return [
-        null,
+        null, // no errors
         convertedAmount,
         rounded.substr(0, rounded.length - (!decimals ? 3 : 2)),
     ]
