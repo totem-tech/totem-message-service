@@ -1,7 +1,7 @@
 import CouchDBStorage from './utils/CouchDBStorage'
 import { arrSort, generateHash, isFn } from './utils/utils'
 import { setTexts } from './language'
-import { TYPES, validateObj } from './utils/validator'
+import { TYPES, validate, validateObj } from './utils/validator'
 import PromisE from './utils/PromisE'
 
 const currencies = new CouchDBStorage(null, 'currencies')
@@ -93,6 +93,58 @@ convertTo.validationConf = {
  * @returns {Array|Map}
  */
 const getAll = async (ids = null, asMap = true, limit = 9999) => await currencies.getAll(ids, asMap, limit)
+
+/**
+ * @name    getClosingPriceByDate
+ * @summary retrieve currency closing price for a specific date
+ * 
+ * @param   {Date}      date 
+ * @param   {Array}     currencyIDs (optional) list of specific currency IDs. 
+ *                                  If empty, will return all available prices for the date.
+ * @param   {Function}  callback    args =>
+ *                                      - err    string: error message if request failed
+ *                                      - result array: list of prices
+ * @example ```javascript
+ * 
+ * // Example @result:
+ * [ {
+ *      currencyID: 'A.stock', 
+ *      ratioOfExchange: 100000000 
+ * } ]
+ * ```
+ */
+export const handleCurrencyPricesByDate = async (date, currencyIDs, callback) => {
+    if (!isFn(callback)) return
+
+    const { validatorConf } = handleCurrencyPricesByDate
+    const err = validateObj({ date, currencyIDs }, validatorConf, true, true)
+    if (err) return callback(err)
+
+    const selector = { date }
+    const limit = currencyIDs.length || (await currenciesPromise).length
+    if (currencyIDs.length) {
+        selector.currencyID = { $in: currencyIDs }
+    }
+    const result = await dailyHistoryDB.search(selector, limit, 0, false, {
+        fields: [
+            'currencyID',
+            'ratioOfExchange',
+        ]
+    })
+    callback(null, result)
+}
+handleCurrencyPricesByDate.validatorConf = {
+    currencyIDs: {
+        required: false,
+        type: TYPES.array,
+    },
+    date: {
+        maxLength: 10,
+        minLength: 10,
+        required: true,
+        type: TYPES.date,
+    },
+}
 
 /**
  * @name    handleCurrencyConvert

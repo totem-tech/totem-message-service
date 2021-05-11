@@ -12,7 +12,7 @@ import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
-import { handleCurrencyConvert, handleCurrencyList } from './currencies'
+import { handleCurrencyConvert, handleCurrencyList, handleCurrencyPricesByDate } from './currencies'
 // import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
@@ -70,6 +70,7 @@ const events = {
     // Currency
     'currency-convert': handleCurrencyConvert,
     'currency-list': handleCurrencyList,
+    'currency-prices-by-date': handleCurrencyPricesByDate,
 
     // Crowdsale
     // ...crowdsaleHanders,
