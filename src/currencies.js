@@ -22,7 +22,7 @@ const autoUpdateHash = async () => {
     console.log(new Date(), 'Updating currencies cache')
     try {
         currenciesPromise = await getAll(null, false)
-        currenciesHash = generateHash(arrSort(await currenciesPromise, 'ISO'))
+        currenciesHash = generateHash(arrSort(await currenciesPromise, 'ticker'))
         setTimeout(autoUpdateHash, autoRefreshDelay)
     } catch (err) {
         console.error(new Date(), 'Failed to update currencies cache', err)
@@ -33,8 +33,8 @@ const autoUpdateHash = async () => {
  * @name    handleCurrencyConvert
  * @summary handle currency conversion requests
  * 
- * @param   {String}    from        source currency ticker (ISO string). Eg: USD
- * @param   {String}    to          target currency ticker (ISO string). Eg: EUR.
+ * @param   {String}    from        source currency ID or ticker
+ * @param   {String}    to          target currency ID or ticker
  * @param   {Number}    amount      the amount to convert to @to currency
  * 
  * @returns {Array}     [
@@ -47,24 +47,25 @@ export const convertTo = async (from, to, amount) => {
     const err = validateObj({ amount, from, to }, convertTo.validationConf)
     if (err) return [err]
 
-    const fromCurrency = await currencies.find({
-        ISO: from.toUpperCase(),
-    }, true, true, false)
+    const fromCurrency = await currencies.get(from) || await currencies.find({ ticker: from })
     if (!fromCurrency) return [`${messages.notFound}: ${from}`]
 
     const toCurrency = from === to
         ? fromCurrency
-        : await currencies.find({
-            ISO: to.toUpperCase(),
-        }, true, true, false)
+        : await currencies.get(to) || await currencies.find({ ticker: to })
     if (!toCurrency) return [`${messages.notFound}: ${to}`]
 
+    const { decimals = 0 } = toCurrency
     const convertedAmount = from === to
         ? amount // conversion not required
         : (fromCurrency.ratioOfExchange / toCurrency.ratioOfExchange) * amount
-    const rounded = convertedAmount.toFixed(parseFloat(toCurrency.decimals))
+    const rounded = convertedAmount.toFixed(parseFloat(decimals + 2))
 
-    return [null, convertedAmount, rounded]
+    return [
+        null,
+        convertedAmount,
+        rounded.substr(0, rounded.length - (!decimals ? 3 : 2)),
+    ]
 }
 convertTo.validationConf = {
     amount: {
@@ -97,8 +98,8 @@ const getAll = async (ids = null, asMap = true, limit = 9999) => await currencie
  * @name    handleCurrencyConvert
  * @summary handle currency conversion requests
  * 
- * @param   {String}    from        source currency ticker (ISO string). Eg: USD
- * @param   {String}    to          target currency ticker (ISO string). Eg: EUR.
+ * @param   {String}    from        source currency ID
+ * @param   {String}    to          target currency ID
  * @param   {Number}    amount      the amount to convert to @to currency
  * @param   {Function}  callback    arguments => 
  *                                  @err                string: error message if request failed
@@ -107,7 +108,7 @@ const getAll = async (ids = null, asMap = true, limit = 9999) => await currencie
 export const handleCurrencyConvert = async (from, to, amount, callback) => {
     if (!isFn(callback)) return
 
-    const [err, convertedAmount, rounded] = convertTo(from, to, amount)
+    const [err, convertedAmount, rounded] = await convertTo(from, to, amount)
     callback(err, convertedAmount, rounded)
 }
 
@@ -139,6 +140,10 @@ setTimeout(async () => {
         {
             index: { fields: ['name'] },
             name: 'name-index',
+        },
+        {
+            index: { fields: ['ticker'] },
+            name: 'ticker-index',
         },
         {
             index: { fields: ['type'] },
