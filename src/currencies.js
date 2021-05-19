@@ -36,6 +36,7 @@ const autoUpdateHash = async () => {
  * @param   {String}    from        source currency ID or ticker
  * @param   {String}    to          target currency ID or ticker
  * @param   {Number}    amount      the amount to convert to @to currency
+ * @param   {String}    date        (optional)
  * 
  * @returns {Array}     [
  *                          @err                String: error message if any,
@@ -43,7 +44,7 @@ const autoUpdateHash = async () => {
  *                          @rounded            String: converted amount rounded to appropriate decimal places
  *                      ]
  */
-export const convertTo = async (from, to, amount) => {
+export const convertTo = async (from, to, amount, date) => {
     const err = validateObj({ amount, from, to }, convertTo.validationConf)
     if (err) return [err]
 
@@ -109,6 +110,7 @@ const getAll = async (ids = null, asMap = true, limit = 9999) => await currencie
  * // Example @result:
  * [ {
  *      currencyID: 'A.stock', 
+ *      date: '2020-01-01',
  *      ratioOfExchange: 100000000 
  * } ]
  * ```
@@ -127,7 +129,7 @@ export const handleCurrencyPricesByDate = async (date, currencyIDs, callback) =>
     }
     const result = await dailyHistoryDB.search(selector, limit, 0, false, {
         fields: [
-            'currencyID',
+            'currencyId',
             'ratioOfExchange',
         ]
     })
@@ -204,12 +206,12 @@ setTimeout(async () => {
     ]
     const indexes2 = [
         {
-            index: { fields: [{ 'date': 'desc' }] },
+            index: { fields: [{ date: 'desc' }] },
             name: 'date-index',
         },
         {
-            index: { fields: [{ 'ticker': 'desc' }] },
-            name: 'ticker-index',
+            index: { fields: [{ date: 'desc' }, { currencyId: 'desc' }] },
+            name: 'date-currencyId-index',
         },
     ]
     // create indexes. Ignore if already exists
