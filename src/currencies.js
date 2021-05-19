@@ -100,7 +100,7 @@ const getAll = async (ids = null, asMap = true, limit = 9999) => await currencie
  * @summary retrieve currency closing price for a specific date
  * 
  * @param   {Date}      date 
- * @param   {Array}     currencyIDs (optional) list of specific currency IDs. 
+ * @param   {Array}     currencyIds (optional) list of specific currency IDs. 
  *                                  If empty, will return all available prices for the date.
  * @param   {Function}  callback    args =>
  *                                      - err    string: error message if request failed
@@ -115,17 +115,17 @@ const getAll = async (ids = null, asMap = true, limit = 9999) => await currencie
  * } ]
  * ```
  */
-export const handleCurrencyPricesByDate = async (date, currencyIDs, callback) => {
+export const handleCurrencyPricesByDate = async (date, currencyIds, callback) => {
     if (!isFn(callback)) return
 
     const { validatorConf } = handleCurrencyPricesByDate
-    const err = validateObj({ date, currencyIDs }, validatorConf, true, true)
+    const err = validateObj({ date, currencyIDs: currencyIds }, validatorConf, true, true)
     if (err) return callback(err)
 
     const selector = { date }
-    const limit = currencyIDs.length || (await currenciesPromise).length
-    if (currencyIDs.length) {
-        selector.currencyID = { $in: currencyIDs }
+    const limit = currencyIds.length || (await currenciesPromise).length
+    if (currencyIds.length) {
+        selector.currencyID = { $in: currencyIds }
     }
     const result = await dailyHistoryDB.search(selector, limit, 0, false, {
         fields: [
