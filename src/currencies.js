@@ -5,7 +5,7 @@ import { TYPES, validate, validateObj } from './utils/validator'
 import PromisE from './utils/PromisE'
 
 const currencies = new CouchDBStorage(null, 'currencies')
-const dailyHistoryDB = new CouchDBStorage(null, 'currency_price_history_daily')
+const dailyHistoryDB = new CouchDBStorage(null, 'currency_price-history-daily')
 let currenciesHash // hash of sorted array of supported currencies
 let currenciesPromise
 const autoRefreshDelay = 60 * 60 * 1000
