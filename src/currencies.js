@@ -162,11 +162,12 @@ export const handleCurrencyPricesByDate = async (date, currencyIds, callback) =>
     const selector = { date }
     const limit = currencyIds.length || (await currenciesPromise).length
     if (currencyIds.length) {
-        selector.currencyID = { $in: currencyIds }
+        selector.currencyId = { $in: currencyIds }
     }
     const result = await dailyHistoryDB.search(selector, limit, 0, false, {
         fields: [
             'currencyId',
+            'marketCapUSD',
             'ratioOfExchange',
         ]
     })
