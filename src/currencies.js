@@ -164,13 +164,7 @@ export const handleCurrencyPricesByDate = async (date, currencyIds, callback) =>
     if (currencyIds.length) {
         selector.currencyId = { $in: currencyIds }
     }
-    const result = await dailyHistoryDB.search(selector, limit, 0, false, {
-        fields: [
-            'currencyId',
-            'marketCapUSD',
-            'ratioOfExchange',
-        ]
-    })
+    const result = await dailyHistoryDB.search(selector, limit, 0, false)
     callback(null, result)
 }
 handleCurrencyPricesByDate.validatorConf = {
