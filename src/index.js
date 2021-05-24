@@ -12,7 +12,12 @@ import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
-import { handleCurrencyConvert, handleCurrencyList, handleCurrencyPricesByDate } from './currencies'
+import {
+    handleCurrencyConvert,
+    handleCurrencyList,
+    handleCurrencyPricesByDate,
+    updateCache
+} from './currencies'
 // import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest } from './faucetRequests'
 import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
@@ -258,6 +263,10 @@ async function importToDB(fileNames) {
 
         // database specifc post-save actions 
         switch (dbName) {
+            case 'currencies':
+                // regenerate currencies cache
+                updateCache()
+                break
             case 'translations':
                 // re-generate hashes of translated texts for each language
                 okIds.length && setupLang()

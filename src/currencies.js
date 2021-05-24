@@ -18,7 +18,7 @@ const messages = setTexts({
  * @name    autoUpdateHash
  * @summary auto update hash of currencies list
  */
-const autoUpdateHash = async () => {
+export const updateCache = async (auto = false) => {
     console.log(new Date(), 'Updating currencies cache')
     try {
         currenciesPromise = getAll(null, false)
@@ -26,7 +26,7 @@ const autoUpdateHash = async () => {
             arrSort(await currenciesPromise, 'ticker'),
             'blake2',
         )
-        setTimeout(autoUpdateHash, autoRefreshDelay)
+        auto && setTimeout(updateCache, autoRefreshDelay)
     } catch (err) {
         console.error(new Date(), 'Failed to update currencies cache', err)
     }
@@ -216,5 +216,5 @@ setTimeout(async () => {
     // create indexes. Ignore if already exists
     await PromisE.all(indexes.map(index => db.createIndex(index)))
     await PromisE.all(indexes2.map(index => dbH.createIndex(index)))
-    autoUpdateHash()
+    updateCache(true)
 })
