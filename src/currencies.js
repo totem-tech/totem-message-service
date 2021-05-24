@@ -21,8 +21,11 @@ const messages = setTexts({
 const autoUpdateHash = async () => {
     console.log(new Date(), 'Updating currencies cache')
     try {
-        currenciesPromise = await getAll(null, false)
-        currenciesHash = generateHash(arrSort(await currenciesPromise, 'ticker'))
+        currenciesPromise = getAll(null, false)
+        currenciesHash = generateHash(
+            arrSort(await currenciesPromise, 'ticker'),
+            'blake2',
+        )
         setTimeout(autoUpdateHash, autoRefreshDelay)
     } catch (err) {
         console.error(new Date(), 'Failed to update currencies cache', err)
@@ -96,59 +99,6 @@ convertTo.validationConf = {
 const getAll = async (ids = null, asMap = true, limit = 9999) => await currencies.getAll(ids, asMap, limit)
 
 /**
- * @name    getClosingPriceByDate
- * @summary retrieve currency closing price for a specific date
- * 
- * @param   {Date}      date 
- * @param   {Array}     currencyIds (optional) list of specific currency IDs. 
- *                                  If empty, will return all available prices for the date.
- * @param   {Function}  callback    args =>
- *                                      - err    string: error message if request failed
- *                                      - result array: list of prices
- * @example ```javascript
- * 
- * // Example @result:
- * [ {
- *      currencyID: 'A.stock', 
- *      date: '2020-01-01',
- *      ratioOfExchange: 100000000 
- * } ]
- * ```
- */
-export const handleCurrencyPricesByDate = async (date, currencyIds, callback) => {
-    if (!isFn(callback)) return
-
-    const { validatorConf } = handleCurrencyPricesByDate
-    const err = validateObj({ date, currencyIDs: currencyIds }, validatorConf, true, true)
-    if (err) return callback(err)
-
-    const selector = { date }
-    const limit = currencyIds.length || (await currenciesPromise).length
-    if (currencyIds.length) {
-        selector.currencyID = { $in: currencyIds }
-    }
-    const result = await dailyHistoryDB.search(selector, limit, 0, false, {
-        fields: [
-            'currencyId',
-            'ratioOfExchange',
-        ]
-    })
-    callback(null, result)
-}
-handleCurrencyPricesByDate.validatorConf = {
-    currencyIDs: {
-        required: false,
-        type: TYPES.array,
-    },
-    date: {
-        maxLength: 10,
-        minLength: 10,
-        required: true,
-        type: TYPES.date,
-    },
-}
-
-/**
  * @name    handleCurrencyConvert
  * @summary handle currency conversion requests
  * 
@@ -180,6 +130,60 @@ export const handleCurrencyList = async (hash, callback) => {
     // whether or not client needs to update the list of tickers
     if (hash === currenciesHash) return callback(null, [])
     callback(null, await currenciesPromise)
+}
+
+/**
+ * @name    getClosingPriceByDate
+ * @summary retrieve currency closing price for a specific date
+ * 
+ * @param   {Date}      date 
+ * @param   {Array}     currencyIds (optional) list of specific currency IDs. 
+ *                                  If empty, will return all available prices for the date.
+ * @param   {Function}  callback    args =>
+ *                                      - err    string: error message if request failed
+ *                                      - result array: list of prices
+ * @example ```javascript
+ * 
+ * // Example @result:
+ * [ {
+ *      currencyID: 'A.stock', 
+ *      date: '2020-01-01',
+ *      ratioOfExchange: 100000000 
+ * } ]
+ * ```
+ */
+export const handleCurrencyPricesByDate = async (date, currencyIds, callback) => {
+    if (!isFn(callback)) return
+
+    const { validatorConf } = handleCurrencyPricesByDate
+    const err = validateObj({ date, currencyIds }, validatorConf, true, true)
+    if (err) return callback(err)
+
+    const selector = { date }
+    const limit = currencyIds.length || (await currenciesPromise).length
+    if (currencyIds.length) {
+        selector.currencyID = { $in: currencyIds }
+    }
+    const result = await dailyHistoryDB.search(selector, limit, 0, false, {
+        fields: [
+            'currencyId',
+            'ratioOfExchange',
+        ]
+    })
+    callback(null, result)
+}
+handleCurrencyPricesByDate.validatorConf = {
+    currencyIds: {
+        required: false,
+        type: TYPES.array,
+        unique: true,
+    },
+    date: {
+        maxLength: 10,
+        minLength: 10,
+        required: true,
+        type: TYPES.date,
+    },
 }
 
 // initialize
