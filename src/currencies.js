@@ -133,7 +133,7 @@ export const handleCurrencyList = async (hash, callback) => {
 }
 
 /**
- * @name    getClosingPriceByDate
+ * @name    handleCurrencyPricesByDate
  * @summary retrieve currency closing price for a specific date
  * 
  * @param   {Date}      date 
@@ -160,11 +160,15 @@ export const handleCurrencyPricesByDate = async (date, currencyIds, callback) =>
     if (err) return callback(err)
 
     const selector = { date }
-    const limit = currencyIds.length || (await currenciesPromise).length
+    const limit = currencyIds.length || 99999
     if (currencyIds.length) {
         selector.currencyId = { $in: currencyIds }
     }
-    const result = await dailyHistoryDB.search(selector, limit, 0, false)
+    const result = await PromisE.timeout(
+        dailyHistoryDB.search(selector, limit, 0, false),
+        10000, // times out after 10 seconds
+    )
+
     callback(null, result)
 }
 handleCurrencyPricesByDate.validatorConf = {
