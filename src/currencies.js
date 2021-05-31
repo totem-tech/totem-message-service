@@ -5,7 +5,7 @@ import { TYPES, validate, validateObj } from './utils/validator'
 import PromisE from './utils/PromisE'
 
 const currencies = new CouchDBStorage(null, 'currencies')
-const dailyHistoryDB = new CouchDBStorage(null, 'currency_price-history-daily')
+const dailyHistoryDB = new CouchDBStorage(null, 'currencies_price-history-daily')
 let currenciesHash // hash of sorted array of supported currencies
 let currenciesPromise
 const autoRefreshDelay = 60 * 60 * 1000
@@ -18,7 +18,7 @@ const messages = setTexts({
  * @name    autoUpdateHash
  * @summary auto update hash of currencies list
  */
-const autoUpdateHash = async () => {
+export const updateCache = async (auto = false) => {
     console.log(new Date(), 'Updating currencies cache')
     try {
         currenciesPromise = getAll(null, false)
@@ -26,7 +26,7 @@ const autoUpdateHash = async () => {
             arrSort(await currenciesPromise, 'ticker'),
             'blake2',
         )
-        setTimeout(autoUpdateHash, autoRefreshDelay)
+        auto && setTimeout(updateCache, autoRefreshDelay)
     } catch (err) {
         console.error(new Date(), 'Failed to update currencies cache', err)
     }
@@ -133,7 +133,7 @@ export const handleCurrencyList = async (hash, callback) => {
 }
 
 /**
- * @name    getClosingPriceByDate
+ * @name    handleCurrencyPricesByDate
  * @summary retrieve currency closing price for a specific date
  * 
  * @param   {Date}      date 
@@ -160,11 +160,15 @@ export const handleCurrencyPricesByDate = async (date, currencyIds, callback) =>
     if (err) return callback(err)
 
     const selector = { date }
-    const limit = currencyIds.length || (await currenciesPromise).length
+    const limit = currencyIds.length || 99999
     if (currencyIds.length) {
         selector.currencyId = { $in: currencyIds }
     }
-    const result = await dailyHistoryDB.search(selector, limit, 0, false)
+    const result = await PromisE.timeout(
+        dailyHistoryDB.search(selector, limit, 0, false),
+        10000, // times out after 10 seconds
+    )
+
     callback(null, result)
 }
 handleCurrencyPricesByDate.validatorConf = {
@@ -216,5 +220,5 @@ setTimeout(async () => {
     // create indexes. Ignore if already exists
     await PromisE.all(indexes.map(index => db.createIndex(index)))
     await PromisE.all(indexes2.map(index => dbH.createIndex(index)))
-    autoUpdateHash()
+    updateCache(true)
 })
