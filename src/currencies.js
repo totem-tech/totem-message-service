@@ -26,7 +26,7 @@ export const updateCache = async (auto = false) => {
             arrSort(await currenciesPromise, 'ticker'),
             'blake2',
         )
-        auto && setTimeout(updateCache, autoRefreshDelay)
+        auto && setTimeout(() => updateCache(true), autoRefreshDelay)
     } catch (err) {
         console.error(new Date(), 'Failed to update currencies cache', err)
     }
