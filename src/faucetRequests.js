@@ -57,7 +57,7 @@ const setVariables = () => {
     // environment variables
     EXTERNAL_PUBLIC_KEY = process.env.external_publicKey
     EXTERNAL_SERVER_NAME = process.env.external_serverName
-    const serverName = process.env.serverName    
+    const serverName = process.env.serverName
     const printData = process.env.printSensitiveData === "YES"
     if (!serverName) return 'Missing environment variable: "serverName"'
     if (!EXTERNAL_PUBLIC_KEY) return 'Missing environment variable: "external_serverName"'
@@ -84,7 +84,7 @@ const setVariables = () => {
     console.log('serverName: ', serverName, '\n')
     console.log('keyData: ', KEY_DATA, '\n')
     // only to check if keydata/encoded text is correct
-    console.log('walletAddress: ', keyInfoFromKeyData(KEY_DATA).address, '\n') 
+    console.log('walletAddress: ', keyInfoFromKeyData(KEY_DATA).address, '\n')
     console.log('Encryption KeyPair: ', encryptPair, '\n')
     console.log('Signature KeyPair: ', signKeyPair, '\n')
     console.log('external_serverName: ', EXTERNAL_SERVER_NAME)
@@ -100,7 +100,7 @@ export async function handleFaucetRequest(address, callback) {
     if (!faucetClient.connected) throw texts.faucetServerDown
     const err = setVariables()
     if (err) throw err
-    
+
     const [_, user] = this
     if (!user) return callback(texts.loginOrRegister)
     let { requests } = (await faucetRequests.get(user.id)) || {}
@@ -120,7 +120,7 @@ export async function handleFaucetRequest(address, callback) {
     }
     const request = {
         address,
-        timestamp: (new Date()).toISOString(),
+        timestamp: new Date().toISOString(),
         funded: false
     }
     requests.push(request)
@@ -182,7 +182,7 @@ export const emitEncryptedToFaucetServer = async (eventName, data, timeout = 600
                 nonce,
                 (err, result) => resolve([err, result]) ,
             )
-        } catch (err) { 
+        } catch (err) {
             reject(err)
         }
     }, timeout)

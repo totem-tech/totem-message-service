@@ -59,7 +59,7 @@ export async function handleProject(hash, project, create, callback) {
     const authErr = await authorizeData(hash, project)
     if (authErr) return callback(authErr)
 
-    project.tsCreated = (existingProject || {}).createdAt || (new Date()).toISOString()
+    project.tsCreated = (existingProject || {}).createdAt || new Date().toISOString()
     project.tsUpdated = new Date().toISOString()
 
     // store user information
