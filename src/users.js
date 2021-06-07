@@ -1,6 +1,6 @@
 import { Subject } from 'rxjs'
 import CouchDBStorage from './utils/CouchDBStorage'
-import { arrUnique, isArr, isFn, isStr } from './utils/utils'
+import { arrUnique, isArr, isFn, isObj, isStr } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { setTexts } from './language'
 
@@ -244,7 +244,7 @@ export async function handleLogin(userId, secret, callback) {
  * @param   {String}            referredBy.platform Social media platform identitifier. Eg: "twitter"
  * @param   {Function}  callback  args => @err string: error message if registration fails
  */
-export async function handleRegister(userId, secret, referredBy, callback) {
+export async function handleRegister(userId, secret, address, referredBy, callback) {
     if (!isFn(callback)) return
     const client = this
     // prevent registered user's attempt to register again!
@@ -252,6 +252,7 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     if (user) return callback(messages.alreadyRegistered)
 
     const newUser = {
+        address,
         id: userId,
         tsCreated: new Date(),
         secret,
@@ -271,10 +272,11 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     if (await idExists([userId])) return callback(messages.idExists)
 
     let selector = isObj(referredBy)
-        ? referredBy
+        ? { referredBy }
         : { id: referredBy }
     // continue sign up even if referral code is invalid
     const referrer = await users.find(selector, {}, 10000) || {}
+    console.log({ referredBy, referrer })
     referredBy = referrer.id
 
     // save user data to database
@@ -284,13 +286,14 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     // add client ID to user's clientId list
     userClientIds.set(userId, [client.id])
     console.info('New User registered:', userId)
-    callback(null)
 
     rxUserRegistered.next({
-        userId,
+        address,
         clientId: client.id,
+        userId,
         referredBy,
     })
+    callback(null)
 }
 handleRegister.validationConfig = {
     id: {
