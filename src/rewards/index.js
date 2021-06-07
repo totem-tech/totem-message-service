@@ -14,12 +14,14 @@ const debugTag = '[rewards]'
 rxUserRegistered.subscribe(async ({ address, userId, referredBy }) => {
     try {
         // pay signup reward to the user
-        await signupPayout(userId, address)
+        let err = await signupPayout(userId, address)
+        if (err) console.log(debugTag, 'Signup reward payment faild: ', err)
 
         // pay referral reward (if any)
         if (!referredBy) return
 
-        await referralPayout(referredBy, userId)
+        err = await referralPayout(referredBy, userId)
+        if (err) console.log(debugTag, 'Referral reward payment faild: ', err)
 
     } catch (err) {
         // ToDo: report incident
@@ -70,7 +72,7 @@ const signupPayout = async (userId, address) => {
     }
     await dbRewards.set(userId, data)
 
-    if (signupReward.error) throw new Error(signupReward.error)
+    return signupReward.error
 }
 
 /**
@@ -143,8 +145,7 @@ const referralPayout = async (referrerId, referreeId) => {
     ).catch(err =>
         new Error('Failed to send notification to user referrer.', err)
     )
-
-    if (entry.error) throw new Error(entry.error)
+    return entry.error
 }
 
 
