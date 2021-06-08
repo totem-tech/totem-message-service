@@ -9,6 +9,7 @@ export const rxUserRegistered = new Subject() // value: [userId, clientId, refer
 export const rxUserLoggedIn = new Subject() // value: [userId, clientIds]
 export const clients = new Map()
 export const userClientIds = new Map()
+export const systemUserSymbol = Symbol('I am the system meawser!')
 const onlineSupportUsers = new Map()
 const userIdRegex = /^[a-z][a-z0-9]+$/
 // Error messages
@@ -38,6 +39,8 @@ export const SYSTEM_IDS = Object.freeze([
     // User ID for the Totem price aggregator micro service
     // This will be used to trigger currency list hash update
     'price_aggregator',
+    'rewards',
+    'system',
 ])
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([
@@ -92,10 +95,15 @@ export const emitToClients = (clientIds = [], eventName = '', params = []) => ev
 // @userIds     array
 // @eventName   string: websocket event name
 // @params      array: parameters to be supplied to the client
-export const emitToUsers = (userIds = [], eventName = '', params = [], excludeClientId) => arrUnique(userIds).forEach(userId => {
-    const clientIds = userClientIds.get(userId) || []
-    emitToClients(clientIds.filter(cid => cid !== excludeClientId), eventName, params)
-})
+export const emitToUsers = (userIds = [], eventName, params = [], excludeClientId) => arrUnique(userIds)
+    .forEach(userId => {
+        const clientIds = userClientIds.get(userId) || []
+        emitToClients(
+            clientIds.filter(cid => cid !== excludeClientId),
+            eventName,
+            params,
+        )
+    })
 
 // returns an array of users with role 'support'
 export const getSupportUsers = async () => {

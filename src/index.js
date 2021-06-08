@@ -36,7 +36,7 @@ import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
 // makes sure rewards is buddled
-import rewards from './rewards'
+import rewards from './rewards' // DO NOT REMOVE
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)

@@ -162,7 +162,7 @@ handleFaucetRequest.requireLogin = true
  * 
  * @returns {Array}  [err, result]
  */
-export const emitEncryptedToFaucetServer = async (eventName, data, timeout = 60000) => {
+export const emitToFaucetServer = async (eventName, data, timeout = 60000) => {
     const lenNumChars = 9
     const dataStr = isStr(data) && data || JSON.stringify(data)
     const lenStr = JSON.stringify(dataStr.length).padStart(lenNumChars)
