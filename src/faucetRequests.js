@@ -11,7 +11,7 @@ import { isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 import PromisE from './utils/PromisE'
 
-const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
+// const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
 // Maximum number of requests within @TIME_LIMIT
 const REQUEST_LIMIT = 5
 const TIME_LIMIT = 24 * 60 * 60 * 1000 // 1 day in milliseconds
@@ -57,7 +57,7 @@ const setVariables = () => {
     // environment variables
     EXTERNAL_PUBLIC_KEY = process.env.external_publicKey
     EXTERNAL_SERVER_NAME = process.env.external_serverName
-    const serverName = process.env.serverName    
+    const serverName = process.env.serverName
     const printData = process.env.printSensitiveData === "YES"
     if (!serverName) return 'Missing environment variable: "serverName"'
     if (!EXTERNAL_PUBLIC_KEY) return 'Missing environment variable: "external_serverName"'
@@ -84,7 +84,7 @@ const setVariables = () => {
     console.log('serverName: ', serverName, '\n')
     console.log('keyData: ', KEY_DATA, '\n')
     // only to check if keydata/encoded text is correct
-    console.log('walletAddress: ', keyInfoFromKeyData(KEY_DATA).address, '\n') 
+    console.log('walletAddress: ', keyInfoFromKeyData(KEY_DATA).address, '\n')
     console.log('Encryption KeyPair: ', encryptPair, '\n')
     console.log('Signature KeyPair: ', signKeyPair, '\n')
     console.log('external_serverName: ', EXTERNAL_SERVER_NAME)
@@ -96,56 +96,58 @@ if (envErr) throw new Error(envErr)
 
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
-    console.log('faucetClient.connected', faucetClient.connected)
-    if (!faucetClient.connected) throw texts.faucetServerDown
-    const err = setVariables()
-    if (err) throw err
-    
-    const [_, user] = this
-    if (!user) return callback(texts.loginOrRegister)
-    let { requests } = (await faucetRequests.get(user.id)) || {}
-    requests = requests || []
-    const last = requests[requests.length - 1]
-    if (last && last.inProgress) {
-        const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
-        // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
-        if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
-    }
-    const numReqs = requests.length
-    let fifthTS = (requests[numReqs - 5] || {}).timestamp
-    fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
-    if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
-        // prevents adding more than maximum number of requests within the given duration
-        return callback(`${texts.fauceRequestLimitReached}: ${REQUEST_LIMIT}`)
-    }
-    const request = {
-        address,
-        timestamp: (new Date()).toISOString(),
-        funded: false
-    }
-    requests.push(request)
+    return callback('This feature has been deprecated!')
 
-    if (numReqs >= REQUEST_LIMIT) {
-        // remove older requests ???
-        requests = requests.slice(numReqs - REQUEST_LIMIT)
-    }
+    // console.log('faucetClient.connected', faucetClient.connected)
+    // if (!faucetClient.connected) throw texts.faucetServerDown
+    // const err = setVariables()
+    // if (err) throw err
 
-    const index = requests.length - 1
-    requests[index].inProgress = true
-    // save inprogress status to database
-    await faucetRequests.set(user.id, { requests }, true)
-    const [faucetServerErr, result] = await emitEncryptedToFaucetServer('faucet', request)
-    const [blockHash] = result || []
-    requests[index].funded = !faucetServerErr
-    requests[index].blockHash = blockHash
-    requests[index].inProgress = false
+    // const [_, user] = this
+    // if (!user) return callback(texts.loginOrRegister)
+    // let { requests } = (await faucetRequests.get(user.id)) || {}
+    // requests = requests || []
+    // const last = requests[requests.length - 1]
+    // if (last && last.inProgress) {
+    //     const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
+    //     // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
+    //     if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
+    // }
+    // const numReqs = requests.length
+    // let fifthTS = (requests[numReqs - 5] || {}).timestamp
+    // fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
+    // if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
+    //     // prevents adding more than maximum number of requests within the given duration
+    //     return callback(`${texts.fauceRequestLimitReached}: ${REQUEST_LIMIT}`)
+    // }
+    // const request = {
+    //     address,
+    //     timestamp: new Date().toISOString(),
+    //     funded: false
+    // }
+    // requests.push(request)
 
-    !!faucetServerErr && console.log(`Faucet request failed. `, faucetServerErr)
-    // get back to the user
-    callback(faucetServerErr, blockHash)
+    // if (numReqs >= REQUEST_LIMIT) {
+    //     // remove older requests ???
+    //     requests = requests.slice(numReqs - REQUEST_LIMIT)
+    // }
 
-    // update completed status to database
-    await faucetRequests.set(user.id, { requests }, true)
+    // const index = requests.length - 1
+    // requests[index].inProgress = true
+    // // save inprogress status to database
+    // await faucetRequests.set(user.id, { requests }, true)
+    // const [faucetServerErr, result] = await emitEncryptedToFaucetServer('faucet', request)
+    // const [blockHash] = result || []
+    // requests[index].funded = !faucetServerErr
+    // requests[index].blockHash = blockHash
+    // requests[index].inProgress = false
+
+    // !!faucetServerErr && console.log(`Faucet request failed. `, faucetServerErr)
+    // // get back to the user
+    // callback(faucetServerErr, blockHash)
+
+    // // update completed status to database
+    // await faucetRequests.set(user.id, { requests }, true)
 }
 handleFaucetRequest.requireLogin = true
 
@@ -180,9 +182,9 @@ export const emitEncryptedToFaucetServer = async (eventName, data, timeout = 600
                 eventName,
                 encryptedMsg,
                 nonce,
-                (err, result) => resolve([err, result]) ,
+                (faucetError, result) => resolve([faucetError, result]),
             )
-        } catch (err) { 
+        } catch (err) {
             reject(err)
         }
     }, timeout)

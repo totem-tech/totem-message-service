@@ -43,7 +43,7 @@ setTimeout(async () => {
 })
 // maximum number of recent unreceived notifications user can receive
 const UNRECEIVED_LIMIT = 200
-const messages = setTexts({
+const errMessages = setTexts({
     accessDenied: 'Access denied',
     ethAddressError: 'valid Ethereum address required',
     introducingUserIdConflict: 'Introducing user cannot not be a recipient',
@@ -54,9 +54,9 @@ const messages = setTexts({
 export const commonConfs = {
     ethAddress: {
         chainType: 'ethereum',
-        customMessages: { identity: messages.ethAddressError },
+        customMessages: { identity: errMessages.ethAddressError },
         // number of characters required including '0x'
-        minLength: 42, 
+        minLength: 42,
         maxLength: 42,
         required: true,
         type: TYPES.identity,
@@ -102,7 +102,7 @@ export const VALID_TYPES = Object.freeze({
             // Only the application itself should be able to send this notification
             validate: function () {
                 const [_c, _u, isSystem] = this
-                console.log({user: _u})
+                console.log({ user: _u })
                 return !isSystem
             },
         }
@@ -113,10 +113,10 @@ export const VALID_TYPES = Object.freeze({
             dataFields: { userId: commonConfs.userId },
             // check if user id is valid
             validate: async (i, f, toUserIds, { userId }) => !await idExists(userId)
-                ? messages.invalidUserId
+                ? errMessages.invalidUserId
                 : toUserIds.includes(userId)
                     // prevent user to be introduced to themself!
-                    ? messages.introducingUserIdConflict
+                    ? errMessages.introducingUserIdConflict
                     : null,
             messageField: commonConfs.str3To160,
         },
@@ -142,7 +142,7 @@ export const VALID_TYPES = Object.freeze({
             // validate introducer id, if supplied
             validate: async (_, _1, _2, { introducerId: id }) => !id || await idExists(id)
                 ? null
-                : messages.invalidUserId
+                : errMessages.invalidUserId
         }
     },
     task: {
@@ -172,7 +172,7 @@ export const VALID_TYPES = Object.freeze({
         },
         invoiced_response: {
             dataFields: {
-                disputed: { required: true, type: TYPES.boolean},
+                disputed: { required: true, type: TYPES.boolean },
                 fulfillerAddress: commonConfs.identity,
                 taskId: commonConfs.idHash,
                 taskTitle: commonConfs.str3To160Required,
@@ -291,7 +291,7 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
     if (!isFn(callback)) return
     const [_, user = {}] = this
     const notificaiton = await notifications.get(id)
-    if (!notificaiton) return callback(messages.invalidId)
+    if (!notificaiton) return callback(errMessages.invalidId)
     if (!notificaiton.to.includes(user.id)) return callback(message.accessDenied)
 
     const markAs = (key, positive = false) => {
@@ -317,33 +317,24 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
 }
 handleNotificationSetStatus.requireLogin = true
 
-// handleNotify deals with notification requests
-//
-// Params:
-// @toUserIds   array    : receiver User ID(s)
-// @type        string   : parent notification type
-// @childType   string   : child notification type
-// @message     string   : message to be displayed (unless custom message required). can be encrypted later on
-// @data        object   : information specific to the type of notification
-// @callback    function : params: (@err string) 
-export async function handleNotification(recipients, type, childType, message, data, callback) {
-    if (!isFn(callback)) return
-    const [_, user] = this
-    const senderId = user.id
+export async function sendNotification(senderId, recipients, type, childType, message, data) {
+    const that = this || [null, null, true] // indicates notification is being sent by the application itself
 
     let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
-    if (err) return callback(err)
+    if (err) return err
 
     const typeConfig = VALID_TYPES[type]
     const childTypeConfig = typeConfig[childType]
-    if (childType && !isObj(childTypeConfig)) return callback(messages.invalidParams + ': childType')
+    if (childType && !isObj(childTypeConfig)) return errMessages.invalidParams + ': childType'
 
     // validate data fields
-    const config = childType ? childTypeConfig : typeConfig
+    const config = childType
+        ? childTypeConfig
+        : typeConfig
     const dataExpected = isObj(config.dataFields)
     if (dataExpected) {
         err = validateObj(data, config.dataFields, true, true)
-        if (err) return callback(err)
+        if (err) return err
         // get rid of unwanted properties from `data` object
         const dataKeys = Object.keys(config.dataFields)
         data = objClean(data, dataKeys)
@@ -354,7 +345,7 @@ export async function handleNotification(recipients, type, childType, message, d
             data[key] = objClean(data[key], Object.keys(keyConfig.config))
         })
     }
-    
+
     // validate message
     err = isObj(config.messageField) && validateObj(
         { message },
@@ -362,18 +353,18 @@ export async function handleNotification(recipients, type, childType, message, d
         true,
         true,
     )
-    if (err) return callback(err)
+    if (err) return err
 
     // throw error if any of the user ids are invalid
-    const userIdsExists = !recipients.includes(user.id) && await idExists(recipients)
-    if (!userIdsExists) return callback(messages.invalidUserId)
+    const userIdsExists = !recipients.includes(senderId) && await idExists(recipients)
+    if (!userIdsExists) return errMessages.invalidUserId
 
     // if notification type has a handler function execute it
     const id = uuid.v1()
-    err = isFn(config.validate) && await config.validate.call(this, id, senderId, recipients, data, message)
-    if (err) return callback(err)
+    err = isFn(config.validate) && await config.validate.call(that, id, senderId, recipients, data, message)
+    if (err) return err
 
-    const tsCreated = (new Date()).toISOString()
+    const tsCreated = new Date().toISOString()
     await notifications.set(id, {
         from: senderId,
         to: recipients,
@@ -387,6 +378,23 @@ export async function handleNotification(recipients, type, childType, message, d
     })
 
     emitToUsers(recipients, 'notification', [id, senderId, type, childType, message, data, tsCreated, false, false])
-    callback()
+}
+
+// handleNotify deals with notification requests
+//
+// Params:
+// @toUserIds   array    : receiver User ID(s)
+// @type        string   : parent notification type
+// @childType   string   : child notification type
+// @message     string   : message to be displayed (unless custom message required). can be encrypted later on
+// @data        object   : information specific to the type of notification
+// @callback    function : params: (@err string) 
+export async function handleNotification(recipients, type, childType, message, data, callback) {
+    if (!isFn(callback)) return
+    const [_, user] = this
+    const senderId = user.id
+    const args = [senderId, recipients, type, childType, message, data, callback]
+    const err = await sendNotification.apply(this, args)
+    callback(err)
 }
 handleNotification.requireLogin = true
