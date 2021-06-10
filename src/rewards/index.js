@@ -8,7 +8,7 @@ import { setTexts } from '../language'
 // existing faucet requests to retreive user's address if users db doesn't already have it
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 const isDebug = process.env.Debug === 'true'
-const ProcessMissedPayouts = process.env.ProcessMissedPayouts
+const ProcessMissedPayouts = process.env.ProcessMissedPayouts === "YES"
 ProcessMissedPayouts && setTimeout(() => processMissedPayouts(), 2000)
 const timeout = 60000
 const debugTag = '[rewards]'
