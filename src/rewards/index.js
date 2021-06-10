@@ -1,50 +1,97 @@
 import { emitToFaucetServer } from '../faucetRequests'
 import { sendNotification } from '../notification'
-import { rxUserRegistered, users } from "../users"
-import { arrSort, generateHash } from '../utils/utils'
+import { RESERVED_IDS, rxUserRegistered, users } from "../users"
+import { arrSort, generateHash, isObj } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'
 
-const dbRewards = new CouchDBStorage(null, 'rewards')
-// stores items in progress
-const dbRewardsConf = new CouchDBStorage(null, 'rewards_conf')
+// existing faucet requests to retreive user's address if users db doesn't already have it
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 const isDebug = process.env.Debug === 'true'
+const ProcessMissedPayouts = process.env.ProcessMissedPayouts
+ProcessMissedPayouts && setTimeout(() => processMissedPayouts(), 2000)
 const timeout = 60000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
 const texts = setTexts({
     signupRewardMsg: `
-    Some funds to get you started will arrive shortly.
-    Keep in eye on the identities module.
-    Have fun using Totem Live and don't forget join us on our social media channels! :)
-`
+        Some funds to get you started will arrive shortly.
+        Keep in eye on the identities module.
+        Have fun using Totem Live and don't forget join us on our social media channels! :)
+    `
 })
 const log = (...args) => isDebug && console.log(...args)
 
+/*
+// sample rewards data
+    user.rewards = {
+        signupReward: {
+            status: 'success',
+            txHash: '',
+            txId: '',
+        },
+        socialRewards: [
+            {
+                campaignId: 'signup',
+                platform: 'twitter',
+                handle: 'twitterUserId',
+                tsCreated: new Date(),
+            }
+        ],
+        referralRewards: {
+            userId: {
+                status: 'success',
+                txHash: '',
+                txId: '',
+            }
+        }
+    }
+*/
+
 /**
  * @name    processMissedPayouts
- * @summary execute payout for existing users who missed payout or signed up before reward payouts were activated
+ * @summary process payout for existing users who missed payout or signed up before reward payouts were activated
  */
-const processMissedPayouts = async () => {
-    // retrieve a list of users who missed signup rewards
+const processMissedPayouts = async (skip = 0) => {
+    const _debugTag = `${debugTag} [processMissedPayouts]`
+    const limit = 100
+    // const payoutUsers = await users.view('rewards', 'not-defined')
+    const result = await users.getAll(null, false, limit, skip)
+    const payoutUsers = result.filter(user =>
+        !Object.keys(user.rewards || {}).length
+        && !RESERVED_IDS.includes(user._id)
+    )
+
+    for (let i = 0; i < payoutUsers.length; i++) {
+        let { _id: userId, referredBy } = payoutUsers[i] || {}
+
+        // log(_debugTag, 'Processing missing signup payout:', userId)
+        let error = await signupPayout(userId)
+        if (error && !error.includes('No address'))
+            log(_debugTag, 'Signup reward payment failed', { userId, error })
+
+        referredBy = isObj(referredBy)
+            ? referredBy.userId
+            : referredBy
+        if (!referredBy) continue
+
+        // console.log(_debugTag, 'Processing missing referral payout:', userId)
+        error = await referralPayout(referredBy, userId)
+        if (error && !error.includes('No address'))
+            log(_debugTag, 'Referral reward payment failed', { userId, referredBy, error })
+    }
+
+    if (result.length < limit) return
+    await processMissedPayouts(skip + limit)
 }
 
-// setTimeout(() => {
-//     log(sendNotification)
-//     sendNotification(
-//         'totem',
-//         ['toufiq'],
-//         'chat',
-//         'referralSuccess',
-//         texts.signupRewardMsg,
-//         null
-//     ).then(
-//         success => log('Notificaton success', success),
-//         err => log('Notification failed', err))
-// }, 3000)
-
+const getLastestFaucetAddress = async (userId) => {
+    // retrieve referrer's  address from deprecated faucet requests
+    const { requests = [] } = await dbFaucetRequests.get(userId) || {}
+    const { address } = requests.pop() || {}
+    return address
+}
 /**
  * @name    signupPayout
  * @summary triggers signup payout
@@ -56,37 +103,27 @@ const referralPayout = async (referrerId, referreeId) => {
     const _debugTag = `${debugTag} [ReferralPayout]`
     // retrieve referrer's address
     let user = await users.get(referrerId)
-    if (!user) return
-    log(_debugTag, `${referrerId} referred ${referreeId}`)
+    if (!user) return 'User not found'
 
     if (!user.address) {
-        // retrieve referrer's  address from deprecated faucet requests
-        const { requests = [] } = await dbFaucetRequests.get(referrerId) || {}
-        const requestsSorted = arrSort(requests, 'timestamp', true, false)
-        const { address: frAddress } = requestsSorted[0] || {}
-        user.address = frAddress
-        if (!!frAddress) await users.set(referrerId, user)
-        if (!user.address) return log(
-            _debugTag,
-            `Could not initiate payout. No address found for user: ${referrerId}`
-        )
+        user.address = await getLastestFaucetAddress(referrerId)
+        // update user document with latest faucet request address
+        if (!!user.address) await users.set(referrerId, user)
+        if (!user.address) return 'Could not initiate payout. No address found for user'
     }
 
-    const data = await dbRewards.get(referrerId) || {
-        appRewards: {},
-        referralRewards: {},
-        signupReward: {},
-        socialRewards: {},
-    }
+    user.rewards = user.rewards || {}
+    user.rewards.referralRewards = user.rewards.referralRewards || {}
 
-    const { referralRewards } = data
+    const { referralRewards } = user.rewards
     const { address } = user
     referralRewards[referreeId] = referralRewards[referreeId] || {}
     const entry = referralRewards[referreeId]
+    // Save/update reward entry
     const saveEntry = async (save = true, notify = false) => {
         if (notify & entry.notification !== true) {
             log(_debugTag, 'Sending notification to user', referrerId)
-            const err = !await sendNotification(
+            const err = await sendNotification(
                 referreeId,
                 [referrerId],
                 'chat',
@@ -97,18 +134,24 @@ const referralPayout = async (referrerId, referreeId) => {
             entry.notification = !err
                 ? true
                 : err
-            log(_debugTag, `notifcation to ${referrerId} ${!err ? 'successful' : 'failed'}`, err)
+            const msg = `notifcation to ${referrerId} ${!err ? 'successful' : 'failed'}`
+            log(_debugTag, msg, err)
         }
         if (!save && !notify) return
-        await dbRewards.set(referrerId, data)
+
+        entry.tsCreated = entry.tsCreated || new Date()
+        entry.tsUpdted = new Date()
+        await users.set(referrerId, user)
     }
 
     // user has already been rewarded
     if (entry.status === 'success') {
         await saveEntry(false, true)
-        log(_debugTag, 'payout was already successful')
+        log(_debugTag, 'payout was already successful', { referrerId, referreeId })
         return
     }
+
+    log(_debugTag, `${referrerId} referred ${referreeId}`)
 
     entry.status = 'started'
     await saveEntry()
@@ -143,24 +186,21 @@ const referralPayout = async (referrerId, referreeId) => {
  * @name    signupPayout
  * @summary triggers signup payout
  * 
- * @param   {String} userId 
- * @param   {String} address 
+ * @param   {String} userId
  */
-const signupPayout = async (userId, address) => {
+const signupPayout = async (userId) => {
     const _debugTag = `${debugTag} [SignupPayout]`
-    log(_debugTag, userId)
-    const data = await dbRewards.get(userId) || {
-        appRewards: [],
-        referralRewards: [],
-        signupReward: {},
-        socialRewards: [],
-    }
-    const { signupReward } = data
+
+    const user = await users.get(userId)
+    if (!user) return 'User not found'
+    user.rewards = user.rewards || {}
+    user.rewards.signupReward = user.rewards.signupReward || {}
+    const { signupReward } = user.rewards
     const saveEntry = async (save = true, notify = false) => {
         if (notify && signupReward.notification !== true) {
             // notify user
             log(_debugTag, `Sending notification to user ${userId}`)
-            const err = !await sendNotification(
+            const err = await sendNotification(
                 'totem',
                 [userId],
                 'chat',
@@ -171,27 +211,38 @@ const signupPayout = async (userId, address) => {
             signupReward.notification = !err
                 ? true
                 : err
-            log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err)
+            log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err || '')
         }
         if (!save && !notify) return
-        await dbRewards.set(userId, data)
+
+        signupReward.tsCreated = signupReward.tsCreated || new Date()
+        signupReward.tsUpdted = new Date()
+        await users.set(userId, user)
     }
     // user has already been rewarded
     if (signupReward.status === 'success') {
         await saveEntry(false, true)
-        return log(_debugTag, `payout was already successful ${userId}`)
+        log(_debugTag, `payout was already successful for ${userId}`)
+        return
     }
 
+    user.address = user.address || await getLastestFaucetAddress(userId)
+    if (!user.address) return 'Could not initiate payout. No address found for user'
+
+    log(_debugTag, userId)
     signupReward.status = 'started'
     await saveEntry()
 
     try {
         log(_debugTag, `Sending payout request to faucet server for ${userId}`)
-        const hashSeed = `${userId}-signupReward`
+        const hashSeed = `${userId} -signupReward`
         const rewardId = generateHash(hashSeed, hashAlgo, hashBitLength)
         const [err, data] = await emitToFaucetServer(
             'signup-reward',
-            { address, rewardId },
+            {
+                address: user.address,
+                rewardId,
+            },
             timeout
         )
         const { txId, txHash } = data || {}
@@ -205,47 +256,19 @@ const signupPayout = async (userId, address) => {
     } catch (faucetServerError) {
         log(debugTag, { event: 'signup-reward', faucetServerError })
         signupReward.status = 'error'
-        signupReward.error = err
+        signupReward.error = faucetServerError
     }
     await saveEntry(true, true)
 
     return signupReward.error
 }
 
-
-/*
-// sample data
-dbRewards.set(
-    '_sample-user',
-    {
-        signupReward: {
-            status: 'success',
-            txHash: '',
-            txId: '',
-        },
-        socialRewards: [
-            {
-                campaignId: 'signup',
-                platform: 'twitter',
-                handle: 'twitterUserId',
-                tsCreated: new Date().toISOString(),
-            }
-        ],
-        appRewards: []
-        referralRewards: {
-            userId: {
-                status: 'success',
-                txHash: '',
-                txId: '',
-            }
-        }
-    }
-)
-*/
-
 // Listen for new user registrations and process referral and signup rewards
 rxUserRegistered.subscribe(async ({ address, userId, referredBy }) => {
     try {
+        referredBy = isObj(referredBy)
+            ? referredBy.userId
+            : referredBy
         log(debugTag, 'Initiating post-registration payouts', { userId, referredBy })
         // pay signup reward to the user
         let err = await signupPayout(userId, address)

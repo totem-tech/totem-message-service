@@ -95,9 +95,8 @@ Object.keys(commonConfs).forEach(key =>
  */
 // 
 function validateUserIsSystem() {
-    const [_c, _u, sysUserSymbol] = this
+    const [sysUserSymbol] = this
     const isSystem = sysUserSymbol === systemUserSymbol
-    console.log({ isSystem })
     return !isSystem
 }
 
@@ -328,7 +327,7 @@ handleNotificationSetStatus.requireLogin = true
 
 export async function sendNotification(senderId, recipients, type, childType, message, data) {
     // if `this` is not defined the notification is being sent by the application itself.
-    const that = this || [null, null, systemUserSymbol]
+    const that = this || [systemUserSymbol]
 
     let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
     if (err) return err
@@ -404,7 +403,6 @@ export async function sendNotification(senderId, recipients, type, childType, me
         'notification',
         eventArgs,
     )
-    console.log('Notification sent', notificaiton)
 }
 
 // handleNotify deals with notification requests
