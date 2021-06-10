@@ -47,13 +47,16 @@ export async function handleLanguageTranslations(langCode, textsHash, callback) 
 
 export function setTexts(texts = {}) {
     // attempt to build a single list of english texts for translation
-    if (!buildMode) return texts
 
     build.enList = build.enList || []
-    Object.values(texts).forEach(text => {
-        text = clearClutter(text)
-        build.enList.indexOf(text) === -1 && build.enList.push(text)
-    })
+    Object.keys(texts)
+        .forEach(key => {
+            const text = clearClutter(texts[key])
+            texts[key] = text
+
+            if (!buildMode) return
+            build.enList.indexOf(text) === -1 && build.enList.push(text)
+        })
     build.enList = build.enList.sort()
     return texts
 }
