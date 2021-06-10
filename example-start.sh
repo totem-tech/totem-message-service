@@ -19,4 +19,6 @@
 # DISCORD_WEBHOOK_AVATAR_URL="string: URL to the avatar image. Eg: https://url-to-avatar-image" \
 # DISCORD_WEBHOOK_USERNAME="string: name for the webhook. Eg: `dev.totem.live`" \
 # DISCORD_WEBHOOK_URL_SUPPORT="string: URL of the Discord channel webhook to forward all support messages from the website" \
+# Debug="Boolean: use true enable verbose debugging" \
+# ProcessMissedPayouts="string: use YES to enable processing missed payouts on startup" \
 # yarn run dev
