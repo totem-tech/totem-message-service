@@ -11,13 +11,13 @@ import { isFn, isStr } from './utils/utils'
 import { setTexts } from './language'
 import PromisE from './utils/PromisE'
 
-// const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
+const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
 // Maximum number of requests within @TIME_LIMIT
-const REQUEST_LIMIT = 5
-const TIME_LIMIT = 24 * 60 * 60 * 1000 // 1 day in milliseconds
+const REQUEST_LIMIT = 1
+const TIME_LIMIT = 365000 * 24 * 60 * 60 * 1000 // allow only one more request
 // Duration to disallow user from creating a new faucet request if there is already one in progress (neither success nor error).
 // After timeout, assume something went wrong and allow user to create a new request
-const TIMEOUT_DURATION = 0 //15 * 60 * 1000 // 15 minutes in milliseconds. if changed make sure toupdate `errMsgs.faucetTransferInProgress`
+const TIMEOUT_DURATION = 15 * 60 * 1000 // 15 minutes in milliseconds. if changed make sure toupdate `errMsgs.faucetTransferInProgress`
 // Environment variables
 const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:3002'
 let KEY_DATA, SECRET_KEY, SIGN_PUBLIC_KEY, SIGN_SECRET_KEY, EXTERNAL_PUBLIC_KEY, EXTERNAL_SERVER_NAME
@@ -42,7 +42,7 @@ faucetClient.on('connect_error', (err) => {
 })
 // Error messages
 const texts = setTexts({
-    fauceRequestLimitReached: 'Reached maximum requests allowed within 24 hour period',
+    faucetDeprecated: 'Faucet requests have been are no longer available. Here are more ways you can earn coins in addition to your signup rewards: refer a friend (copy link from Getting Started module) and post about Totem on social media (coming soon).',
     loginOrRegister: 'Login/registration required',
     faucetServerDown: 'Faucet client is not connected',
     faucetTransferInProgress: `
@@ -96,67 +96,72 @@ if (envErr) throw new Error(envErr)
 
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
-    return callback('This feature has been deprecated!')
 
-    // console.log('faucetClient.connected', faucetClient.connected)
-    // if (!faucetClient.connected) throw texts.faucetServerDown
-    // const err = setVariables()
-    // if (err) throw err
+    console.log('faucetClient.connected', faucetClient.connected)
+    if (!faucetClient.connected) throw texts.faucetServerDown
+    const err = setVariables()
+    if (err) throw err
 
-    // const [_, user] = this
-    // if (!user) return callback(texts.loginOrRegister)
-    // let { requests } = (await faucetRequests.get(user.id)) || {}
-    // requests = requests || []
-    // const last = requests[requests.length - 1]
-    // if (last && last.inProgress) {
-    //     const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
-    //     // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
-    //     if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
-    // }
-    // const numReqs = requests.length
-    // let fifthTS = (requests[numReqs - 5] || {}).timestamp
-    // fifthTS = isStr(fifthTS) ? Date.parse(fifthTS) : fifthTS
-    // if (numReqs >= REQUEST_LIMIT && Math.abs(new Date() - fifthTS) < TIME_LIMIT) {
-    //     // prevents adding more than maximum number of requests within the given duration
-    //     return callback(`${texts.fauceRequestLimitReached}: ${REQUEST_LIMIT}`)
-    // }
-    // const request = {
-    //     address,
-    //     timestamp: new Date().toISOString(),
-    //     funded: false
-    // }
-    // requests.push(request)
+    const [_, user] = this
+    if (!user) return callback(texts.loginOrRegister)
 
-    // if (numReqs >= REQUEST_LIMIT) {
-    //     // remove older requests ???
-    //     requests = requests.slice(numReqs - REQUEST_LIMIT)
-    // }
+    const { _id, tsCreated } = user
+    const deadline = new Date('2021-06-10T23:59:59')
+    // Only allow users who signed up before specific date to make one last faucet request
+    const isExistingUser = !tsCreated || new Date(tsCreated) < deadline
+    if (!isExistingUser) return callback(texts.faucetDeprecated)
+    let { requests } = (await faucetRequests.get(_id)) || {}
+    requests = requests || []
+    const last = requests[requests.length - 1]
+    if (last && last.inProgress) {
+        const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
+        // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
+        if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
+    }
 
-    // const index = requests.length - 1
-    // requests[index].inProgress = true
-    // // save inprogress status to database
-    // await faucetRequests.set(user.id, { requests }, true)
-    // const [faucetServerErr, result] = await emitEncryptedToFaucetServer('faucet', request)
-    // const [blockHash] = result || []
-    // requests[index].funded = !faucetServerErr
-    // requests[index].blockHash = blockHash
-    // requests[index].inProgress = false
+    const numReqs = requests.length
+    let { timestamp: lastRequestTs } = (requests.slice(-1) || {})
+    if (new Date(lastRequestTs) > deadline) {
+        // allow only one faucet request after the deadline
+        return callback(texts.faucetDeprecated)
+    }
+    const request = {
+        address,
+        timestamp: new Date().toISOString(),
+        funded: false
+    }
+    requests.push(request)
 
-    // !!faucetServerErr && console.log(`Faucet request failed. `, faucetServerErr)
-    // // get back to the user
-    // callback(faucetServerErr, blockHash)
+    if (numReqs >= REQUEST_LIMIT) {
+        // remove older requests ???
+        requests = requests.slice(numReqs - REQUEST_LIMIT)
+    }
 
-    // // update completed status to database
-    // await faucetRequests.set(user.id, { requests }, true)
+    const index = requests.length - 1
+    requests[index].inProgress = true
+    // save inprogress status to database
+    await faucetRequests.set(_id, { requests }, true)
+    const [faucetServerErr, result] = await emitToFaucetServer('faucet', request)
+    const [blockHash] = result || []
+    requests[index].funded = !faucetServerErr
+    requests[index].blockHash = blockHash
+    requests[index].inProgress = false
+
+    !!faucetServerErr && console.log(`Faucet request failed. `, faucetServerErr)
+    // get back to the user
+    callback(faucetServerErr, blockHash)
+
+    // update completed status to database
+    await faucetRequests.set(_id, { requests }, true)
 }
 handleFaucetRequest.requireLogin = true
 
 /**
- * @name    emitEncryptedToFaucetServer
+ * @name    emitToFaucetServer
  * @summary send encrypted and signed message to faucet server
  * 
  * @param   {String} eventName  websocket event name
- * @param   {*}      data       data to encrypt and send
+ * @param   {*}      data       unencrypted data to send to faucet server. All data will be sent as encrypted
  * @param   {Number} timeout    (optional) timeout duration in milliseconds.
  *                              Default: 60000
  * 
