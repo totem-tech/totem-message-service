@@ -1,24 +1,29 @@
+import { Subject } from 'rxjs'
 import CouchDBStorage from './utils/CouchDBStorage'
-import { arrUnique, isArr, isFn, isStr } from './utils/utils'
+import { arrUnique, isArr, isFn, isObj, isStr } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { setTexts } from './language'
-import { handleNotification } from './notification'
 
-const users = new CouchDBStorage(null, 'users')
+export const users = new CouchDBStorage(null, 'users')
+export const rxUserRegistered = new Subject() // value: [userId, clientId, referredBy]
+export const rxUserLoggedIn = new Subject() // value: [userId, clientIds]
 export const clients = new Map()
 export const userClientIds = new Map()
+export const systemUserSymbol = Symbol('I am the system meawser!')
 const onlineSupportUsers = new Map()
 const userIdRegex = /^[a-z][a-z0-9]+$/
 // Error messages
 const messages = setTexts({
-    alreadyRegistered: 'You have already registered! Please contact support for instructions if you wish to get a new user ID.',
+    alreadyRegistered: `
+        You have already registered!
+        Please contact support for instructions if you wish to get a new user ID.`,
     idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
     idExists: 'User ID already taken',
-    invalidReferralCode: 'invalid referral code',
     invalidUserID: 'Invalid User ID',
     loginFailed: 'Credentials do not match',
     loginOrRegister: 'Login/registration required',
     msgLengthExceeds: 'Maximum characters allowed',
+    strOrObjRequired: 'Valid string or object required',
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
 // User IDs for use by the application ONLY.
@@ -34,6 +39,8 @@ export const SYSTEM_IDS = Object.freeze([
     // User ID for the Totem price aggregator micro service
     // This will be used to trigger currency list hash update
     'price_aggregator',
+    'rewards',
+    'system',
 ])
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([
@@ -88,10 +95,15 @@ export const emitToClients = (clientIds = [], eventName = '', params = []) => ev
 // @userIds     array
 // @eventName   string: websocket event name
 // @params      array: parameters to be supplied to the client
-export const emitToUsers = (userIds = [], eventName = '', params = [], excludeClientId) => arrUnique(userIds).forEach(userId => {
-    const clientIds = userClientIds.get(userId) || []
-    emitToClients(clientIds.filter(cid => cid !== excludeClientId), eventName, params)
-})
+export const emitToUsers = (userIds = [], eventName, params = [], excludeClientId) => arrUnique(userIds)
+    .forEach(userId => {
+        const clientIds = userClientIds.get(userId) || []
+        emitToClients(
+            clientIds.filter(cid => cid !== excludeClientId),
+            eventName,
+            params,
+        )
+    })
 
 // returns an array of users with role 'support'
 export const getSupportUsers = async () => {
@@ -127,8 +139,12 @@ export const getUserByClientId = async (clientId) => {
  */
 export const idExists = async (userIds = []) => {
     if (!userIds || userIds.length === 0) return false
-    userIds = isArr(userIds) ? userIds : [userIds]
-    userIds = userIds.filter(id => !RESERVED_IDS.includes(id))
+    userIds = isArr(userIds)
+        ? userIds
+        : [userIds]
+    userIds = userIds.filter(id =>
+        !RESERVED_IDS.includes(id)
+    )
 
     const usersFound = await users.getAll(userIds, false)
     return userIds.length === usersFound.length
@@ -208,7 +224,7 @@ export async function handleLogin(userId, secret, callback) {
     if (!isFn(callback)) return
     // prevent login with a reserved id
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
-    
+
     const client = this
     const user = await users.get(userId)
     const valid = user && user.secret === secret
@@ -229,25 +245,33 @@ export async function handleLogin(userId, secret, callback) {
  * @name    handleRegister
  * @summary user registration event handler
  * 
- * @param   {String}    userId 
- * @param   {String}    secret 
- * @param   {String}    referredBy (optional) referrer user ID
+ * @param   {String}            userId 
+ * @param   {String}            secret 
+ * @param   {String|Object}     referredBy          (optional) referrer user ID
+ * @param   {String}            referredBy.handle   Social media user identifier
+ * @param   {String}            referredBy.platform Social media platform identitifier. Eg: "twitter"
  * @param   {Function}  callback  args => @err string: error message if registration fails
  */
-export async function handleRegister(userId, secret, referredBy, callback) {
+export async function handleRegister(userId, secret, address, referredBy, callback) {
     if (!isFn(callback)) return
     const client = this
     // prevent registered user's attempt to register again!
     const user = await getUserByClientId(client.id)
     if (user) return callback(messages.alreadyRegistered)
-    
+
     const newUser = {
+        address,
         id: userId,
-        referredBy,
         tsCreated: new Date(),
         secret,
     }
-    const err = validateObj(newUser, handleRegister.validationConfig, true, true)
+    const conf = { ...handleRegister.validationConfig }
+    // make sure users don't use themselves as referrer
+    conf.referredBy = {
+        ...conf.referredBy,
+        reject: userId,
+    }
+    const err = validateObj(newUser, conf, true, true)
     if (err) return callback(err)
 
     // get rid of any leading and trailing spaces
@@ -255,29 +279,46 @@ export async function handleRegister(userId, secret, referredBy, callback) {
     // check if user ID already exists
     if (await idExists([userId])) return callback(messages.idExists)
 
-    const isReferrerValid = referredBy && await idExists([referredBy])
-    // check if referrer ID is valid
-    if (referredBy && !isReferrerValid) return callback(messages.invalidReferralCode)
-        
+    if (isStr(referredBy)) {
+        // direct referral by user ID
+        const { _id } = await users.get(referredBy) || {}
+        // removes referrer ID if referrer user not found
+        referredBy = _id
+    } else {
+        // referral through other platforms
+        const selector = {}
+        selector[`socialHandles.${referredBy.platform}`] = referredBy.handle
+        const { _id } = await users.find(selector, {}, 10000) || {}
+        referredBy = !_id
+            ? undefined // user not found
+            : {
+                ...referredBy,
+                userId: _id,
+            }
+    }
+    // let selector = isObj(referredBy)
+    //     ? { referredBy }
+    //     : { id: referredBy }
+    // // continue sign up even if referral code is invalid
+    // const referrer = await users.find(selector, {}, 10000) || {}
+
+    // referredBy = referrer.id
+
     // save user data to database
     await users.set(userId, newUser)
     // add to websocket client list
     clients.set(client.id, client)
     // add client ID to user's clientId list
+    console.info('New User registered:', JSON.stringify({ userId, referredBy }))
     userClientIds.set(userId, [client.id])
-    console.info('New User registered:', userId)
-    callback(null)
 
-    // notify referrer, if any
-    isReferrerValid && handleNotification.call(
-        [client, newUser, true],
-        [referredBy],
-        'chat',
-        'referralSuccess',
-        null,
-        null,
-        () => { }, // placeholder for required callback argument
-    )
+    rxUserRegistered.next({
+        address,
+        clientId: client.id,
+        userId,
+        referredBy,
+    })
+    callback(null)
 }
 handleRegister.validationConfig = {
     id: {
@@ -299,6 +340,26 @@ handleRegister.validationConfig = {
         reject: RESERVED_IDS,
         required: false,
         type: TYPES.string,
+        customMessages: {
+            object: messages.strOrObjRequired,
+        },
+        // alternatively accept an object with following properties: handle and platform 
+        or: {
+            required: true,
+            type: TYPES.object,
+            config: {
+                handle: {
+                    minLegth: 3,
+                    required: true,
+                    type: TYPES.string,
+                },
+                platform: {
+                    minLegth: 3,
+                    required: true,
+                    type: TYPES.string,
+                },
+            }
+        }
     },
     secret: {
         minLegth: 10,
@@ -307,6 +368,18 @@ handleRegister.validationConfig = {
     },
 }
 
+// console.log('Test referredBy: ', validateObj(
+//     {
+//         id: 'test',
+//         secret: '1234566778875',
+//         referredBy: 'sdf342523',
+//         referredBy: {
+//             handle: '233',
+//             platform: '2342',
+//         },
+//     },
+//     handleRegister.validationConfig
+// ))
 setTimeout(async () => {
     // create an index for the field `roles`, ignores if already exists
     const indexDefs = [{
