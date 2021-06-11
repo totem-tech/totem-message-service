@@ -120,8 +120,7 @@ export async function handleFaucetRequest(address, callback) {
     }
 
     const numReqs = requests.length
-    let { timestamp: lastRequestTs } = (requests.slice(-1) || {})
-    if (new Date(lastRequestTs) > deadline) {
+    if (new Date(last.timestamp) > deadline) {
         // allow only one faucet request after the deadline
         return callback(texts.faucetDeprecated)
     }
