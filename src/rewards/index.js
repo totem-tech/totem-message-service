@@ -18,7 +18,7 @@ const texts = setTexts({
     signupRewardMsg: `
         Some funds to get you started will arrive shortly.
         Keep in eye on the identities module.
-        Have fun using Totem Live and don't forget join us on our social media channels! :)
+        Have fun using Totem Live and don't forget to join us on our social media channels! :)
     `
 })
 const log = (...args) => isDebug && console.log(...args)
