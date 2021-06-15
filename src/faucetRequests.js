@@ -42,7 +42,7 @@ faucetClient.on('connect_error', (err) => {
 })
 // Error messages
 const texts = setTexts({
-    faucetDeprecated: 'Faucet requests have been are no longer available. Here are more ways you can earn coins in addition to your signup rewards: refer a friend (copy link from Getting Started module) and post about Totem on social media (coming soon).',
+    faucetDeprecated: 'Faucet requests have been deprecated and are no longer available. Here are more ways you can earn coins in addition to your signup rewards: refer a friend (copy link from Getting Started module) and post about Totem on social media (coming soon).',
     loginOrRegister: 'Login/registration required',
     faucetServerDown: 'Faucet client is not connected',
     faucetTransferInProgress: `
@@ -96,6 +96,8 @@ if (envErr) throw new Error(envErr)
 
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
+
+    return callback(texts.faucetDeprecated)
 
     console.log('faucetClient.connected', faucetClient.connected)
     if (!faucetClient.connected) throw texts.faucetServerDown
