@@ -262,8 +262,9 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     const newUser = {
         address,
         id: userId,
-        tsCreated: new Date(),
         secret,
+        socialHandles: {},
+        tsCreated: new Date(),
     }
     const conf = { ...handleRegister.validationConfig }
     // make sure users don't use themselves as referrer
@@ -284,7 +285,7 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         const { _id } = await users.get(referredBy) || {}
         // removes referrer ID if referrer user not found
         referredBy = _id
-    } else {
+    } else if (isObj(referredBy) && !!referredBy.handle) {
         // referral through other platforms
         const selector = {}
         selector[`socialHandles.${referredBy.platform}`] = referredBy.handle
@@ -295,17 +296,11 @@ export async function handleRegister(userId, secret, address, referredBy, callba
                 ...referredBy,
                 userId: _id,
             }
+    } else {
+        referredBy = undefined
     }
-    // let selector = isObj(referredBy)
-    //     ? { referredBy }
-    //     : { id: referredBy }
-    // // continue sign up even if referral code is invalid
-    // const referrer = await users.find(selector, {}, 10000) || {}
-
-    // referredBy = referrer.id
-
     // save user data to database
-    await users.set(userId, newUser)
+    await users.set(userId, { ...newUser, referredBy })
     // add to websocket client list
     clients.set(client.id, client)
     // add client ID to user's clientId list
