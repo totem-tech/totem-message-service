@@ -247,7 +247,9 @@ export async function handleLogin(userId, secret, callback) {
  * 
  * @param   {String}            userId 
  * @param   {String}            secret 
- * @param   {String|Object}     referredBy          (optional) referrer user ID
+ * @param   {String|Object}     referredBy          (optional) referrer user ID or social handle reference as following:
+ *                                                      `${handle}@${platform}`
+ *                                                  Example: "twitter_user@twitter"
  * @param   {String}            referredBy.handle   Social media user identifier
  * @param   {String}            referredBy.platform Social media platform identitifier. Eg: "twitter"
  * @param   {Function}  callback  args => @err string: error message if registration fails
@@ -258,6 +260,11 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     // prevent registered user's attempt to register again!
     const user = await getUserByClientId(client.id)
     if (user) return callback(messages.alreadyRegistered)
+
+    if (isStr(referredBy) && referredBy.includes('@')) {
+        const [handle, platform] = referredBy.split('@')
+        referredBy = { handle, platform }
+    }
 
     const newUser = {
         address,
@@ -288,10 +295,13 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     } else if (isObj(referredBy) && !!referredBy.handle) {
         // referral through other platforms
         const selector = {}
-        selector[`socialHandles.${referredBy.platform}`] = referredBy.handle
-        const { _id } = await users.find(selector, {}, 10000) || {}
-        referredBy = !_id
-            ? undefined // user not found
+        const socialKey = `socialHandles.${referredBy.platform}`
+        selector[socialKey] = referredBy.handle
+        const user = await users.find(selector, {}, 10000) || {}
+        // Check if referrer user is valid and or referrer's social handle has been verified
+        const isValid = !!user && user[socialKey] && user[socialKey].verified === true
+        referredBy = !isValid
+            ? undefined
             : {
                 ...referredBy,
                 userId: _id,

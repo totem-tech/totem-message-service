@@ -10,7 +10,7 @@ const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 const isDebug = process.env.Debug === 'true'
 const ProcessMissedPayouts = process.env.ProcessMissedPayouts === "YES"
 ProcessMissedPayouts && setTimeout(() => processMissedPayouts(), 2000)
-const timeout = 60000
+const timeout = 120000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
@@ -56,7 +56,6 @@ const log = (...args) => isDebug && console.log(...args)
 const processMissedPayouts = async (skip = 0) => {
     const _debugTag = `${debugTag} [processMissedPayouts]`
     const limit = 100
-    // const payoutUsers = await users.view('rewards', 'not-defined')
     const result = await users.getAll(null, false, limit, skip)
     const payoutUsers = result.filter(user =>
         !Object.keys(user.rewards || {}).length

@@ -153,6 +153,14 @@ export const VALID_TYPES = Object.freeze({
                 : errMessages.invalidUserId
         }
     },
+    rewards: {
+        messageField: {
+            maxLength: 500,
+            ...commonConfs.str3To160Required
+        },
+        // Only the application itself should be able to send this notification
+        validate: validateUserIsSystem,
+    },
     task: {
         // notify user when a task has been assigned to them
         assignment: {

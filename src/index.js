@@ -35,8 +35,11 @@ import {
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
+import rewardsHandlers from './rewards/handlers'
 // makes sure rewards is buddled
-import rewards from './rewards' // DO NOT REMOVE
+require('./rewards') // DO NOT REMOVE
+
+
 
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
@@ -108,6 +111,9 @@ const events = {
     // Project
     'project': handleProject,
     'projects-by-hashes': handleProjectsByHashes,
+
+    // rewards related handlers
+    ...rewardsHandlers,
 
     // Task 
     'task': handleTask,
