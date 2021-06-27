@@ -4,7 +4,17 @@ import { arrUnique, isArr, isFn, isObj, isStr } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { setTexts } from './language'
 
-export const users = new CouchDBStorage(null, 'users')
+const defaultFields = [
+    '_id',
+    'address',
+    'id', // same as _id. ToDo: deprecate. Frontend update required.
+    'tsCreated',
+    'tsUpdated',
+    'socialHandles',
+    'roles'
+    // rewards and secret is intentionally left out.
+]
+export const users = new CouchDBStorage(null, 'users', defaultFields)
 export const rxUserRegistered = new Subject() // value: [userId, clientId, referredBy]
 export const rxUserLoggedIn = new Subject() // value: [userId, clientIds]
 export const clients = new Map()
@@ -26,8 +36,9 @@ const messages = setTexts({
     strOrObjRequired: 'Valid string or object required',
     reservedIdLogin: 'Cannot login with a reserved User ID',
 })
-// User IDs for use by the application ONLY.
+export const ROLE_ADMIN = 'admin'
 export const ROLE_SUPPORT = 'support'
+// User IDs for use by the application ONLY.
 export const SYSTEM_IDS = Object.freeze([
     'here',
     'me',
@@ -68,9 +79,12 @@ export const RESERVED_IDS = Object.freeze([
 // @params           array:  parameters to be supplied to the client
 export const broadcast = (ignoreClientIds, eventName, params) => {
     if (!isStr(eventName)) return
-    ignoreClientIds = isArr(ignoreClientIds) ? ignoreClientIds : [ignoreClientIds]
-    const clientIds = Array.from(clients).map(([clientId]) => clientId)
-        .filter(id => ignoreClientIds.indexOf(id) === -1)
+    ignoreClientIds = isArr(ignoreClientIds)
+        ? ignoreClientIds
+        : [ignoreClientIds]
+    const clientIds = Array.from(clients)
+        .map(([clientId]) => clientId)
+        .filter(id => !ignoreClientIds.includes(id))
     emitToClients(clientIds, eventName, params)
 }
 
@@ -166,16 +180,16 @@ export async function handleDisconnect() {
     const user = await getUserByClientId(client.id)
     if (!user) return // nothing to do
 
-    const clientIds = userClientIds.get(user.id) || []
+    const clientIds = userClientIds.get(user._id) || []
     const clientIdIndex = clientIds.indexOf(client.id)
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
-    userClientIds.set(user.id, arrUnique(clientIds))
-    console.info('Client disconnected | User ID:', user.id, ' | Client ID: ', client.id)
+    userClientIds.set(user._id, arrUnique(clientIds))
+    console.info('Client disconnected | User ID:', user._id, ' | Client ID: ', client.id)
 
-    if (!onlineSupportUsers.get(user.id) || clientIds.length > 0) return
+    if (!onlineSupportUsers.get(user._id) || clientIds.length > 0) return
     // user is not online
-    onlineSupportUsers.delete(user.id)
+    onlineSupportUsers.delete(user._id)
 }
 
 /**
@@ -226,17 +240,16 @@ export async function handleLogin(userId, secret, callback) {
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
 
     const client = this
-    const user = await users.get(userId)
-    const valid = user && user.secret === secret
-    console.info(`Login ${!valid ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
-    if (!valid) return callback(messages.loginFailed)
+    const user = await users.find({ secret })
+    console.info(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
+    if (!user) return callback(messages.loginFailed)
 
     const { roles = [] } = user
-    const clientIds = userClientIds.get(user.id) || []
+    const clientIds = userClientIds.get(user._id) || []
     clientIds.push(client.id)
-    userClientIds.set(user.id, arrUnique(clientIds))
+    userClientIds.set(user._id, arrUnique(clientIds))
     clients.set(client.id, client)
-    if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user.id, true)
+    if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user._id, true)
 
     callback(null, { roles })
 }
@@ -249,9 +262,9 @@ export async function handleLogin(userId, secret, callback) {
  * @param   {String}            secret 
  * @param   {String|Object}     referredBy          (optional) referrer user ID or social handle reference as following:
  *                                                      `${handle}@${platform}`
- *                                                  Example: "twitter_user@twitter"
+ *                                                  Example: 'twitter_user@twitter'
  * @param   {String}            referredBy.handle   Social media user identifier
- * @param   {String}            referredBy.platform Social media platform identitifier. Eg: "twitter"
+ * @param   {String}            referredBy.platform Social media platform identitifier. Eg: 'twitter'
  * @param   {Function}  callback  args => @err string: error message if registration fails
  */
 export async function handleRegister(userId, secret, address, referredBy, callback) {
@@ -266,12 +279,20 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         referredBy = { handle, platform }
     }
 
+    const tsCreated = new Date()
     const newUser = {
         address,
         id: userId,
         secret,
         socialHandles: {},
-        tsCreated: new Date(),
+        tsCreated,
+        rewards: {
+            signupReward: {
+                status: 'pending',
+                tsCreated,
+                tsUpdated: tsCreated,
+            }
+        }
     }
     const conf = { ...handleRegister.validationConfig }
     // make sure users don't use themselves as referrer

@@ -1,7 +1,10 @@
-import { handleClaimReward, handleGetVerificationCode } from "./social";
+import { handleClaimRewards } from "./handleClaimReward";
+import handleGetRewardsData from "./handleGetRewardsData";
 
+// makes sure rewards is buddled
+require('./index') // DO NOT REMOVE
 
 export default {
-    'rewards-social-verificaton-code': handleGetVerificationCode,
-    'rewards-claim': handleClaimReward
+    'rewards-claim': handleClaimRewards,
+    'rewards-get-data': handleGetRewardsData,
 }

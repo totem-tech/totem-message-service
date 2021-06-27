@@ -7,7 +7,7 @@ import https from 'https'
 import socketIO from 'socket.io'
 import request from 'request'
 import uuid from 'uuid'
-import { isFn, isArr } from './utils/utils'
+import { isFn, isArr, isBool } from './utils/utils'
 import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import { handleCompany, handleCompanySearch } from './companies'
@@ -31,16 +31,15 @@ import {
     handleRegister,
     handleIsUserOnline,
     getUserByClientId,
+    ROLE_ADMIN,
+    broadcast,
 } from './users'
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
 import rewardsHandlers from './rewards/handlers'
-// makes sure rewards is buddled
-require('./rewards') // DO NOT REMOVE
 
-
-
+let maintenanceMode = false
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
@@ -54,6 +53,7 @@ const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO(server)
 // Error messages
 const texts = setTexts({
+    maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
     loginRequired: 'Please login or create an account if you have not already done so',
     runtimeError: `
         Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
@@ -62,7 +62,36 @@ const texts = setTexts({
         Don't forget to mention the following Request ID
     `,
 })
+/**
+ * @name    handleMaintenanceMode
+ * @summary de-/activate maintenance mode.
+ * 
+ * @description When active, all other websocket events will be responded with an error message.
+ * Only user's with role `admin` are allowed to access this endpoint.
+ * 
+ * @param   {Boolean}   active 
+ * @param   {Function}  callback 
+ */
+async function handleMaintenanceMode(active = false, callback) {
+    if (!isFn(callback)) return
+
+    const client = this
+    const { roles = [] } = (await getUserByClientId(client.id)) || {}
+    const isAdmin = roles.includes(ROLE_ADMIN)
+    if (isAdmin && isBool(active)) {
+        maintenanceMode = active
+        // broadcast to all clients
+        setTimeout(() => {
+            broadcast([], eventMaintenanceMode, [maintenanceMode])
+        })
+    }
+    return callback(null, maintenanceMode)
+}
+const eventMaintenanceMode = 'maintenance-mode'
 const events = {
+    // admin endpoints
+    [eventMaintenanceMode]: handleMaintenanceMode,
+
     // User & connection
     'disconnect': handleDisconnect,
     'id-exists': handleIdExists,
@@ -136,6 +165,11 @@ const interceptHandler = (name, handler) => async function (...args) {
     const hasCallback = isFn(callback)
     let user
 
+    if (name !== eventMaintenanceMode && maintenanceMode) {
+        return hasCallback && callback(texts.maintenanceMode)
+    }
+
+
     try {
         if (requireLogin) {
             // user must be logged
@@ -143,7 +177,9 @@ const interceptHandler = (name, handler) => async function (...args) {
             if (!user) return hasCallback && callback(texts.loginRequired)
         }
         // include the user object if login is required for this event
-        const thisArg = !requireLogin ? client : [client, user]
+        const thisArg = !requireLogin
+            ? client
+            : [client, user]
         await handler.apply(thisArg, args)
     } catch (err) {
         user = user || await getUserByClientId(client.id)
