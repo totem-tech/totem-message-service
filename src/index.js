@@ -40,6 +40,7 @@ import { handleNewsletterSignup } from './newsletterSignup'
 import rewardsHandlers from './rewards/handlers'
 
 let maintenanceMode = false
+let requestCount = 0
 const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
@@ -169,7 +170,6 @@ const interceptHandler = (name, handler) => async function (...args) {
         return hasCallback && callback(texts.maintenanceMode)
     }
 
-
     try {
         if (requireLogin) {
             // user must be logged
@@ -180,6 +180,8 @@ const interceptHandler = (name, handler) => async function (...args) {
         const thisArg = !requireLogin
             ? client
             : [client, user]
+        requestCount++
+        maintenanceMode && console.info('Request Count', requestCount)
         await handler.apply(thisArg, args)
     } catch (err) {
         user = user || await getUserByClientId(client.id)
@@ -216,6 +218,9 @@ const interceptHandler = (name, handler) => async function (...args) {
                 username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
             }
         }, handleReqErr)
+    } finally {
+        requestCount--
+        maintenanceMode && console.info('Request Count', requestCount)
     }
 }
 // replace handlers with intercepted handler
