@@ -155,8 +155,11 @@ export const VALID_TYPES = Object.freeze({
     },
     rewards: {
         messageField: {
+            ...commonConfs.str3To160Required,
             maxLength: 500,
-            ...commonConfs.str3To160Required
+        },
+        dataFields: {
+            status: { required: false, type: TYPES.string },
         },
         // Only the application itself should be able to send this notification
         validate: validateUserIsSystem,

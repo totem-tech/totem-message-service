@@ -224,11 +224,21 @@ const interceptHandler = (name, handler) => async function (...args) {
     }
 }
 // replace handlers with intercepted handler
-Object.keys(events).forEach(name => events[name] = interceptHandler(name, events[name]))
+Object.keys(events)
+    .forEach(name =>
+        events[name] = interceptHandler(name, events[name])
+    )
 // Setup websocket event handlers
-socket.on('connection', client => Object.keys(events).forEach(name => client.on(name, events[name])))
+socket.on('connection', client =>
+    Object.keys(events)
+        .forEach(name =>
+            client.on(name, events[name])
+        )
+)
 // Start listening
-server.listen(PORT, () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`))
+server.listen(PORT, () =>
+    console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`)
+)
 
 // attempt to establish a connection to database and exit application if fails
 try {

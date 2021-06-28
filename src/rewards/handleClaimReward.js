@@ -1,12 +1,13 @@
 import { setTexts } from '../language'
+import { users } from '../users'
 import { isFn } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import { claimSignupTwitterReward } from './twitter'
 
 const messages = setTexts({
     invalidRequest: 'Invalid request',
-    rewardAlreadyClaimed: 'You have already claimed this reward'
 })
+const debugTag = '[handleClaimReward]'
 const supportedPlatforms = [
     'twitter'
 ]
@@ -52,15 +53,11 @@ export async function handleClaimRewards(platform, handle, postId, callback) {
 
     switch (platform) {
         case 'twitter':
-            const { socialHandles: sh } = user
-            if (sh && !!(sh.twitter || {}).verified) return callback(messages.rewardAlreadyClaimed)
-
             err = await claimSignupTwitterReward(user.id, handle, postId)
             break
         default:
             err = messages.invalidRequest
     }
-
     // if err is falsy, request has been added to queue. User will be notified once processed
     callback(err || null)
 }
