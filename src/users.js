@@ -274,9 +274,11 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     const user = await getUserByClientId(client.id)
     if (user) return callback(messages.alreadyRegistered)
 
+    console.log({ referredBy })
     if (isStr(referredBy) && referredBy.includes('@')) {
         const [handle, platform] = referredBy.split('@')
         referredBy = { handle, platform }
+        console.log({ referredBy })
     }
 
     const tsCreated = new Date()
@@ -313,22 +315,26 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         const { _id } = await users.get(referredBy) || {}
         // removes referrer ID if referrer user not found
         referredBy = _id
+        console.log({ referredBy })
     } else if (isObj(referredBy) && !!referredBy.handle) {
         // referral through other platforms
-        const selector = {}
-        const socialKey = `socialHandles.${referredBy.platform}`
-        selector[socialKey] = referredBy.handle
-        const user = await users.find(selector, {}, 10000) || {}
+        const { handle, platform } = referredBy
+        const selector = {
+            [`socialHandles.${platform}.handle`]: handle,
+            [`socialHandles.${platform}.verified`]: true
+        }
+        const referrer = await users.find(selector) || {}
         // Check if referrer user is valid and or referrer's social handle has been verified
-        const isValid = !!user && user[socialKey] && user[socialKey].verified === true
-        referredBy = !isValid
+        referredBy = !referrer
             ? undefined
             : {
                 ...referredBy,
-                userId: _id,
+                userId: referrer._id,
             }
+        console.log({ referredBy })
     } else {
         referredBy = undefined
+        console.log('else', { referredBy })
     }
     // save user data to database
     await users.set(userId, { ...newUser, referredBy })
