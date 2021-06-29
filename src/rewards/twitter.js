@@ -1,12 +1,12 @@
 import CouchDBStorage from '../utils/CouchDBStorage'
 import PromisE from '../utils/PromisE'
 import twitterHelper from '../utils/twitterHelper'
+import { generateHash } from '../utils/utils'
 import { emitToFaucetServer } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
 import { users } from '../users'
 import generateCode from './socialVerificationCode'
-import { generateHash } from '../utils/utils'
 
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
@@ -44,8 +44,8 @@ const twitterTags = [
 ].map(x => x.toLowerCase())
 // To avoid hitting Twitter API query limit queue any Twitter API requests and process them on specific time interval. 
 const dbQueue = new CouchDBStorage(null, 'rewards_queue')
-let inProgressKey = null
 const rewardType = 'signup-twitter-reward'
+let inProgressKey = null
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     // check if twitter handle has been claimed already
@@ -58,7 +58,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
         ? messages.rewardAlreadyClaimed
         : messages.handleAlreadyClaimed
     const type = rewardType
-    const key = `${type}:${userId}:${twitterHandle}`
+    const key = generateHash(`${type}:${userId}:${twitterHandle}`, 'blake2', 64)
     // check if user has already claimed this reward
     const existingItem = await dbQueue.get(key) || {}
     const { _id, status } = existingItem
@@ -80,7 +80,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
         _id: key,
         type,
         tweetId,
-        twitterHandle,
+        twitterHandle: `${twitterHandle || ''}`.trim(),
         userId,
     }
     await dbQueue.set(key, queueItem)
@@ -133,10 +133,10 @@ const processNext = async (queueItem, isDetached = true) => {
         return
     }
 
-    console.log(debugTag, 'processing Twitter signup reward claim', key)
+    console.log(debugTag, 'processing Twitter signup reward claim', queueItem._id)
     let { userId, status, type, tweetId, twitterHandle } = queueItem
     const user = await users.get(userId)
-    if (!user) return // user not found. abort execution
+    if (!user) return console.log(debugTag, 'User not found:', userId)
 
     user.rewards = user.rewards || {}
     user.socialHandles = user.socialHandles || {}
@@ -144,7 +144,7 @@ const processNext = async (queueItem, isDetached = true) => {
     user.rewards.signupReward = user.rewards.signupReward || {}
     const { address, rewards, socialHandles } = user
     const { signupReward } = rewards
-    const key = `${type}:${userId}:${twitterHandle}`
+    const key = generateHash(`${type}:${userId}:${twitterHandle}`, 'blake2', 64)
     inProgressKey = key
 
     const verifyTweet = async () => {
