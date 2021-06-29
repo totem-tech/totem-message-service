@@ -1,5 +1,4 @@
 import { setTexts } from '../language'
-import { users } from '../users'
 import { isFn } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import { claimSignupTwitterReward } from './twitter'

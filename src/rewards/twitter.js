@@ -14,6 +14,7 @@ const messages = setTexts({
     disqualifiedTweet: 'To qualify for Twitter reward you must not alter any of the texts in your Tweet. Please go to the Getting Started module and post again.',
     invalidTwitterHandle: 'Twitter handle invalid or not found',
     notFollower: 'You must follow Totem official Twitter account',
+    handleAlreadyClaimed: 'Rewards using this Twitter account has already been claimed by another user',
     rewardAlreadyClaimed: 'You have already claimed this reward',
     rewardSuccessMsgUser: 'Hurray, you have just received your signup Twitter reward! Check your account balance in the identities module.',
     rewardSuccessMsgReferrer: 'Hurray, you have just received reward because one of your referred user posted about Totem. Check your balance in the identities module.'
@@ -47,8 +48,18 @@ let inProgressKey = null
 const rewardType = 'signup-twitter-reward'
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
+    // check if twitter handle has been claimed already
+    const claimer = await users.find({
+        'socialHandles.twitter.handle': twitterHandle,
+        'socialHandles.twitter.verified': true,
+    })
+
+    if (!!claimer) return claimer._id === userId
+        ? messages.rewardAlreadyClaimed
+        : messages.handleAlreadyClaimed
     const type = rewardType
     const key = `${type}:${userId}:${twitterHandle}`
+    // check if user has already claimed this reward
     const existingItem = await dbQueue.get(key) || {}
     const { _id, status } = existingItem
     if (status === statusCodes.paymentSuccess) return messages.rewardAlreadyClaimed
