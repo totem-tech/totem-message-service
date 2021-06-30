@@ -4,6 +4,7 @@ import { RESERVED_IDS, rxUserRegistered, users } from '../users'
 import { arrSort, generateHash, isObj } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'
+import './discord'
 
 // existing faucet requests to retreive user's address if users db doesn't already have it
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
@@ -122,7 +123,7 @@ const referralPayout = async (referrerId, referreeId) => {
             const err = await sendNotification(
                 referreeId,
                 [referrerId],
-                'chat',
+                'rewards',
                 'referralSuccess',
                 null,
                 null
@@ -165,8 +166,9 @@ const referralPayout = async (referrerId, referreeId) => {
             },
             timeout
         )
-        const { txId, txHash } = data || {}
+        const { amount, txId, txHash } = data || {}
 
+        entry.amount = amount
         entry.status = !!err
             ? 'error'
             : 'success'
@@ -208,7 +210,7 @@ const signupPayout = async (userId) => {
             const err = await sendNotification(
                 notificationSenderId,
                 [userId],
-                'chat',
+                'rewards',
                 'signupReward',
                 texts.signupRewardMsg,
                 null
@@ -248,10 +250,11 @@ const signupPayout = async (userId) => {
             },
             timeout
         )
-        const { txId, txHash } = data || {}
+        const { amount, txId, txHash } = data || {}
         signupReward.status = !!err
             ? 'error'
             : 'success'
+        signupReward.amount = amount
         signupReward.error = err || undefined
         signupReward.txId = txId
         signupReward.txHash = txHash
