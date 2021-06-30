@@ -154,6 +154,9 @@ export const VALID_TYPES = Object.freeze({
         }
     },
     rewards: {
+        // Only the application itself should be able to send this notification
+        referralSuccess: { validate: validateUserIsSystem },
+        signupReward: { validate: validateUserIsSystem },
         messageField: {
             ...commonConfs.str3To160Required,
             maxLength: 500,
@@ -229,7 +232,12 @@ export const VALID_TYPES = Object.freeze({
         dataFields: {
             addressFrom: commonConfs.identity,
             addressTo: commonConfs.identity,
-            amountXTX: { maxLength: 18, minLength: 1, required: true, type: TYPES.integer },
+            amount: {
+                maxLength: 18,
+                minLength: 1,
+                required: true,
+                type: TYPES.integer,
+            },
         },
     },
 })
