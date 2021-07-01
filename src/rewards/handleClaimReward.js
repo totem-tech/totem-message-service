@@ -1,6 +1,6 @@
-import { setTexts } from '../language'
 import { isFn } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
+import { setTexts } from '../language'
 import { claimSignupTwitterReward } from './twitter'
 
 const messages = setTexts({

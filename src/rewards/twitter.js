@@ -1,13 +1,16 @@
 import CouchDBStorage from '../utils/CouchDBStorage'
 import PromisE from '../utils/PromisE'
 import twitterHelper from '../utils/twitterHelper'
-import { generateHash } from '../utils/utils'
+import { generateHash, objClean } from '../utils/utils'
 import { emitToFaucetServer } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
 import { users } from '../users'
 import generateCode from './socialVerificationCode'
+import { getRewardId, rewardStatus, rewardTypes } from './rewards'
+import { NIL } from 'uuid'
 
+const dbRewards = new CouchDBStorage(null, 'rewards-test')
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
@@ -27,8 +30,6 @@ const statusCodes = {
     paymentSuccess: 4, // transaction request sent to faucet server
     error: 99,
 }
-const hashAlgo = 'blake2'
-const hashBitLength = 256
 // Totem's official Twitter handle
 const totemTwitterHandle = 'Totem_Live_'
 // System user ID that will be used when sending in-app notifications to Totem users
@@ -43,26 +44,25 @@ const twitterTags = [
     '$TOTEM',
 ].map(x => x.toLowerCase())
 // To avoid hitting Twitter API query limit queue any Twitter API requests and process them on specific time interval. 
-const dbQueue = new CouchDBStorage(null, 'rewards_queue')
-const rewardType = 'signup-twitter-reward'
 let inProgressKey = null
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
+    twitterHandle = `${twitterHandle || ''}`.trim()
+    const type = rewardTypes.signupTwitter
+    const rewardId = getRewardId(type, twitterHandle)
     // check if twitter handle has been claimed already
     const claimer = await users.find({
         'socialHandles.twitter.handle': twitterHandle,
         'socialHandles.twitter.verified': true,
     })
-
-    if (!!claimer) return claimer._id === userId
-        ? messages.rewardAlreadyClaimed
-        : messages.handleAlreadyClaimed
-    const type = rewardType
-    const key = generateHash(`${type}:${userId}:${twitterHandle}`, 'blake2', 64)
+    const existingItem = await dbRewards.get(rewardId)
     // check if user has already claimed this reward
-    const existingItem = await dbQueue.get(key) || {}
-    const { _id, status } = existingItem
-    if (status === statusCodes.paymentSuccess) return messages.rewardAlreadyClaimed
+    const { _id, data: { statusCode } = {}, status } = existingItem || {}
+    const alreadyClaimed = !!claimer
+        && claimer._id !== userId
+        && status === rewardStatus.success
+    if (alreadyClaimed) return messages.handleAlreadyClaimed
+    if (statusCode === statusCodes.paymentSuccess) return messages.rewardAlreadyClaimed
 
     // a request for exact same type of reward for this user is already in the queue
     // only allow repeat if matches one of the following statuses
@@ -70,46 +70,39 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
         statusCodes.error,
         statusCodes.paymentError,
         statusCodes.verificationFailed,
-    ].includes(status)
+    ].includes(statusCode)
     // nothing to do
     if (!!_id && !allowRepeat) return
 
-    const queueItem = {
-        status: statusCodes.pending,
-        ...existingItem,
-        _id: key,
+    const rewardEntry = {
+        _id: rewardId,
+        data: {
+            statusCode: statusCodes.pending,
+            twitterHandle,
+            tweetId,
+        },
+        notification: false,
+        status: rewardStatus.processing,
         type,
-        tweetId,
-        twitterHandle: `${twitterHandle || ''}`.trim(),
         userId,
     }
-    await dbQueue.set(key, queueItem)
-    console.log(debugTag, 'added to queue', key)
-    return await processNext(queueItem, true)
+    await dbRewards.set(rewardId, rewardEntry)
+    console.log(debugTag, 'added to queue', rewardId)
+    return await processNext(rewardEntry, true)
 }
 
-const notifyUser = async (message, userId, status) => {
+const notifyUser = async (message, userId, status, rewardId) => {
     await sendNotification(
         notificationSenderId,
         [userId],
         'rewards',
         null,
         message,
-        { status }
+        { status },
+        rewardId
     )
 }
-
-const updateStatus = async (id, status, error = null) => {
-    // update existing entry status to failed
-    await dbQueue.set(
-        id,
-        {
-            error,
-            status: status || statusCodes.error,
-        },
-    )
-}
-const processNext = async (queueItem, isDetached = true) => {
+const processNext = async (rewardEntry, isDetached = true) => {
     let error
     // an item is already being executed
     if (!!inProgressKey) return
@@ -118,196 +111,112 @@ const processNext = async (queueItem, isDetached = true) => {
     inProgressKey = Symbol('reserved')
 
     // retrieve next queue item from database
-    queueItem = !!queueItem
-        ? queueItem
-        : await dbQueue.find({
-            status: {
-                $in: [statusCodes.pending]
-            },
-            type: rewardType,
+    rewardEntry = !!rewardEntry
+        ? rewardEntry
+        : await dbRewards.find({
+            status: { $ne: rewardStatus.success },
+            'data.statusCode': statusCodes.pending,
+            type: rewardTypes.signupTwitter,
         })
 
     // end of the pending queue
-    if (!queueItem) {
+    if (!rewardEntry) {
         inProgressKey = null
         return
     }
 
-    console.log(debugTag, 'processing Twitter signup reward claim', queueItem._id)
-    let { userId, status, type, tweetId, twitterHandle } = queueItem
+    console.log(debugTag, 'processing Twitter signup reward', rewardEntry._id)
+    let { data, status, type, userId } = rewardEntry
+    const { tweetId, twitterHandle } = data
+    let statusCode
     const user = await users.get(userId)
     if (!user) return console.log(debugTag, 'User not found:', userId)
 
-    user.rewards = user.rewards || {}
-    user.socialHandles = user.socialHandles || {}
-    user.socialHandles.twitter = {}
-    user.rewards.signupReward = user.rewards.signupReward || {}
-    const { address, rewards, socialHandles } = user
-    const { signupReward } = rewards
-    const key = generateHash(`${type}:${userId}:${twitterHandle}`, 'blake2', 64)
-    inProgressKey = key
+    const { address, referredBy, socialHandles = {} } = user
+    const { twitter = {} } = socialHandles
+    user.socialHandles = socialHandles
+    const rewardId = getRewardId(rewardTypes.signupTwitter, twitterHandle)
+    inProgressKey = rewardId
 
-    const verifyTweet = async () => {
-        // check if user is following Totem 
-        const {
-            following,
-            id: twitterId,
-            screen_name: followerHandle
-        } = await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
-
-        // User ID not found!
-        if (!twitterId || followerHandle !== twitterHandle) return messages.invalidTwitterHandle
-
-        // User is not following Totem
-        if (!following) return messages.notFollower
-
-        // retrieve Tweet
-        let {
-            entities: { urls },
-            full_text,
-            user: { screen_name }
-        } = await twitterHelper.getTweetById(tweetId)
-
-        if (!full_text || screen_name !== twitterHandle) return messages.invalidTweet
-
-
-        // generate a verification code (hash of user ID) for user to include in their Tweet
-        const verificaitonCode = await generateCode(userId, 'twitter', twitterHandle)
-        full_text = JSON.stringify(full_text, null, 4)
-            .toLowerCase()
-        let valid = [
-            ...twitterTags,
-            verificaitonCode
-        ].every(tag =>
-            full_text.includes(tag)
-        )
-        if (!valid) return messages.disqualifiedTweet
-
-        // check if user included the referral link
-        const referralLink = `https://totem.live?ref=${twitterHandle}@twitter`
-        valid = twitterTags.every(str => full_text.includes(str))
-            && (urls || []).find(x => x.expanded_url === referralLink)
-        if (!valid) return messages.disqualifiedTweet
-
-        // set user's social handle as verified and save twitterId
-        signupReward.twitterReward = {
-            notified: false,
-            status: 'pending',
-            tsCreated: new Date(),
-        }
-        socialHandles.twitter = {
-            handle: twitterHandle,
-            twitterId,
-            verified: true,
-        }
-        // update user with pending status
-        await users.set(userId, user)
-        console.log(debugTag, 'Tweet and follow verified', twitterHandle)
-    }
-
-    const payReward = async (referrer) => {
-        // send reward request to faucet server
-        const rewardType = referrer
-            ? 'referral-twitter-reward'
-            : 'signup-twitter-reward'
-        const seed = referrer
-            ? `${rewardType}-${userId}-${referrer._id}`
-            : `${rewardType}-${userId}`
-        const [err, data] = await emitToFaucetServer(
-            'reward-payment',
-            {
-                address,
-                rewardId: generateHash(
-                    seed,
-                    hashAlgo,
-                    hashBitLength,
-                ),
-                rewardType
-            },
-            120000
-        )
-        if (err) return err
-
-        const { amount, txId, txHash } = data || {}
-        const tsCreated = new Date()
-        const rewardEntry = {
-            amount,
-            status: 'success',
-            tsCreated,
-            tsUpdated: tsCreated,
-            txHash,
-            txId,
-        }
-        if (referrer) {
-            referrer.rewards = referrer.rewards || {}
-            referrer.rewards.referralRewards = referrer.rewards.referralRewards || {}
-            referrer.rewards.referralRewards[userId].twitterReward = rewardEntry
-        } else {
-            signupReward.twitterReward = rewardEntry
-        }
-
-        // update user entry with 'success' status and txId
-        await users.set(
-            referrer
-                ? referrer._id
-                : userId,
-            referrer || user,
-        )
-    }
+    const referrer = referredBy && await users.find({ referredBy })
+    const rewardIdReferrer = referrer && getRewardId(rewardTypes.referralTwitter, twitterHandle)
 
     try {
-        if (status <= statusCodes.verificationFailed && !user.socialHandles.twitter.verified) {
-            const verifyErr = await verifyTweet()
-            status = !!verifyErr
-                ? statusCodes.verificationFailed
-                : statusCodes.verified
-            await updateStatus(key, status, verifyErr)
-            if (verifyErr) return isDetached
-                ? await notifyUser(verifyErr, userId, 'error')
-                : verifyErr
+        const doVerify = data.statusCode <= statusCodes.verificationFailed
+        if (doVerify) {
+            const [verifyErr, twitterId] = await verifyTweet(userId, twitterHandle, tweetId)
+            if (verifyErr) {
+                statusCode = statusCodes.verificationFailed
+                throw new Error(verifyErr)
+            }
+            // verification succes
+            socialHandles.twitter = {
+                handle: twitterHandle,
+                twitterId,
+                verified: true,
+            }
+            await users.set(userId, user)
+
+            // update reward entry
+            rewardEntry.data.twitterId = twitterId
+            rewardEntry.data.statusCode = statusCodes.verified
+            await dbRewards.set(rewardId, rewardEntry)
+            console.log(debugTag, 'Tweet and follow verified', twitterHandle)
+            if (verifyErr) return !isDetached
+                ? verifyErr
+                : await notifyUser(
+                    verifyErr,
+                    userId,
+                    'error',
+                    rewardId,
+                )
         }
 
-        if (status <= statusCodes.paymentError) {
-            console.log(debugTag, 'processing reward payment to user')
-            // pay user
-            const payErr = await payReward()
-
+        // pay user
+        if (data.statusCode <= statusCodes.paymentError) {
+            const [payErr, iData = {}] = await payReward(address, rewardId, false)
+            rewardEntry.amount = iData.amunt
+            rewardEntry.txHash = iData.txHash
+            rewardEntry.txId = iData.txId
             if (payErr) {
-                status = statusCodes.paymentError
-                await updateStatus(key, statusCodes.paymentError, payErr)
-                return isDetached
-                    ? await notifyUser(payErr, userId, 'error')
-                    : payErr
+                statusCode = statusCodes.paymentError
+                throw new Error(payErr)
             }
-            if (!signupReward.twitterReward.notified) {
-                // payment was successfull send a notification to user
-                await notifyUser(messages.rewardSuccessMsgUser, userId, 'success')
-                signupReward.twitterReward.notified = true
-                await users.set(userId, user)
+
+            // payment was successfull send a notification to user
+            if (!rewardEntry.notification) {
+                await notifyUser(
+                    messages.rewardSuccessMsgUser,
+                    userId,
+                    'success',
+                    rewardId,
+                )
+                rewardEntry.notification = !payErr
             }
         }
 
         // pay referrer
-        const referrer = await users.find({
-            [`rewards.referralRewards.${userId}`]: {
-                $gt: null
-            }
-        }, { fields: ['_id', 'address', 'rewards'] })
-        if (referrer) {
-            console.log(debugTag, 'processing reward payment to referrer')
-            const payRefErr = await payReward(referrer)
+        if (!!referrer) {
+            const [payRefErr] = await payReward(
+                referrer.address,
+                rewardIdReferrer,
+                referrer,
+                userId,
+            )
+
             if (payRefErr) {
-                await updateStatus(key, statusCodes.paymentReferrerError, payRefErr)
-                return
+                statusCode = statusCodes.paymentError
+                throw new Error(payRefErr)
             }
-            // referral payment successful. Notify referrer.
-            await notifyUser(messages.rewardSuccessMsgReferrer, referrer._id, 'success')
         }
-        status = statusCodes.paymentSuccess
-        await updateStatus(key, statusCodes.paymentSuccess, null)
-        console.log(debugTag, 'reward payments complete', key)
+        rewardEntry.data.statusCode = statusCodes.paymentSuccess
+        rewardEntry.status = rewardStatus.success
+        await dbRewards.set(rewardId, rewardEntry)
+        console.log(debugTag, 'reward payments complete', rewardId)
     } catch (err) {
-        await updateStatus(key, statusCodes.error, err)
+        rewardEntry.data.statusCode = statusCode || statusCodes.error
+        rewardEntry.status = rewardStatus.error
+        await dbRewards.set(rewardId, rewardEntry)
         // execution failed
         console.log(debugTag, 'processNext():catch', err)
         error = err
@@ -320,8 +229,127 @@ const processNext = async (queueItem, isDetached = true) => {
         })
     }
 
-    return error
+    if (error && isDetached)
+        return await notifyUser(
+            payErr,
+            userId,
+            'error',
+            rewardId,
+        )
+
+    return error && `${error}`
 }
 
+const payReward = async (address, rewardId, referrer, referredUserId) => {
+    console.log(debugTag, `payReward to ${!!referrer ? 'referrer' : 'user'}`)
+    const rewardEntry = (await dbRewards.get(rewardId)) || {}
+    if (rewardEntry && rewardEntry.status === rewardStatus.success) {
+        return [
+            null,
+            objClean(rewardEntry, ['amount', 'txHash', 'txId'])
+        ]
+    }
+    const [err, data = {}] = await emitToFaucetServer(
+        'reward-payment',
+        {
+            address,
+            rewardId,
+            rewardType: referrer
+                ? rewardTypes.referralTwitter
+                : rewardTypes.signupTwitter,
+        },
+        120000,
+    )
+    if (!referrer) return [err, data]
+
+    const { amount, txId, txHash } = data || {}
+    const entry = {
+        amount,
+        data: {
+            referredUserId,
+            twitterId,
+            twitterHandle,
+            statusCode: payReferrer
+                ? statusCodes.paymentSuccess
+                : statusCodes.verified
+        },
+        status: rewardStatus.success,
+        txHash,
+        txId,
+        userId: referrer._id,
+    }
+
+    // update user entry with 'success' status and txId
+    await dbRewards.set(rewardId, entry)
+
+    // referral payment successful. Notify referrer.
+    await notifyUser(
+        messages.rewardSuccessMsgReferrer,
+        referrer._id,
+        'success',
+        rewardId,
+    )
+    return [null, data]
+}
+
+const verifyTweet = async (userId, twitterHandle, tweetId) => {
+    console.log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
+    // check if user is following Totem 
+    const {
+        following,
+        id: twitterId,
+        screen_name: followerHandle
+    } = await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
+
+    // User ID not found!
+    if (!twitterId || followerHandle !== twitterHandle) return [messages.invalidTwitterHandle]
+
+    // User is not following Totem
+    if (!following) return [messages.notFollower]
+
+    // check if twitterId was previous claimed
+    const claimer = await dbRewards.find({
+        'data.twitterid': twitterId,
+        'data.statusCode': { $gt: statusCodes.verified },
+        userId: { $ne: userId }
+    })
+
+    if (!!claimer) return [message.handleAlreadyClaimed]
+
+    // retrieve Tweet
+    let {
+        entities: { urls },
+        full_text,
+        user: { screen_name }
+    } = await twitterHelper.getTweetById(tweetId)
+
+    if (!full_text || screen_name !== twitterHandle) return [messages.invalidTweet]
+
+    // generate a verification code (hash of user ID) for user to include in their Tweet
+    const verificaitonCode = await generateCode(userId, 'twitter', twitterHandle)
+    full_text = JSON.stringify(full_text, null, 4)
+        .toLowerCase()
+    let valid = [
+        ...twitterTags,
+        verificaitonCode
+    ].every(tag =>
+        full_text.includes(tag)
+    )
+    if (!valid) return [messages.disqualifiedTweet]
+
+    // check if user included the referral link
+    const referralLink = `https://totem.live?ref=${twitterHandle}@twitter`
+    valid = twitterTags.every(str => full_text.includes(str))
+        && (urls || []).find(x => x.expanded_url === referralLink)
+    return [
+        !valid
+            ? messages.disqualifiedTweet
+            : null,
+        twitterId
+    ]
+
+}
+
+
 // process any pending items on startup
-setTimeout(() => processNext())
+// setTimeout(() => processNext())

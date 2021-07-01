@@ -1,6 +1,6 @@
 import uuid from 'uuid'
 import CouchDBStorage from './utils/CouchDBStorage'
-import { isFn, isObj, objClean, objReadOnly } from './utils/utils'
+import { generateHash, isFn, isObj, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, idExists, RESERVED_IDS, systemUserSymbol } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -110,11 +110,11 @@ function validateUserIsSystem() {
 //                      @data       object : extra information, can be specific to the module
 //                      @message    string : message to be displayed, unless invitation type has custom view
 export const VALID_TYPES = Object.freeze({
-    chat: {
-        // Only the application itself should be able to send this notification
-        referralSuccess: { validate: validateUserIsSystem },
-        signupReward: { validate: validateUserIsSystem },
-    },
+    // chat: {
+    //     // Only the application itself should be able to send this notification
+    //     referralSuccess: { validate: validateUserIsSystem },
+    //     signupReward: { validate: validateUserIsSystem },
+    // },
     identity: {
         // user1 recommends user2 to share their identity with user3
         introduce: {
@@ -155,8 +155,16 @@ export const VALID_TYPES = Object.freeze({
     },
     rewards: {
         // Only the application itself should be able to send this notification
-        referralSuccess: { validate: validateUserIsSystem },
-        signupReward: { validate: validateUserIsSystem },
+        referralSuccess: {
+            dataField: {
+                status: { type: TYPES.string },
+                rewardId: { type: TYPES.string },
+            },
+            validate: validateUserIsSystem
+        },
+        signupReward: {
+            validate: validateUserIsSystem
+        },
         messageField: {
             ...commonConfs.str3To160Required,
             maxLength: 500,
@@ -344,9 +352,11 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
 }
 handleNotificationSetStatus.requireLogin = true
 
-export async function sendNotification(senderId, recipients, type, childType, message, data) {
+export async function sendNotification(senderId, recipients, type, childType, message, data, id) {
     // if `this` is not defined the notification is being sent by the application itself.
     const that = this || [systemUserSymbol]
+
+    id = id || generateHash(uuid.v1(), 'blake2', 256)
 
     let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
     if (err) return err
@@ -388,7 +398,6 @@ export async function sendNotification(senderId, recipients, type, childType, me
     if (!userIdsExists) return errMessages.invalidUserId
 
     // if notification type has a handler function execute it
-    const id = uuid.v1()
     err = isFn(config.validate) && await config.validate.call(that, id, senderId, recipients, data, message)
     if (err) return err
 
@@ -437,7 +446,7 @@ export async function handleNotification(recipients, type, childType, message, d
     if (!isFn(callback)) return
     const [_, user] = this
     const senderId = user.id
-    const args = [senderId, recipients, type, childType, message, data, callback]
+    const args = [senderId, recipients, type, childType, message, data]
     const err = await sendNotification.apply(this, args)
     callback(err)
 }

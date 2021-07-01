@@ -69,6 +69,13 @@ export const RESERVED_IDS = Object.freeze([
     'totem',
     'totemaccounting',
     'totemlive',
+    'twitter',
+    'facebook',
+    'linkedin',
+    'medium',
+    'tiktok',
+    'instragram',
+    'pinterest'
 ])
 
 // Broadcast message to all users except ignoreClientIds
@@ -274,11 +281,9 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     const user = await getUserByClientId(client.id)
     if (user) return callback(messages.alreadyRegistered)
 
-    console.log({ referredBy })
     if (isStr(referredBy) && referredBy.includes('@')) {
         const [handle, platform] = referredBy.split('@')
         referredBy = { handle, platform }
-        console.log({ referredBy })
     }
 
     const tsCreated = new Date()
@@ -288,13 +293,6 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         secret,
         socialHandles: {},
         tsCreated,
-        rewards: {
-            signupReward: {
-                status: 'pending',
-                tsCreated,
-                tsUpdated: tsCreated,
-            }
-        }
     }
     const conf = { ...handleRegister.validationConfig }
     // make sure users don't use themselves as referrer
@@ -315,7 +313,6 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         const { _id } = await users.get(referredBy) || {}
         // removes referrer ID if referrer user not found
         referredBy = _id
-        console.log({ referredBy })
     } else if (isObj(referredBy) && !!referredBy.handle) {
         // referral through other platforms
         const { handle, platform } = referredBy
@@ -331,10 +328,8 @@ export async function handleRegister(userId, secret, address, referredBy, callba
                 ...referredBy,
                 userId: referrer._id,
             }
-        console.log({ referredBy })
     } else {
         referredBy = undefined
-        console.log('else', { referredBy })
     }
     // save user data to database
     await users.set(userId, { ...newUser, referredBy })
@@ -399,19 +394,6 @@ handleRegister.validationConfig = {
         type: TYPES.string,
     },
 }
-
-// console.log('Test referredBy: ', validateObj(
-//     {
-//         id: 'test',
-//         secret: '1234566778875',
-//         referredBy: 'sdf342523',
-//         referredBy: {
-//             handle: '233',
-//             platform: '2342',
-//         },
-//     },
-//     handleRegister.validationConfig
-// ))
 setTimeout(async () => {
     // create an index for the field `roles`, ignores if already exists
     const indexDefs = [{

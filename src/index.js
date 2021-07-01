@@ -37,7 +37,7 @@ import {
 import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
-import rewardsHandlers from './rewards/handlers'
+import rewardsHandlers from './rewards'
 
 let maintenanceMode = false
 let requestCount = 0
