@@ -22,6 +22,7 @@ const timeout = 120000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
+const initialRewardAmount = 108154 // only used where amount has not been saved (initial drop)
 export const log = (...args) => isDebug && console.log(...args)
 export const rewardStatus = {
     error: 'error', // payment failed
@@ -300,8 +301,8 @@ export const paySignupReward = async (userId) => {
     return rewardEntry.error
 }
 
+// migrate old reward entries from "users" collection to "rewards" collection
 const migrateOldRewards = async () => {
-    // migrate old reward entries from "users" collection to "rewards" collection
     const selector = { rewards: { $gt: null } }
     const userEntries = await users.search(selector, 999, 0, false, { fields: [] })
     const rewardEntries = new Map()
@@ -312,6 +313,7 @@ const migrateOldRewards = async () => {
             const rewardId = getRewardId(rewardTypes.signup, userId)
             rewardEntries.set(rewardId, {
                 ...signupReward,
+                amount: signupReward.amount || initialRewardAmount,
                 userId,
                 type: rewardTypes.signup,
             })
@@ -324,6 +326,7 @@ const migrateOldRewards = async () => {
             const rewardId = getRewardId(rewardTypes.referral, referredUserId)
             rewardEntries.set(rewardId, {
                 ...entry,
+                amount: entry.amount || initialRewardAmount,
                 userId,
                 data: { referredUserId },
                 type: rewardTypes.referral,
