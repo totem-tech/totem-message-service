@@ -46,13 +46,13 @@ export const rewardTypes = {
 //     const _debugTag = `${debugTag} [processMissedPayouts]`
 //     const limit = 100
 //     const selector = {
-//         'rewards.signupReward.status': {
-//             $in: [
-//                 rewardStatus.error,
-//                 rewardStatus.pending,
-//                 rewardStatus.processing,
-//             ]
-//         }
+//         // 'rewards.signupReward.status': {
+//         //     $in: [
+//         //         rewardStatus.error,
+//         //         rewardStatus.pending,
+//         //         rewardStatus.processing,
+//         //     ]
+//         // }
 //     }
 //     // make sure to retrieve 'rewards' fields along with default fields
 //     const extraProps = {
@@ -126,7 +126,15 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     }
 
     const rewardEntry = (await dbRewards.get(rewardId)) || {
+        amount: null,
         data: { referredUserId },
+        notification: false,
+        status: rewardStatus.pending,
+        tsCreated: null,
+        tsUpdated: null,
+        txHash: null,
+        txId: null,
+        type: rewardTypes.referral,
         userId: referrerUserId,
     }
     // Save/update reward entry
@@ -212,10 +220,20 @@ export const paySignupReward = async (userId) => {
     if (!user.address) return 'Could not initiate payout. No address found for user'
 
     const { address } = user
-    const signupReward = (await dbRewards.get(rewardId)) || { userId }
+    const rewardEntry = (await dbRewards.get(rewardId)) || {
+        amount: null,
+        notification: false,
+        status: rewardStatus.pending,
+        tsCreated: null,
+        tsUpdated: null,
+        txHash: null,
+        txId: null,
+        type: rewardTypes.signup,
+        userId: userId,
+    }
 
     const saveEntry = async (save = true, notify = false) => {
-        if (notify && signupReward.notification !== true) {
+        if (notify && rewardEntry.notification !== true) {
             // notify user
             log(_debugTag, `Sending notification to user ${userId}`)
             const err = await sendNotification(
@@ -226,30 +244,30 @@ export const paySignupReward = async (userId) => {
                 texts.signupRewardMsg,
                 {
                     rewardId,
-                    status: signupReward.status,
+                    status: rewardEntry.status,
                 },
                 generateHash(rewardId, hashAlgo, hashBitLength),
             )
-            signupReward.notification = !err
+            rewardEntry.notification = !err
                 ? true
                 : err
             log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err || '')
         }
         if (!save && !notify) return
 
-        signupReward.tsCreated = signupReward.tsCreated || new Date()
-        signupReward.tsUpdated = new Date()
-        await dbRewards.set(rewardId, signupReward)
+        rewardEntry.tsCreated = rewardEntry.tsCreated || new Date()
+        rewardEntry.tsUpdated = new Date()
+        await dbRewards.set(rewardId, rewardEntry)
     }
     // user has already been rewarded
-    if (signupReward.status === 'success') {
+    if (rewardEntry.status === 'success') {
         await saveEntry(false, true)
         log(_debugTag, `payout was already successful for ${userId}`)
         return
     }
 
     log(_debugTag, userId)
-    signupReward.status = rewardStatus.processing
+    rewardEntry.status = rewardStatus.processing
     await saveEntry()
 
     try {
@@ -264,22 +282,22 @@ export const paySignupReward = async (userId) => {
             timeout,
         )
         const { amount, txId, txHash } = data || {}
-        signupReward.status = !!err
+        rewardEntry.status = !!err
             ? rewardStatus.error
             : 'success'
-        signupReward.amount = amount
-        signupReward.error = err || undefined
-        signupReward.txId = txId
-        signupReward.txHash = txHash
+        rewardEntry.amount = amount
+        rewardEntry.error = err || undefined
+        rewardEntry.txId = txId
+        rewardEntry.txHash = txHash
 
     } catch (faucetServerError) {
         log(debugTag, { event: 'signup-reward', faucetServerError })
-        signupReward.status = rewardStatus.error
-        signupReward.error = faucetServerError
+        rewardEntry.status = rewardStatus.error
+        rewardEntry.error = faucetServerError
     }
     await saveEntry(true, true)
 
-    return signupReward.error
+    return rewardEntry.error
 }
 
 const migrateOldRewards = async () => {

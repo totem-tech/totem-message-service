@@ -10,15 +10,15 @@ async function handleGetRewardsData(callback) {
     const limit = 999
     const selector = { userId: user._id }
     const extraProps = {
-        fields: [
-            '_id',
-            'amount',
-            'status',
-            'tsCreated',
-            'txId',
-            'txHash',
-            'type',
-        ]
+        // fields: [
+        //     '_id',
+        //     'amount',
+        //     'status',
+        //     'tsCreated',
+        //     'txId',
+        //     'txHash',
+        //     'type',
+        // ]
     }
     const rewards = await dbRewards.search(selector, limit, 0, false, extraProps)
     callback(null, rewards)

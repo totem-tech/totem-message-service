@@ -1,16 +1,13 @@
-import CouchDBStorage from '../utils/CouchDBStorage'
 import PromisE from '../utils/PromisE'
 import twitterHelper from '../utils/twitterHelper'
-import { generateHash, objClean } from '../utils/utils'
+import { objClean } from '../utils/utils'
 import { emitToFaucetServer } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
 import { users } from '../users'
+import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
-import { getRewardId, rewardStatus, rewardTypes } from './rewards'
-import { NIL } from 'uuid'
 
-const dbRewards = new CouchDBStorage(null, 'rewards-test')
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
