@@ -172,7 +172,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
         // pay user
         if (data.statusCode <= statusCodes.paymentError) {
             const [payErr, iData = {}] = await payReward(address, rewardId, false)
-            rewardEntry.amount = iData.amunt
+            rewardEntry.amount = iData.amount
             rewardEntry.txHash = iData.txHash
             rewardEntry.txId = iData.txId
             if (payErr) {
