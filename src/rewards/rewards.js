@@ -141,7 +141,7 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     // Save/update reward entry
     const saveEntry = async (save = true, notify = false) => {
         if (save) await dbRewards.set(rewardId, rewardEntry)
-        if (!notify || rewardEntry.notification === true) return
+        if (!notify) return
 
         log(_debugTag, 'Sending notification to user', referrerUserId)
         const err = await sendNotification(
@@ -188,10 +188,10 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
         const { amount, txId, txHash } = data || {}
 
         rewardEntry.amount = amount
+        rewardEntry.error = err || undefined
         rewardEntry.status = !!err
             ? rewardStatus.error
             : rewardStatus.success
-        rewardEntry.error = err || undefined
         rewardEntry.txId = txId
         rewardEntry.txHash = txHash
     } catch (faucetServerError) {
@@ -230,35 +230,39 @@ export const paySignupReward = async (userId) => {
         txHash: null,
         txId: null,
         type: rewardTypes.signup,
-        userId: userId,
+        userId,
     }
 
     const saveEntry = async (save = true, notify = false) => {
+        log(debugTag, { rewardEntry, notify })
         if (save) await dbRewards.set(rewardId, rewardEntry)
-        if (!notify || rewardEntry.notification === true) return
+        if (!notify) return
+        setTimeout(async () => {
+            // notify user
+            log(_debugTag, `Sending notification to user ${userId}`)
+            const err = await sendNotification(
+                notificationSenderId,
+                [userId],
+                'rewards',
+                'signupReward',
+                texts.signupRewardMsg,
+                {
+                    rewardId,
+                    status: rewardEntry.status,
+                },
+                generateHash(rewardId, hashAlgo, hashBitLength),
+            )
+            rewardEntry.notification = !err
+                ? true
+                : err
+            log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err || '')
+            await dbRewards.set(rewardId, rewardEntry)
+        }, 100)
 
-        // notify user
-        log(_debugTag, `Sending notification to user ${userId}`)
-        const err = await sendNotification(
-            notificationSenderId,
-            [userId],
-            'rewards',
-            'signupReward',
-            texts.signupRewardMsg,
-            {
-                rewardId,
-                status: rewardEntry.status,
-            },
-            generateHash(rewardId, hashAlgo, hashBitLength),
-        )
-        rewardEntry.notification = !err
-            ? true
-            : err
-        log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err || '')
-        await dbRewards.set(rewardId, rewardEntry)
     }
     // user has already been rewarded
-    if (rewardEntry.status === 'success') {
+    if (rewardEntry.status === rewardStatus.success && !rewardEntry.notification) {
+        log('already paid', { rewardEntry })
         await saveEntry(false, true)
         log(_debugTag, `payout was already successful for ${userId}`)
         return
@@ -293,7 +297,7 @@ export const paySignupReward = async (userId) => {
         rewardEntry.status = rewardStatus.error
         rewardEntry.error = faucetServerError
     }
-    await saveEntry(true, true)
+    await saveEntry(true, rewardEntry.status === rewardStatus.success)
 
     return rewardEntry.error
 }
@@ -334,10 +338,10 @@ const migrateOldRewards = async () => {
 
     if (userEntries.length === 0) return
 
-    console.log(`Migrating ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
+    log(`Migrating ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
     await dbRewards.setAll(rewardEntries, true, 99999, false)
     await users.setAll(userEntries)
-    console.log(`Migrated ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
+    log(`Migrated ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
 }
 
 const processUnsuccessfulRewards = async () => {
@@ -353,7 +357,7 @@ const processUnsuccessfulRewards = async () => {
     const rewardEntries = await dbRewards.search(selector, 9999, 0, false)
     if (rewardEntries.length === 0) return
 
-    console.log(`Processing incomplete signup & referral rewards ${rewardEntries.length}`)
+    log(`Processing incomplete signup & referral rewards ${rewardEntries.length}`)
 
     let failCount = 0
     for (let entry of rewardEntries) {
@@ -374,7 +378,7 @@ const processUnsuccessfulRewards = async () => {
         }
     }
 
-    console.log('Processed incomplete signup & referral rewards', {
+    log('Processed incomplete signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
         success: rewardEntries.length - failCount
@@ -396,7 +400,7 @@ setTimeout(async () => {
 
 setTimeout(() => {
     migrateOldRewards()
-        .catch(err => console.log(debugTag, 'Failed to migrate old reward entries', err))
+        .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
     processUnsuccessfulRewards()
-        .catch(err => console.log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
+        .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
 }, 3000)
