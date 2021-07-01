@@ -140,25 +140,25 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     }
     // Save/update reward entry
     const saveEntry = async (save = true, notify = false) => {
-        if (notify & rewardEntry.notification !== true) {
-            log(_debugTag, 'Sending notification to user', referrerUserId)
-            const err = await sendNotification(
-                referredUserId,
-                [referrerUserId],
-                'rewards',
-                'referralSuccess',
-                null,
-                {
-                    rewardId,
-                    status: rewardEntry.status,
-                },
-                generateHash(rewardId, hashAlgo, hashBitLength),
-            )
-            rewardEntry.notification = err || true
-            const msg = `notifcation to ${referrerUserId} ${!err ? 'successful' : 'failed'}`
-            log(_debugTag, msg, err)
-        }
-        if (!save && !notify) return
+        if (save) await dbRewards.set(rewardId, rewardEntry)
+        if (!notify || rewardEntry.notification === true) return
+
+        log(_debugTag, 'Sending notification to user', referrerUserId)
+        const err = await sendNotification(
+            referredUserId,
+            [referrerUserId],
+            'rewards',
+            'referralSuccess',
+            null,
+            {
+                rewardId,
+                status: rewardEntry.status,
+            },
+            generateHash(rewardId, hashAlgo, hashBitLength),
+        )
+        rewardEntry.notification = err || true
+        const msg = `notifcation to ${referrerUserId} ${!err ? 'successful' : 'failed'}`
+        log(_debugTag, msg, err)
         await dbRewards.set(rewardId, rewardEntry)
     }
 
@@ -234,30 +234,27 @@ export const paySignupReward = async (userId) => {
     }
 
     const saveEntry = async (save = true, notify = false) => {
-        if (notify && rewardEntry.notification !== true) {
-            // notify user
-            log(_debugTag, `Sending notification to user ${userId}`)
-            const err = await sendNotification(
-                notificationSenderId,
-                [userId],
-                'rewards',
-                'signupReward',
-                texts.signupRewardMsg,
-                {
-                    rewardId,
-                    status: rewardEntry.status,
-                },
-                generateHash(rewardId, hashAlgo, hashBitLength),
-            )
-            rewardEntry.notification = !err
-                ? true
-                : err
-            log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err || '')
-        }
-        if (!save && !notify) return
+        if (save) await dbRewards.set(rewardId, rewardEntry)
+        if (!notify || rewardEntry.notification === true) return
 
-        rewardEntry.tsCreated = rewardEntry.tsCreated || new Date()
-        rewardEntry.tsUpdated = new Date()
+        // notify user
+        log(_debugTag, `Sending notification to user ${userId}`)
+        const err = await sendNotification(
+            notificationSenderId,
+            [userId],
+            'rewards',
+            'signupReward',
+            texts.signupRewardMsg,
+            {
+                rewardId,
+                status: rewardEntry.status,
+            },
+            generateHash(rewardId, hashAlgo, hashBitLength),
+        )
+        rewardEntry.notification = !err
+            ? true
+            : err
+        log(_debugTag, `notifcation to ${userId} ${!err ? 'successful' : 'failed'}`, err || '')
         await dbRewards.set(rewardId, rewardEntry)
     }
     // user has already been rewarded

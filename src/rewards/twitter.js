@@ -179,17 +179,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 statusCode = statusCodes.paymentError
                 throw new Error(payErr)
             }
-
-            // payment was successfull send a notification to user
-            if (!rewardEntry.notification) {
-                await notifyUser(
-                    messages.rewardSuccessMsgUser,
-                    userId,
-                    'success',
-                    rewardId,
-                )
-                rewardEntry.notification = !payErr
-            }
         }
 
         // pay referrer
@@ -226,13 +215,27 @@ const processNext = async (rewardEntry, isDetached = true) => {
         })
     }
 
-    if (error && isDetached)
+    if (error && isDetached) {
         return await notifyUser(
             payErr,
             userId,
             'error',
             rewardId,
         )
+    }
+
+    // payment was successfull send a notification to user
+    if (!rewardEntry.notification && !error) {
+        await notifyUser(
+            messages.rewardSuccessMsgUser,
+            userId,
+            'success',
+            rewardId,
+        )
+        rewardEntry.notification = true
+        // update notification status
+        await dbRewards.set(rewardId, rewardEntry)
+    }
 
     return error && `${error}`
 }
