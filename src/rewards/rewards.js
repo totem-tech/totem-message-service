@@ -208,11 +208,12 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
  * @summary triggers signup payout
  * 
  * @param   {String} userId
+ * @param   {String} _rewardId (only used when dealing with legacy rewardIds)
  */
-export const paySignupReward = async (userId) => {
+export const paySignupReward = async (userId, _rewardId) => {
     const _debugTag = `${debugTag} [SignupPayout]`
     const rewardType = rewardTypes.signup
-    const rewardId = getRewardId(rewardType, userId)
+    const rewardId = _rewardId || getRewardId(rewardType, userId)
 
     const user = await users.get(userId)
     if (!user) return 'User not found'
@@ -360,17 +361,18 @@ const processUnsuccessfulRewards = async () => {
     log(`Processing incomplete signup & referral rewards ${rewardEntries.length}`)
 
     let failCount = 0
+    log(debugTag, { rewardEntries: rewardEntries.length })
     for (let entry of rewardEntries) {
-        const { data = {}, type, userId } = entry
+        const { _id, data = {}, type, userId } = entry
         const { referredUserId } = data
+        log(debugTag, '[processUnsuccessfulRewards] Processing entry', { entry })
         try {
-
             switch (type) {
                 case rewardTypes.referral:
                     await payReferralReward(userId, referredUserId)
                     break
                 case rewardTypes.signup:
-                    await paySignupReward(userId)
+                    await paySignupReward(userId, _id)
                     break
             }
         } catch (err) {

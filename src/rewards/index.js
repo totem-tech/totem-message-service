@@ -4,9 +4,7 @@ import handleGetRewardsData from "./handleGetRewardsData"
 import { log, payReferralReward, paySignupReward } from "./rewards"
 import { isObj } from '../utils/utils'
 
-
 const debugTag = '[rewards]'
-
 // Listen for new user registrations and process referral and signup rewards
 rxUserRegistered.subscribe(async ({ address, userId, referredBy }) => {
     try {
