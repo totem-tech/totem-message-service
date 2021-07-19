@@ -21,4 +21,5 @@
 # DISCORD_WEBHOOK_URL_SUPPORT="string: URL of the Discord channel webhook to forward all support messages from the website" \
 # Debug="Boolean: use true enable verbose debugging" \
 # ProcessMissedPayouts="string: use YES to enable processing missed payouts on startup" \
+# Twitter_Bearer_Token="string: token for accessing Twitter API" \
 # yarn run dev
