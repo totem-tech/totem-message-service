@@ -20,6 +20,5 @@ export default async function generateCode(userId, platform, handle) {
         'blake2',
         32,
     )
-    console.log({ userId, platform, handle, code })
     return code.substr(2) // get rid of 0x prefix
 }

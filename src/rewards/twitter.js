@@ -84,7 +84,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     }
     await dbRewards.set(rewardId, rewardEntry)
     console.log(debugTag, 'added to queue', rewardId)
-    return await processNext(rewardEntry, true)
+    return await processNext(rewardEntry, false)
 }
 
 const notifyUser = async (message, userId, status, rewardId) => {
@@ -129,7 +129,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
     if (!user) return console.log(debugTag, 'User not found:', userId)
 
     const { address, referredBy, socialHandles = {} } = user
-    const { twitter = {} } = socialHandles
     user.socialHandles = socialHandles
     const rewardId = getRewardId(rewardTypes.signupTwitter, twitterHandle)
     inProgressKey = rewardId
@@ -328,22 +327,21 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
     const verificaitonCode = await generateCode(userId, 'twitter', twitterHandle)
     full_text = JSON.stringify(full_text, null, 4)
         .toLowerCase()
-    let valid = [
-        ...twitterTags,
-        verificaitonCode
-    ].every(tag =>
-        full_text.includes(tag)
-    )
-    if (!valid) return [messages.disqualifiedTweet]
+    const tagsValid = [...twitterTags, verificaitonCode]
+        .every(tag => full_text.includes(tag))
+    if (!tagsValid) return [messages.disqualifiedTweet]
 
     // check if user included the referral link
-    const referralLink = `https://totem.live?ref=${twitterHandle}@twitter`
-    valid = twitterTags.every(str => full_text.includes(str))
-        && (urls || []).find(x => x.expanded_url === referralLink)
+    const url = 'https://totem.live'
+    const path = `?ref=${twitterHandle}@twitter`
+    const referralLinks = [
+        `${url}${path}`,
+        `${url}/${path}`,
+    ]
+    const linkValid = (urls || [])
+        .find(x => referralLinks.includes(x.expanded_url))
     return [
-        !valid
-            ? messages.disqualifiedTweet
-            : null,
+        !linkValid && messages.disqualifiedTweet,
         twitterId
     ]
 
