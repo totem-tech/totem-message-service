@@ -13,7 +13,7 @@ rxUserRegistered.subscribe(async ({ address, userId, referredBy }) => {
             : referredBy
         log(debugTag, 'Initiating post-registration payouts', { userId, referredBy })
         // pay signup reward to the user
-        let err = await paySignupReward(userId, address)
+        let err = await paySignupReward(userId)
         if (err) log(debugTag, 'Signup reward payment faild: ', err)
 
         // pay referral reward (if any)
