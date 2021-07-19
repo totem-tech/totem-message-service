@@ -217,7 +217,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     if (error && isDetached) {
         return await notifyUser(
-            payErr,
+            error,
             userId,
             'error',
             rewardId,
