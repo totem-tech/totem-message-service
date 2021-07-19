@@ -55,11 +55,10 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     const existingItem = await dbRewards.get(rewardId)
     // check if user has already claimed this reward
     const { _id, data: { statusCode } = {}, status } = existingItem || {}
-    const alreadyClaimed = !!claimer
-        && claimer._id !== userId
-        && status === rewardStatus.success
-    if (alreadyClaimed) return messages.handleAlreadyClaimed
-    if (statusCode === statusCodes.paymentSuccess) return messages.rewardAlreadyClaimed
+    const alreadyClaimed = claimer && status === rewardStatus.success
+    if (alreadyClaimed) return _id !== userId
+        ? messages.handleAlreadyClaimed
+        : messages.rewardAlreadyClaimed
 
     // a request for exact same type of reward for this user is already in the queue
     // only allow repeat if matches one of the following statuses
