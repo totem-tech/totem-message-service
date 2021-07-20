@@ -349,4 +349,4 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 
 
 // process any pending items on startup
-// setTimeout(() => processNext())
+setTimeout(() => processNext())

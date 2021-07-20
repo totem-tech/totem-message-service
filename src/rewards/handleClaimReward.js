@@ -24,7 +24,8 @@ const validationConf = {
         type: TYPES.string,
     },
     postId: {
-        minLength: 3,
+        maxLength: 19,
+        minLength: 19,
         required: true,
         type: TYPES.string,
     }
