@@ -117,6 +117,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // end of the pending queue
     if (!rewardEntry) {
+        isDetached && console.log(debugTag, 'No pending or errored reward entry found')
         inProgressKey = null
         return
     }
@@ -126,7 +127,10 @@ const processNext = async (rewardEntry, isDetached = true) => {
     const { tweetId, twitterHandle } = data
     let statusCode
     const user = await users.get(userId)
-    if (!user) return console.log(debugTag, 'User not found:', userId)
+    if (!user) {
+        inProgressKey = null
+        return console.log(debugTag, 'User not found:', userId)
+    }
 
     const { address, referredBy, socialHandles = {} } = user
     user.socialHandles = socialHandles
@@ -157,14 +161,17 @@ const processNext = async (rewardEntry, isDetached = true) => {
             rewardEntry.data.statusCode = statusCodes.verified
             await dbRewards.set(rewardId, rewardEntry)
             console.log(debugTag, 'Tweet and follow verified', twitterHandle)
-            if (verifyErr) return !isDetached
-                ? verifyErr
-                : await notifyUser(
-                    verifyErr,
-                    userId,
-                    'error',
-                    rewardId,
-                )
+            if (verifyErr) {
+                inProgressKey = null
+                return !isDetached
+                    ? verifyErr
+                    : await notifyUser(
+                        verifyErr,
+                        userId,
+                        'error',
+                        rewardId,
+                    )
+            }
         }
 
         // pay user
