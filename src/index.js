@@ -171,6 +171,8 @@ const interceptHandler = (name, handler) => async function (...args) {
     }
 
     try {
+        requestCount++
+        maintenanceMode && console.info('Request Count', requestCount)
         if (requireLogin) {
             // user must be logged
             user = await getUserByClientId(client.id)
@@ -180,8 +182,6 @@ const interceptHandler = (name, handler) => async function (...args) {
         const thisArg = !requireLogin
             ? client
             : [client, user]
-        requestCount++
-        maintenanceMode && console.info('Request Count', requestCount)
         await handler.apply(thisArg, args)
     } catch (err) {
         user = user || await getUserByClientId(client.id)
