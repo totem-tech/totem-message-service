@@ -11,7 +11,8 @@ const defaultFields = [
     'tsCreated',
     'tsUpdated',
     'socialHandles',
-    'roles'
+    'referredBy',
+    'roles',
     // rewards and secret is intentionally left out.
 ]
 export const users = new CouchDBStorage(null, 'users', defaultFields)
