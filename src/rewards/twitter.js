@@ -112,7 +112,7 @@ const notifyUser = async (message, userId, status, rewardId) => {
  * @returns 
  */
 const processNext = async (rewardEntry, isDetached = true) => {
-    let error, errorCode
+    let error, errorCode, doWait
     // an item is already being executed
     if (!!inProgressKey) return
 
@@ -156,6 +156,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     try {
         if (statusCode <= statusCodes.verificationFailed) {
+            doWait = true
             const [verifyErr, twitterId] = await verifyTweet(userId, twitterHandle, tweetId)
             if (verifyErr) {
                 errorCode = statusCodes.verificationFailed
@@ -232,8 +233,8 @@ const processNext = async (rewardEntry, isDetached = true) => {
         error = err
     } finally {
         setTimeout(async () => {
-            // wait one minute
-            await PromisE.delay(60 * 1000)
+            // wait one minute, if Twitter API was used
+            doWait && await PromisE.delay(60 * 1000)
             inProgressKey = null
             processNext()
         })
