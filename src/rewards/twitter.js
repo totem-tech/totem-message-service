@@ -303,7 +303,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         data: {
             referredUserId,
             twitterHandle,
-            statusCode: statusCodes.paymentSuccess
+            statusCode: statusCodes.paymentSuccessReferrer,
         },
         status: rewardStatus.success,
         txHash,
@@ -398,7 +398,12 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 setTimeout(async () => {
     if (reprocessTwitterRewards === 'YES') {
         const rewardEntries = await dbRewards.search({
-            'data.statusCode': { $lte: statusCodes.paymentErrorReferrrer },
+            'data.statusCode': {
+                $in: [
+                    statusCodes.paymentSuccess,
+                    statusCodes.paymentErrorReferrrer,
+                ]
+            },
             type: rewardTypes.signupTwitter,
         }, 0, 0, false)
         for (let i = 0; i < rewardEntries.length; i++) {
