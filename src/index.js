@@ -80,22 +80,18 @@ async function handleMaintenanceMode(active = false, callback) {
     const user = (await getUserByClientId(client.id)) || {}
     const { roles = [] } = user
     const isAdmin = roles.includes(ROLE_ADMIN)
-    console.log('handleMaintenanceMode', { cid: client.id, user, isAdmin, active, maintenanceMode })
     if (isAdmin && isBool(active)) {
         maintenanceMode = active
         // broadcast to all clients
-        setTimeout(() => {
-            broadcast([], eventMaintenanceMode, [maintenanceMode])
-
-            console.log('handleMaintenanceMode', { isAdmin, active, maintenanceMode })
-        })
+        setTimeout(() => broadcast([], eventMaintenanceMode, [maintenanceMode]))
     }
     return callback(null, maintenanceMode)
 }
 const eventMaintenanceMode = 'maintenance-mode'
+// events allowed during maintenance mode.
 const maintenanceModeEvents = [
     eventMaintenanceMode,
-    'login'
+    'login', // without login admin user won't be able to login and therefore, can't turn off maintenance mode.
 ]
 const events = {
     // admin endpoints
