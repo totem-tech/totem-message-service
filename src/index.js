@@ -77,18 +77,26 @@ async function handleMaintenanceMode(active = false, callback) {
     if (!isFn(callback)) return
 
     const client = this
-    const { roles = [] } = (await getUserByClientId(client.id)) || {}
+    const user = (await getUserByClientId(client.id)) || {}
+    const { roles = [] } = user
     const isAdmin = roles.includes(ROLE_ADMIN)
+    console.log('handleMaintenanceMode', { cid: client.id, user, isAdmin, active, maintenanceMode })
     if (isAdmin && isBool(active)) {
         maintenanceMode = active
         // broadcast to all clients
         setTimeout(() => {
             broadcast([], eventMaintenanceMode, [maintenanceMode])
+
+            console.log('handleMaintenanceMode', { isAdmin, active, maintenanceMode })
         })
     }
     return callback(null, maintenanceMode)
 }
 const eventMaintenanceMode = 'maintenance-mode'
+const maintenanceModeEvents = [
+    eventMaintenanceMode,
+    'login'
+]
 const events = {
     // admin endpoints
     [eventMaintenanceMode]: handleMaintenanceMode,
@@ -166,7 +174,7 @@ const interceptHandler = (name, handler) => async function (...args) {
     const hasCallback = isFn(callback)
     let user
 
-    if (name !== eventMaintenanceMode && maintenanceMode) {
+    if (maintenanceMode && !maintenanceModeEvents.includes(name)) {
         return hasCallback && callback(texts.maintenanceMode)
     }
 
@@ -287,7 +295,7 @@ async function importToDB(fileNames) {
 
         console.log(`\nMigrating ${file}: ${data.size} entries`)
         const db = new CouchDBStorage(
-            getConnection(), // get the global connection created above
+            await getConnection(), // get the global connection created above
             dbName.replace(' ', '_'),
         )
 
@@ -306,9 +314,17 @@ async function importToDB(fileNames) {
                 // convert ratioOfExchange and decimals to integer
                 Array.from(data)
                     .forEach(([_, value]) => {
-                        value.ratioOfExchange = parseInt(value.ratioOfExchange)
-                        value.decimals = parseInt(value.decimals)
-                        value.sequence = parseInt(value.sequence)
+                        // keys to force parse into integer
+                        [
+                            'ratioOfExchange',
+                            'decimals',
+                            'sequence',
+                        ].forEach(key =>
+                            value[key] = parseInt(value[key])
+                        )
+                        // value.ratioOfExchange = parseInt(value.ratioOfExchange)
+                        // value.decimals = parseInt(value.decimals)
+                        // value.sequence = parseInt(value.sequence)
                     })
                 break
         }
