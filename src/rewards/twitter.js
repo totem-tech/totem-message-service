@@ -14,7 +14,7 @@ const {
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
-    disqualifiedTweet: 'To qualify for Twitter reward you must not alter any of the texts in your Tweet. Please go to the Getting Started module and post again.',
+    disqualifiedTweet: 'To qualify for Twitter reward you must not alter any of the texts in your Tweet. Please go to the rewards module and post again.',
     invalidTwitterHandle: 'Twitter handle invalid or not found',
     notFollower: 'You must follow Totem official Twitter account',
     handleAlreadyClaimed: 'Rewards using this Twitter account has already been claimed by another user',
@@ -382,7 +382,7 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 
         // check if twitterId was previous claimed
         const claimer = await dbRewards.find({
-            'data.twitterid': twitterId,
+            'data.twitterId': twitterId,
             'data.statusCode': { $gt: statusCodes.verified },
             userId: { $ne: userId }
         })
