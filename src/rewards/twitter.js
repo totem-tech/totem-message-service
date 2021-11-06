@@ -177,7 +177,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             if (verifyErr) {
                 console.log(debugTag, { verifyErr })
                 errorCode = statusCodes.verificationFailed
-                ignoreEntry = verifyErr.includes('No status found')
+                ignoreEntry = true
                 throw verifyErr
             }
             // verification succes
@@ -252,7 +252,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
         console.log(debugTag, 'processNext():catch', {
             err,
             rewardEntry,
-            rewardEntryFromDB: await dbRewards.get(rewardId),
         })
         error = err
     } finally {
@@ -436,7 +435,9 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
             twitterId
         ]
     } catch (err) {
-        return [`${err}`]
+        const msg = `${err}`
+        if (msg.includes('No status found')) return [msg]
+        throw err
     }
 
 }
