@@ -176,7 +176,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 console.log(debugTag, { verifyErr })
                 errorCode = statusCodes.verificationFailed
                 ignoreEntry = verifyErr.includes('No status found')
-                throw new Error(verifyErr)
+                throw verifyErr
             }
             // verification succes
             socialHandles.twitter = {
@@ -247,7 +247,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
         rewardEntry.data.error = `${err}`
         await dbRewards.set(rewardId, rewardEntry)
         // execution failed
-        console.log(debugTag, 'processNext():catch', err)
+        console.log(debugTag, 'processNext():catch', { err, rewardEntry })
         error = err
     } finally {
         setTimeout(async () => {
