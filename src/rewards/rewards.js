@@ -15,7 +15,7 @@ const texts = setTexts({
 })
 // existing faucet requests to retreive user's address if users db doesn't already have it
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
-export const dbRewards = new CouchDBStorage(null, 'rewards')
+export const dbRewards = new CouchDBStorage(null, 'rewards-prod')
 const notificationSenderId = 'rewards'
 const isDebug = `${process.env.Debug}`.toLowerCase() === 'true'
 const timeout = 120000
@@ -26,6 +26,7 @@ const initialRewardAmount = 108154 // only used where amount has not been saved 
 export const log = (...args) => isDebug && console.log(...args)
 export const rewardStatus = {
     error: 'error', // payment failed
+    ignore: 'ignore',
     pending: 'pending', // payment is yet to be processed
     processing: 'processing', // payment is being processed
     success: 'success', // payment was successful
@@ -216,7 +217,7 @@ export const paySignupReward = async (userId, _rewardId) => {
     const rewardId = _rewardId || getRewardId(rewardType, userId)
 
     const user = await users.get(userId)
-    if (!user) return 'User not found'
+    if (!user) return `User not found: ${userId}`
 
     user.address = user.address || await getLastestFaucetAddress(userId)
     if (!user.address) return 'Could not initiate payout. No address found for user'
@@ -235,7 +236,7 @@ export const paySignupReward = async (userId, _rewardId) => {
     }
 
     const saveEntry = async (save = true, notify = false) => {
-        log(debugTag, { rewardEntry, notify })
+        // log(debugTag, { rewardEntry, notify })
         if (save) await dbRewards.set(rewardId, rewardEntry)
         if (!notify) return
         setTimeout(async () => {
@@ -347,7 +348,12 @@ const migrateOldRewards = async () => {
 
 const processUnsuccessfulRewards = async () => {
     const selector = {
-        status: { $ne: 'success' },
+        status: {
+            $in: [
+                rewardStatus.error,
+                rewardStatus.pending,
+            ]
+        },
         type: {
             $in: [
                 rewardTypes.signup,
@@ -365,17 +371,23 @@ const processUnsuccessfulRewards = async () => {
     for (let entry of rewardEntries) {
         const { _id, data = {}, type, userId } = entry
         const { referredUserId } = data
-        log(debugTag, '[processUnsuccessfulRewards] Processing entry', { entry })
+        log(debugTag, '[UnsuccessfulRewards] Processing', _id)
         try {
+            let error
             switch (type) {
                 case rewardTypes.referral:
-                    await payReferralReward(userId, referredUserId)
+                    error = await payReferralReward(userId, referredUserId)
                     break
                 case rewardTypes.signup:
-                    await paySignupReward(userId, _id)
+                    error = await paySignupReward(userId, _id)
+                    break
+                default:
+                    error = 'Unsupported type'
                     break
             }
+            if (error) throw new Error(error)
         } catch (err) {
+            log(debugTag, '[UnsuccessfulRewards] payout request failed', `${err}`)
             failCount++
         }
     }

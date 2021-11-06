@@ -67,7 +67,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     const isTrollbox = receiverIds.includes(TROLLBOX) || receiverIds.includes(TROLLBOX_ALT)
     const isSupportMsg = receiverIds.includes(ROLE_SUPPORT)
     const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
-    
+
     if (isTrollbox) {
         // handle trollbox messages
         args[2] = [TROLLBOX]
@@ -103,7 +103,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     if (isSupportMsg) {
         // include all support members
         const supportUsers = await getSupportUsers()
-        userIds = arrUnique([ ...userIds, ...supportUsers.map(u => u.id) ])
+        userIds = arrUnique([...userIds, ...supportUsers.map(u => u.id)])
     }
     emitToUsers(userIds, event, args)
     callback(null, timestamp, id)
@@ -134,7 +134,14 @@ handleMessageGetRecent.validationConf = {
         },
         label: texts.recipients,
         minLength: 1,
-        reject: RESERVED_IDS.filter(id => ![ROLE_SUPPORT, TROLLBOX, TROLLBOX_ALT].includes(id)),
+        reject: RESERVED_IDS
+            .filter(id =>
+                ![
+                    ROLE_SUPPORT,
+                    TROLLBOX,
+                    TROLLBOX_ALT,
+                ].includes(id)
+            ),
         required: true,
         type: TYPES.array,
         unique: true,

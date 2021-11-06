@@ -1,14 +1,16 @@
 import PromisE from '../utils/PromisE'
 import twitterHelper from '../utils/twitterHelper'
 import { objClean } from '../utils/utils'
-import { emitToFaucetServer } from '../faucetRequests'
+import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
 import { users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
 
-const { reprocessTwitterRewards } = process.env
+const {
+    reprocessTwitterRewards,
+} = process.env
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
@@ -29,7 +31,8 @@ const statusCodes = {
     paymentErrorReferrrer: 5, // error occured while processing referrer reward payment
     paymentSuccessReferrer: 6, // referrer reward payment successful
     error: 99,
-    complete: 100,
+    complete: 100, // unused
+    ignore: 999, // reward claim failed however status has been set manually to ignore
 }
 // Totem's official Twitter handle
 const totemTwitterHandle = 'Totem_Live_'
@@ -48,18 +51,20 @@ const twitterTags = [
 let inProgressKey = null
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
-    twitterHandle = `${twitterHandle || ''}`.trim()
+    twitterHandle = `${twitterHandle || ''}`
+        .trim()
+        .toLowerCase()
     const type = rewardTypes.signupTwitter
     const rewardId = getRewardId(type, twitterHandle)
     // check if twitter handle has been claimed already
-    const claimer = await users.find({
-        'socialHandles.twitter.handle': twitterHandle,
-        'socialHandles.twitter.verified': true,
-    })
-    const existingItem = await dbRewards.get(rewardId)
+    const [claimer] = await users.view('lowercase', 'twitterHandle', { key: twitterHandle })
+    const existingReward = await dbRewards.get(rewardId)
     // check if user has already claimed this reward
-    const { _id, data: { statusCode } = {}, status } = existingItem || {}
-    const alreadyClaimed = claimer && status === rewardStatus.success
+    const { _id, data: { statusCode } = {}, status } = existingReward || {}
+    const alreadyClaimed = claimer
+        && claimer.socialHandles.twitter
+        && claimer.socialHandles.twitter.verified
+        && status === rewardStatus.success
     if (alreadyClaimed) return _id !== userId
         ? messages.handleAlreadyClaimed
         : messages.rewardAlreadyClaimed
@@ -119,12 +124,18 @@ const processNext = async (rewardEntry, isDetached = true) => {
     // reserve this for execution to avoid any possible race condition may be caused due to database query delay
     inProgressKey = Symbol('reserved')
 
+    // make sure faucet server is connected
+    await waitTillFSConnected(0, `${debugTag} [processNext]`)
+
     // retrieve next queue item from database
     rewardEntry = !!rewardEntry
         ? rewardEntry
         : await dbRewards.find({
-            status: { $ne: rewardStatus.success },
-            'data.statusCode': statusCodes.pending,
+            status: rewardStatus.pending,
+            // status: {
+            //     $ne: rewardStatus.success,
+            // },
+            // 'data.statusCode': statusCodes.pending,
             type: rewardTypes.signupTwitter,
         })
 
@@ -137,11 +148,14 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     console.log(debugTag, 'processing Twitter signup reward', rewardEntry._id)
     let { data, userId } = rewardEntry
+    // force lowercase existing twitter handles
+    data.twitterHandle = `${data.twitterHandle}`.toLowerCase()
     let { statusCode, tweetId, twitterHandle } = data
     const user = await users.get(userId)
     if (!user) {
         inProgressKey = null
-        return console.log(debugTag, 'User not found:', userId)
+        console.log(debugTag, 'User not found:', userId)
+        return processNext()
     }
 
     const { address, referredBy, socialHandles = {} } = user
@@ -159,6 +173,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             doWait = true
             const [verifyErr, twitterId] = await verifyTweet(userId, twitterHandle, tweetId)
             if (verifyErr) {
+                console.log(debugTag, { verifyErr })
                 errorCode = statusCodes.verificationFailed
                 throw new Error(verifyErr)
             }
@@ -169,6 +184,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 verified: true,
             }
             await users.set(userId, user)
+            console.log(debugTag, 'User after verification complete', await users.get(userId))
 
             // update reward entry
             data.twitterId = twitterId
@@ -200,8 +216,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 throw new Error(payErr)
             }
         }
-
-        console.log(debugTag, { referredBy, referrer })
 
         // pay referrer
         if (!!referrer && data.statusCode <= statusCodes.paymentErrorReferrrer) {
@@ -264,7 +278,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 }
 
 /**
- * @nam     payReward
+ * @name     payReward
  * @summary pay twitter reward to either referrer or user
  * 
  * @param   {String} address 
@@ -341,11 +355,14 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
 const verifyTweet = async (userId, twitterHandle, tweetId) => {
     console.log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
     // check if user is following Totem 
-    const {
+    let {
         following,
         id: twitterId,
         screen_name: followerHandle
     } = await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
+
+    // force lowercase twitter handle
+    followerHandle = `${followerHandle}`.toLowerCase()
 
     // User ID not found!
     if (!twitterId || followerHandle !== twitterHandle) return [messages.invalidTwitterHandle]
@@ -369,10 +386,24 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
         user: { screen_name }
     } = await twitterHelper.getTweetById(tweetId)
 
+    // force lowercase twitter handle
+    screen_name = `${screen_name}`.toLowerCase()
     if (!full_text || screen_name !== twitterHandle) return [messages.invalidTweet]
 
+    // for legacy compatibility
+    const referralUrl = (urls || [])
+        .find(x =>
+            x.expanded_url.includes('?ref=')
+            && x.expanded_url.includes('@twitter')
+        )
+    const handleToVerify = !referralUrl
+        ? twitterHandle
+        : referralUrl
+            .expanded_url
+            .split('?ref=')[1]
+            .split('@twitter')[0] || twitterHandle
     // generate a verification code (hash of user ID) for user to include in their Tweet
-    const verificaitonCode = await generateCode(userId, 'twitter', twitterHandle)
+    const verificaitonCode = await generateCode(userId, 'twitter', handleToVerify)
     full_text = JSON.stringify(full_text, null, 4)
         .toLowerCase()
     const tagsValid = [...twitterTags, verificaitonCode]
@@ -384,6 +415,7 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
     const path = `?ref=${twitterHandle}@twitter`
     const referralLinks = [
         `${url}${path}`,
+        // for backward compatibility where URL included a "/" like this: 'https://totem.live/?ref=.....'
         `${url}/${path}`,
     ]
     const linkValid = (urls || [])
@@ -395,13 +427,13 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 
 }
 
-// process any pending items on startup
+// process any pending or half-finished items on startup
 setTimeout(async () => {
     if (reprocessTwitterRewards === 'YES') {
         const rewardEntries = await dbRewards.search({
             'data.statusCode': {
                 $in: [
-                    statusCodes.paymentSuccess,
+                    statusCodes.paymentSuccess, // payment successful but referrer payment has not been processed yet
                     statusCodes.paymentErrorReferrrer,
                 ]
             },

@@ -1,4 +1,5 @@
 import ioClient from 'socket.io-client'
+import { BehaviorSubject } from 'rxjs'
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
     encrypt,
@@ -12,6 +13,8 @@ import { setTexts } from './language'
 import PromisE from './utils/PromisE'
 
 const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
+// faucet server connected
+const rxFSConnected = new BehaviorSubject(false)
 // Maximum number of requests within @TIME_LIMIT
 const REQUEST_LIMIT = 1
 const TIME_LIMIT = 365000 * 24 * 60 * 60 * 1000 // allow only one more request
@@ -33,13 +36,37 @@ const faucetClient = ioClient(FAUCET_SERVER_URL, {
 faucetClient.on('connect', () => {
     shouldLogError = true
     console.log('Connected to faucet server')
+    rxFSConnected.next(true)
 })
 faucetClient.on('connect_error', (err) => {
     // send message to discord error logger channel
     // if(shouldLogError) 
     shouldLogError = false
     console.log('Faucet client connection failed: ', err)
+    rxFSConnected.next(false)
 })
+/**
+ * @name    waitTillFSConnected
+ * @summary wait until faucet server is connected or timed out
+ * 
+ * @param   {Number} timeout timeout duration in milliseconds. If falsy will wait indefinitely until connected.
+ * 
+ * @returns {Promise}
+ */
+export const waitTillFSConnected = (timeout = 15000, tag) => new Promise((resolve, reject) => {
+    const sub = rxFSConnected
+        .subscribe(connected => {
+            if (!connected) return console.log(tag, 'Waiting for faucet server to be connected')
+            setTimeout(() => sub.unsubscribe())
+            resolve(true)
+        })
+
+    timeout && setTimeout(() => {
+        sub.unsubscribe()
+        reject('Faucet server did not connect after timeout')
+    }, timeout)
+})
+
 // Error messages
 const texts = setTexts({
     faucetDeprecated: 'Faucet requests have been deprecated and are no longer available. Here are more ways you can earn coins in addition to your signup rewards: refer a friend (copy link from Getting Started module) and post about Totem on social media (coming soon).',
