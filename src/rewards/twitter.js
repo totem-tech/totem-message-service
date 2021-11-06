@@ -117,7 +117,7 @@ const notifyUser = async (message, userId, status, rewardId) => {
  * @returns 
  */
 const processNext = async (rewardEntry, isDetached = true) => {
-    let error, errorCode, doWait
+    let error, errorCode, doWait, ignoreEntry
     // an item is already being executed
     if (!!inProgressKey) return
 
@@ -175,6 +175,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             if (verifyErr) {
                 console.log(debugTag, { verifyErr })
                 errorCode = statusCodes.verificationFailed
+                ignoreEntry = verifyErr.includes('No status found')
                 throw new Error(verifyErr)
             }
             // verification succes
@@ -191,17 +192,17 @@ const processNext = async (rewardEntry, isDetached = true) => {
             data.statusCode = statusCodes.verified
             await dbRewards.set(rewardId, rewardEntry)
             console.log(debugTag, 'Tweet and follow verified', twitterHandle)
-            if (verifyErr) {
-                inProgressKey = null
-                return !isDetached
-                    ? verifyErr
-                    : await notifyUser(
-                        verifyErr,
-                        userId,
-                        'error',
-                        rewardId,
-                    )
-            }
+            // if (verifyErr) {
+            //     inProgressKey = null
+            //     return !isDetached
+            //         ? verifyErr
+            //         : await notifyUser(
+            //             verifyErr,
+            //             userId,
+            //             'error',
+            //             rewardId,
+            //         )
+            // }
         }
 
         // pay user
@@ -240,7 +241,9 @@ const processNext = async (rewardEntry, isDetached = true) => {
         console.log(debugTag, 'reward payments complete', rewardId)
     } catch (err) {
         data.statusCode = errorCode || statusCodes.error
-        rewardEntry.status = rewardStatus.error
+        rewardEntry.status = ignoreEntry
+            ? rewardStatus.ignore
+            : rewardStatus.error
         rewardEntry.data.error = `${err}`
         await dbRewards.set(rewardId, rewardEntry)
         // execution failed
