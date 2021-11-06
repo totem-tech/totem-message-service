@@ -15,7 +15,7 @@ const defaultFields = [
     'roles',
     // rewards and secret is intentionally left out.
 ]
-export const users = new CouchDBStorage(null, 'users', defaultFields)
+export const users = new CouchDBStorage(null, 'users-prod', defaultFields)
 export const rxUserRegistered = new Subject() // value: [userId, clientId, referredBy]
 export const rxUserLoggedIn = new Subject() // value: [userId, clientIds]
 export const clients = new Map()
@@ -60,6 +60,8 @@ export const RESERVED_IDS = Object.freeze([
     'accounting',
     'admin',
     'administrator',
+    'announcement',
+    'announcements',
     'bitcoin',
     'blockchain',
     'ethereum',
@@ -248,7 +250,7 @@ export async function handleLogin(userId, secret, callback) {
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
 
     const client = this
-    const user = await users.find({ secret })
+    const user = await users.find({ _id: userId, secret })
     console.info(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
     if (!user) return callback(messages.loginFailed)
 
@@ -315,18 +317,28 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         // removes referrer ID if referrer user not found
         referredBy = _id
     } else if (isObj(referredBy) && !!referredBy.handle) {
-        // referral through other platforms
-        const { handle, platform } = referredBy
-        const selector = {
-            [`socialHandles.${platform}.handle`]: handle,
-            [`socialHandles.${platform}.verified`]: true
+        let referrer
+        let { handle, platform } = referredBy
+        handle = `${handle}`.toLowerCase()
+
+        if (platform === 'twitter') {
+            // lowercase twitter handle search using custom view
+            referrer = (await users.view('lowercase', 'twitterHandle', { key: handle }))[0]
+        } else {
+            // referral through other platforms
+            referrer = await users.find({
+                [`socialHandles.${platform}.handle`]: handle,
+                [`socialHandles.${platform}.verified`]: true
+            })
+
         }
-        const referrer = await users.find(selector) || {}
+
         // Check if referrer user is valid and or referrer's social handle has been verified
         referredBy = !referrer
             ? undefined
             : {
-                ...referredBy,
+                handle,
+                platform,
                 userId: referrer._id,
             }
     } else {
@@ -397,9 +409,30 @@ handleRegister.validationConfig = {
 }
 setTimeout(async () => {
     // create an index for the field `roles`, ignores if already exists
-    const indexDefs = [{
-        index: { fields: ['roles'] },
-        name: 'roles-index',
-    }]
-    indexDefs.forEach(async (def) => await (await users.getDB()).createIndex(def))
+    const indexDefs = [
+        {
+            index: { fields: ['roles'] },
+            name: 'roles-index',
+        },
+    ]
+    indexDefs.forEach(async (def) =>
+        await (await users.getDB()).createIndex(def)
+    )
+
+    // create design document to enable case-insensitive search of twitter handles
+    const designDoc = await users.getDoc('_design/lowercase')
+    const views = {
+        twitterHandle: {
+            map: `function (doc) {
+                if(!(doc.socialHandles || {}).twitter) return
+                emit(doc.socialHandles.twitter.handle.toLowerCase(), null)
+            }`
+        }
+    }
+    const updateRequired = !designDoc || Object.keys(views)
+        .find(key => !(designDoc.views || {})[key])
+    if (!updateRequired) return
+
+    console.log('Creating design document: users/_design/lowercase')
+    await users.set('_design/lowercase', { views, language: 'javascript' })
 })
