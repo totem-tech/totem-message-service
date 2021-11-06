@@ -241,6 +241,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
     } catch (err) {
         data.statusCode = errorCode || statusCodes.error
         rewardEntry.status = rewardStatus.error
+        rewardEntry.data.error = `${err}`
         await dbRewards.set(rewardId, rewardEntry)
         // execution failed
         console.log(debugTag, 'processNext():catch', err)
@@ -354,76 +355,80 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
  */
 const verifyTweet = async (userId, twitterHandle, tweetId) => {
     console.log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
-    // check if user is following Totem 
-    let {
-        following,
-        id: twitterId,
-        screen_name: followerHandle
-    } = await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
+    try {
+        // check if user is following Totem 
+        let {
+            following,
+            id: twitterId,
+            screen_name: followerHandle
+        } = await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
 
-    // force lowercase twitter handle
-    followerHandle = `${followerHandle}`.toLowerCase()
+        // force lowercase twitter handle
+        followerHandle = `${followerHandle}`.toLowerCase()
 
-    // User ID not found!
-    if (!twitterId || followerHandle !== twitterHandle) return [messages.invalidTwitterHandle]
+        // User ID not found!
+        if (!twitterId || followerHandle !== twitterHandle) return [messages.invalidTwitterHandle]
 
-    // User is not following Totem
-    if (!following) return [messages.notFollower]
+        // User is not following Totem
+        if (!following) return [messages.notFollower]
 
-    // check if twitterId was previous claimed
-    const claimer = await dbRewards.find({
-        'data.twitterid': twitterId,
-        'data.statusCode': { $gt: statusCodes.verified },
-        userId: { $ne: userId }
-    })
+        // check if twitterId was previous claimed
+        const claimer = await dbRewards.find({
+            'data.twitterid': twitterId,
+            'data.statusCode': { $gt: statusCodes.verified },
+            userId: { $ne: userId }
+        })
 
-    if (!!claimer) return [message.handleAlreadyClaimed]
+        if (!!claimer) return [message.handleAlreadyClaimed]
 
-    // retrieve Tweet
-    let {
-        entities: { urls },
-        full_text,
-        user: { screen_name }
-    } = await twitterHelper.getTweetById(tweetId)
+        // retrieve Tweet
+        let {
+            entities: { urls },
+            full_text,
+            user: { screen_name }
+        } = await twitterHelper.getTweetById(tweetId)
 
-    // force lowercase twitter handle
-    screen_name = `${screen_name}`.toLowerCase()
-    if (!full_text || screen_name !== twitterHandle) return [messages.invalidTweet]
+        // force lowercase twitter handle
+        screen_name = `${screen_name}`.toLowerCase()
+        if (!full_text || screen_name !== twitterHandle) return [messages.invalidTweet]
 
-    // for legacy compatibility
-    const referralUrl = (urls || [])
-        .find(x =>
-            x.expanded_url.includes('?ref=')
-            && x.expanded_url.includes('@twitter')
-        )
-    const handleToVerify = !referralUrl
-        ? twitterHandle
-        : referralUrl
-            .expanded_url
-            .split('?ref=')[1]
-            .split('@twitter')[0] || twitterHandle
-    // generate a verification code (hash of user ID) for user to include in their Tweet
-    const verificaitonCode = await generateCode(userId, 'twitter', handleToVerify)
-    full_text = JSON.stringify(full_text, null, 4)
-        .toLowerCase()
-    const tagsValid = [...twitterTags, verificaitonCode]
-        .every(tag => full_text.includes(tag))
-    if (!tagsValid) return [messages.disqualifiedTweet]
+        // for legacy compatibility
+        const referralUrl = (urls || [])
+            .find(x =>
+                x.expanded_url.includes('?ref=')
+                && x.expanded_url.includes('@twitter')
+            )
+        const handleToVerify = !referralUrl
+            ? twitterHandle
+            : referralUrl
+                .expanded_url
+                .split('?ref=')[1]
+                .split('@twitter')[0] || twitterHandle
+        // generate a verification code (hash of user ID) for user to include in their Tweet
+        const verificaitonCode = await generateCode(userId, 'twitter', handleToVerify)
+        full_text = JSON.stringify(full_text, null, 4)
+            .toLowerCase()
+        const tagsValid = [...twitterTags, verificaitonCode]
+            .every(tag => full_text.includes(tag))
+        if (!tagsValid) return [messages.disqualifiedTweet]
 
-    // check if user included the referral link
-    const url = 'https://totem.live'
-    const path = `?ref=${twitterHandle}@twitter`
-    const referralLinks = [
-        `${url}${path}`,
-        // for backward compatibility where URL included a "/" like this: 'https://totem.live/?ref=.....'
-        `${url}/${path}`,
-    ]
-    const linkValid = (urls || [])
-        .find(x => referralLinks.includes(x.expanded_url))
-    return [
-        !linkValid && messages.disqualifiedTweet,
-        twitterId
-    ]
+        // check if user included the referral link
+        const url = 'https://totem.live'
+        const path = `?ref=${twitterHandle}@twitter`
+        const referralLinks = [
+            `${url}${path}`,
+            // for backward compatibility where URL included a "/" like this: 'https://totem.live/?ref=.....'
+            `${url}/${path}`,
+        ]
+        const linkValid = (urls || [])
+            .find(x => referralLinks.includes(x.expanded_url))
+        return [
+            !linkValid && messages.disqualifiedTweet,
+            twitterId
+        ]
+    } catch (err) {
+        return [`${err}`]
+    }
 
 }
 
