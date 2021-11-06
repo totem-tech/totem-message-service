@@ -160,7 +160,9 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     const { address, referredBy, socialHandles = {} } = user
     user.socialHandles = socialHandles
-    const rewardId = getRewardId(rewardTypes.signupTwitter, twitterHandle)
+    const rewardId = rewardEntry
+        ? rewardEntry._id
+        : getRewardId(rewardTypes.signupTwitter, twitterHandle)
     inProgressKey = rewardId
 
     const referrer = referredBy
