@@ -247,7 +247,11 @@ const processNext = async (rewardEntry, isDetached = true) => {
         rewardEntry.data.error = `${err}`
         await dbRewards.set(rewardId, rewardEntry)
         // execution failed
-        console.log(debugTag, 'processNext():catch', { err, rewardEntry })
+        console.log(debugTag, 'processNext():catch', {
+            err,
+            rewardEntry,
+            rewardEntryFromDB: await dbRewards.get(rewardId),
+        })
         error = err
     } finally {
         setTimeout(async () => {
