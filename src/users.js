@@ -15,7 +15,7 @@ const defaultFields = [
     'roles',
     // rewards and secret is intentionally left out.
 ]
-export const users = new CouchDBStorage(null, 'users-prod', defaultFields)
+export const users = new CouchDBStorage(null, 'users', defaultFields)
 export const rxUserRegistered = new Subject() // value: [userId, clientId, referredBy]
 export const rxUserLoggedIn = new Subject() // value: [userId, clientIds]
 export const clients = new Map()
