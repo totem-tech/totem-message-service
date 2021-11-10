@@ -440,7 +440,7 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
             'No data',
             'No status'
         ].find(x => msg.includes(x))
-        if (notFound) return [`Invalid tweet ID: ${msg}`]
+        if (notFound) return [`${msg}`.replace('Error:', 'Tweet verification error:')]
         throw err
     }
 }
