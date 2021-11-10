@@ -131,9 +131,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
     // reserve this for execution to avoid any possible race condition may be caused due to database query delay
     inProgressKey = Symbol('reserved')
 
-    // make sure faucet server is connected
-    await waitTillFSConnected(0, `${debugTag} [processNext]`)
-
     // retrieve next queue item from database
     rewardEntry = !!rewardEntry
         ? rewardEntry
@@ -148,11 +145,13 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // end of the pending queue
     if (!rewardEntry) {
-        isDetached && console.log(debugTag, 'No pending or errored reward entry found')
+        isDetached && console.log(debugTag, 'No pending reward entry found')
         inProgressKey = null
         return
     }
 
+    // make sure faucet server is connected
+    await waitTillFSConnected(0, `${debugTag} [processNext]`)
     console.log(debugTag, 'processing Twitter signup reward', rewardEntry._id)
     let { data, userId } = rewardEntry
     // force lowercase existing twitter handles
