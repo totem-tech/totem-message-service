@@ -436,10 +436,13 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
         ]
     } catch (err) {
         const msg = `${err}`
-        if (msg.includes('No status found')) return [msg]
+        const notFound = [
+            'No data',
+            'No status'
+        ].find(x => msg.includes(x))
+        if (notFound) return [`Invalid tweet ID: ${msg}`]
         throw err
     }
-
 }
 
 // process any pending or half-finished items on startup
