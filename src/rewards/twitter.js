@@ -60,7 +60,13 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     const [claimer] = await users.view('lowercase', 'twitterHandle', { key: twitterHandle })
     const existingReward = await dbRewards.get(rewardId)
     // check if user has already claimed this reward
-    const { _id, data: { statusCode } = {}, status } = existingReward || {}
+    const {
+        _id,
+        data: {
+            statusCode
+        } = {},
+        status,
+    } = existingReward || {}
     const alreadyClaimed = claimer
         && claimer.socialHandles.twitter
         && claimer.socialHandles.twitter.verified
@@ -74,6 +80,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     const allowRepeat = [
         statusCodes.error,
         statusCodes.paymentError,
+        statusCodes.pending,
         statusCodes.verificationFailed,
     ].includes(statusCode)
     // nothing to do
@@ -150,6 +157,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
     let { data, userId } = rewardEntry
     // force lowercase existing twitter handles
     data.twitterHandle = `${data.twitterHandle}`.toLowerCase()
+    delete data.error
     let { statusCode, tweetId, twitterHandle } = data
     const user = await users.get(userId)
     if (!user) {
