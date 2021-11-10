@@ -124,7 +124,7 @@ const notifyUser = async (message, userId, status, rewardId) => {
  * @returns 
  */
 const processNext = async (rewardEntry, isDetached = true) => {
-    let error, errorCode, doWait, ignoreEntry
+    let error, errorCode, doWait
     // an item is already being executed
     if (!!inProgressKey) return
 
@@ -185,7 +185,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
             if (verifyErr) {
                 console.log(debugTag, { verifyErr })
                 errorCode = statusCodes.verificationFailed
-                ignoreEntry = true
                 throw verifyErr
             }
             // verification succes
@@ -251,9 +250,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
         console.log(debugTag, 'reward payments complete', rewardId)
     } catch (err) {
         data.statusCode = errorCode || statusCodes.error
-        rewardEntry.status = ignoreEntry
-            ? rewardStatus.ignore
-            : rewardStatus.error
+        rewardEntry.status = rewardStatus.error
         rewardEntry.data.error = `${err}`
         await dbRewards.set(rewardId, rewardEntry)
         // execution failed
