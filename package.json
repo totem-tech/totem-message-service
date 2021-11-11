@@ -51,7 +51,7 @@
     "@polkadot/keyring": "^1.8.1",
     "@polkadot/util": "^3.2.1",
     "@polkadot/util-crypto": "^3.2.1",
-    "@polkadot/wasm-crypto": "^0.14.1",
+    "@polkadot/wasm-crypto": "^0.20.1",
     "abort-controller": "^3.0.0",
     "babel-cli": "^6.26.0",
     "babel-core": "^6.26.3",
