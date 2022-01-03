@@ -1,7 +1,21 @@
 import CouchDBStorage from './utils/CouchDBStorage'
 import { isFn } from './utils/utils'
 
-const glAccounts = new CouchDBStorage(null, 'gl-accounts')
+const fields = [
+    'number',
+    'name',
+    'typeNr',
+    'typeName',
+    'categoryNr',
+    'categoryName',
+    'categoryGrpNr',
+    'categoryGrpName',
+    'groupNr',
+    'groupName',
+    'subGrpNr',
+    'balanceType',
+]
+const glAccounts = new CouchDBStorage(null, 'gl-accounts', fields)
 
 export const handleGlAccounts = async (accountNumbers = [], callback) => {
     if (!isFn(callback)) return
@@ -9,22 +23,5 @@ export const handleGlAccounts = async (accountNumbers = [], callback) => {
     const selector = {
         number: { $in: accountNumbers }
     }
-    const extraProps = {
-        fields: [
-            'number',
-            'name',
-            'typeNr',
-            'typeName',
-            'categoryNr',
-            'categoryName',
-            'categoryGrpNr',
-            'categoryGrpName',
-            'groupNr',
-            'groupName',
-            'subGrpNr',
-            'balanceType',
-        ]
-    }
-
-    return callback(null, await glAccounts.search(selector, 0, 0, false, extraProps))
+    return callback(null, await glAccounts.search(selector, 0, 0, false))
 }

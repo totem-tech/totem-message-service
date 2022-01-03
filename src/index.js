@@ -51,7 +51,12 @@ const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO(server)
+const socket = socketIO(server, {
+    // Specifying CORS 
+    cors: {
+        origin: '*',
+    }
+})
 // Error messages
 const texts = setTexts({
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
@@ -153,6 +158,7 @@ const events = {
     'task': handleTask,
     'task-get-by-id': handleTaskGetById,
 }
+
 const interceptHandler = (name, handler) => async function (...args) {
     if (!isFn(handler)) return
     const client = this
