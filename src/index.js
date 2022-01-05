@@ -51,12 +51,7 @@ const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
 const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO(server, {
-    // Specifying CORS 
-    cors: {
-        origin: '*',
-    }
-})
+const socket = socketIO(server)
 // Error messages
 const texts = setTexts({
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
