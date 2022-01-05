@@ -305,46 +305,46 @@ export const paySignupReward = async (userId, _rewardId) => {
 }
 
 // migrate old reward entries from "users" collection to "rewards" collection
-const migrateOldRewards = async () => {
-    const selector = { rewards: { $gt: null } }
-    const userEntries = await users.search(selector, 999, 0, false, { fields: [] })
-    const rewardEntries = new Map()
-    for (let user of userEntries) {
-        const { _id: userId, rewards = {} } = user
-        const { signupReward, referralRewards = {} } = rewards
-        if (!!signupReward && !!signupReward.status) {
-            const rewardId = getRewardId(rewardTypes.signup, userId)
-            rewardEntries.set(rewardId, {
-                ...signupReward,
-                amount: signupReward.amount || initialRewardAmount,
-                userId,
-                type: rewardTypes.signup,
-            })
-        }
+// const migrateOldRewards = async () => {
+//     const selector = { rewards: { $gt: null } }
+//     const userEntries = await users.search(selector, 999, 0, false, { fields: [] })
+//     const rewardEntries = new Map()
+//     for (let user of userEntries) {
+//         const { _id: userId, rewards = {} } = user
+//         const { signupReward, referralRewards = {} } = rewards
+//         if (!!signupReward && !!signupReward.status) {
+//             const rewardId = getRewardId(rewardTypes.signup, userId)
+//             rewardEntries.set(rewardId, {
+//                 ...signupReward,
+//                 amount: signupReward.amount || initialRewardAmount,
+//                 userId,
+//                 type: rewardTypes.signup,
+//             })
+//         }
 
-        const referredUserIds = Object.keys(referralRewards)
-        for (let referredUserId of referredUserIds) {
-            const entry = referralRewards[referredUserId]
-            if (!Object.keys(entry).length) continue
-            const rewardId = getRewardId(rewardTypes.referral, referredUserId)
-            rewardEntries.set(rewardId, {
-                ...entry,
-                amount: entry.amount || initialRewardAmount,
-                userId,
-                data: { referredUserId },
-                type: rewardTypes.referral,
-            })
-        }
-        delete user.rewards
-    }
+//         const referredUserIds = Object.keys(referralRewards)
+//         for (let referredUserId of referredUserIds) {
+//             const entry = referralRewards[referredUserId]
+//             if (!Object.keys(entry).length) continue
+//             const rewardId = getRewardId(rewardTypes.referral, referredUserId)
+//             rewardEntries.set(rewardId, {
+//                 ...entry,
+//                 amount: entry.amount || initialRewardAmount,
+//                 userId,
+//                 data: { referredUserId },
+//                 type: rewardTypes.referral,
+//             })
+//         }
+//         delete user.rewards
+//     }
 
-    if (userEntries.length === 0) return
+//     if (userEntries.length === 0) return
 
-    log(`Migrating ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
-    await dbRewards.setAll(rewardEntries, true, 99999, false)
-    await users.setAll(userEntries)
-    log(`Migrated ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
-}
+//     log(`Migrating ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
+//     await dbRewards.setAll(rewardEntries, true, 99999, false)
+//     await users.setAll(userEntries)
+//     log(`Migrated ${rewardEntries.size} reward entries from "users" to "rewards" collection`)
+// }
 
 const processUnsuccessfulRewards = async () => {
     const selector = {
@@ -400,21 +400,32 @@ const processUnsuccessfulRewards = async () => {
 }
 setTimeout(async () => {
     // create an index for the field `userId`, ignores if already exists
-    const indexDefs = [{
-        index: { fields: ['userId'] },
-        name: 'userId-index',
-    }]
+    const indexDefs = [
+        {
+            index: {
+                fields: ['userId']
+            },
+            name: 'userId-index',
+        },
+        {
+            index: {
+                fields: [
+                    { tsCreated: 'desc' }
+                ]
+            },
+            name: 'userId-index',
+        }
+    ]
     indexDefs.forEach(async (def) =>
         await (
             await dbRewards.getDB()
         ).createIndex(def)
     )
-
 })
 
 setTimeout(() => {
-    migrateOldRewards()
-        .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
+    // migrateOldRewards()
+    //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
     processUnsuccessfulRewards()
         .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
 }, 3000)
