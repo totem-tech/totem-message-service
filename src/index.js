@@ -55,7 +55,7 @@ const socket = socketIO(server)
 // Error messages
 const texts = setTexts({
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
-    loginRequired: 'Please login or create an account if you have not already done so',
+    loginRequired: 'You must be logged in to make this request. Please login or create an account.',
     runtimeError: `
         Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
         You can also email us at support@totemaccounting.com. 
