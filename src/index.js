@@ -50,8 +50,25 @@ const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
+const socketClients = [
+    'https://totem.live',
+    'https://dev.totem.live',
+    ...(process.env.SOCKET_CLIENTS || '')
+        .split(',')
+        .map(x => x.trim())
+        .map(x => {
+            if (x.startsWith('https://') || x.startsWith('http://')) return x
+            return `https://${x}`
+        })
+        .filter(Boolean)
+]
+const allowRequest = (request, callback) => {
+    const { headers: { origin } = {} } = request
+    const allow = socketClients.includes(origin)
+    callback(null, allow)
+}
 const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO(server)
+const socket = socketIO(server, { allowRequest })
 // Error messages
 const texts = setTexts({
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
