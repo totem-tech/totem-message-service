@@ -56,11 +56,11 @@ const socketClients = [
     ...(process.env.SOCKET_CLIENTS || '')
         .split(',')
         .map(x => x.trim())
+        .filter(Boolean)
         .map(x => {
             if (x.startsWith('https://') || x.startsWith('http://')) return x
             return `https://${x}`
         })
-        .filter(Boolean)
 ]
 const allowRequest = (request, callback) => {
     const { headers: { origin } = {} } = request
