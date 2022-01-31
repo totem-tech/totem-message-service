@@ -50,23 +50,28 @@ const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
-const socketClients = [
-    'https://totem.live',
-    'https://dev.totem.live',
-    ...(process.env.SOCKET_CLIENTS || '')
-        .split(',')
-        .map(x => x.trim())
-        .filter(Boolean)
-        .map(x => {
-            if (x.startsWith('https://') || x.startsWith('http://')) return x
-            return `https://${x}`
-        })
-]
-const allowRequest = (request, callback) => {
-    const { headers: { origin } = {} } = request
-    const allow = socketClients.includes(origin)
-    callback(null, allow)
-}
+const socketClients = (process.env.SOCKET_CLIENTS || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(x => {
+        if (x.startsWith('https://') || x.startsWith('http://')) return x
+        return `https://${x}`
+    })
+let unapprovedOrigins = []
+const allowRequest = socketClients.length === 0
+    ? undefined
+    : (request, callback) => {
+        const { headers: { origin } = {} } = request
+        const allow = socketClients.includes(origin)
+        if (!allow && !unapprovedOrigins.includes(origin)) {
+            unapprovedOrigins.push(origin)
+            // keep maximum of 100 
+            unapprovedOrigins = unapprovedOrigins.slice(-100)
+            console.log('Websocket request rejected from unapproved origin:', origin)
+        }
+        callback(null, allow)
+    }
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO(server, { allowRequest })
 // Error messages

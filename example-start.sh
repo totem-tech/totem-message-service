@@ -22,4 +22,5 @@
 # Debug="Boolean: use true enable verbose debugging" \
 # ProcessMissedPayouts="string: use YES to enable processing missed payouts on startup" \
 # Twitter_Bearer_Token="string: token for accessing Twitter API" \
+# SOCKET_CLIENTS="string: (optional) URL of the web applications to allow connecting to the messaging service. Example: 'https://totem.live,https//:some-other-app.com'" \
 # yarn run dev
