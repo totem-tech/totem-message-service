@@ -38,6 +38,7 @@ import { handleTask, handleTaskGetById } from './task'
 import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
 import rewardsHandlers from './rewards'
+import { handlers as crowdloanHandlers } from './crowdloan'
 
 let maintenanceMode = false
 let requestCount = 0
@@ -140,6 +141,9 @@ const events = {
 
     // Crowdsale
     // ...crowdsaleHanders,
+
+    // Crowdloan
+    ...crowdloanHandlers,
 
     // Faucet request
     'faucet-request': handleFaucetRequest,
