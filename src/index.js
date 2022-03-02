@@ -60,6 +60,7 @@ const socketClients = (process.env.SOCKET_CLIENTS || '')
         return `https://${x}`
     })
 let unapprovedOrigins = []
+console.log({ socketClients })
 const allowRequest = socketClients.length === 0
     ? undefined
     : (request, callback) => {
