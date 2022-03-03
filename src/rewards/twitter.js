@@ -476,16 +476,28 @@ setTimeout(async () => {
             },
             type: rewardTypes.signupTwitter,
         }, 0, 0, false)
+        let failed = 0
+        let success = 0
         for (let i = 0; i < rewardEntries.length; i++) {
             await PromisE.delay(3000)
             const rewardEntry = rewardEntries[i]
-            log('Reprocessing reward entry', rewardEntry._id, rewardEntry.status)
+            log('Reprocessing twitter reward entry', rewardEntry._id, rewardEntry.status)
             const error = await processNext(rewardEntry, false)
                 .catch(err => err)
             if (isError(error)) error = error.message
-            error && log(rewardEntry._id, { error })
+            if (error) {
+                log(rewardEntry._id, { error })
+                failed++
+            } else {
+                success++
+            }
         }
         reprocessRewards = false
+        rewardEntries.length > 0 && log('Finished reprocessing failed twitter reward entries', {
+            total: rewardEntries.length,
+            success,
+            failed,
+        })
     }
     await processNext()
 })
