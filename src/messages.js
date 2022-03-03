@@ -66,7 +66,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     const args = [message, senderId, receiverIds, encrypted, timestamp]
     const isTrollbox = receiverIds.includes(TROLLBOX) || receiverIds.includes(TROLLBOX_ALT)
     const isSupportMsg = receiverIds.includes(ROLE_SUPPORT)
-    const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
+    const userIsSupport = [...(user.roles || []), user.id].includes(ROLE_SUPPORT)
 
     if (isTrollbox) {
         // handle trollbox messages

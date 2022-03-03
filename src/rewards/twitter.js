@@ -4,10 +4,11 @@ import { objClean } from '../utils/utils'
 import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
-import { users } from '../users'
+import { emitToUsers, ROLE_SUPPORT, users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
 import { isError } from '@polkadot/util'
+import { handleMessage } from '../messages'
 
 let reprocessRewards = process.env.ReprocessRewards === 'yes'
 const debugTag = '[rewards] [twitter]'
@@ -476,8 +477,8 @@ setTimeout(async () => {
             },
             type: rewardTypes.signupTwitter,
         }, 0, 0, false)
-        let failed = 0
-        let success = 0
+        let failCount = 0
+        let successCount = 0
         for (let i = 0; i < rewardEntries.length; i++) {
             await PromisE.delay(3000)
             const rewardEntry = rewardEntries[i]
@@ -487,17 +488,47 @@ setTimeout(async () => {
             if (isError(error)) error = error.message
             if (error) {
                 log(rewardEntry._id, { error })
-                failed++
+                failCount++
             } else {
-                success++
+                successCount++
             }
         }
         reprocessRewards = false
-        rewardEntries.length > 0 && log('Finished reprocessing failed twitter reward entries', {
-            total: rewardEntries.length,
-            success,
-            failed,
-        })
+        if (rewardEntries.length > 0) {
+            log('Finished reprocessing failed twitter reward entries', {
+                total: rewardEntries.length,
+                successCount,
+                failCount,
+            })
+
+            // send ACK messge to support users
+            handleMessage.call(
+                [{}, { id: ROLE_SUPPORT }]
+                [ROLE_SUPPORT],
+                `Finished reprocessing failed Twitter rewards. \n\n${JSON.stringify({
+                    total: rewardEntries.length,
+                    successCount,
+                    failCount,
+                }, null, 4)}`,
+                false,
+                () => { }
+            )
+            // emitToUsers(
+            //     [ROLE_SUPPORT],
+            //     'message',
+            //     [
+            //         `Finished reprocessing failed Twitter rewards \n\n${JSON.stringify({
+            //             total: rewardEntries.length,
+            //             successCount,
+            //             failCount,
+            //         }, null, 4)}`,
+            //         ROLE_SUPPORT,
+            //         [ROLE_SUPPORT],
+            //         false,
+            //         new Date().toISOString(),
+            //     ]
+            // )
+        }
     }
     await processNext()
 })

@@ -1,9 +1,10 @@
 import { emitToFaucetServer } from '../faucetRequests'
 import { sendNotification } from '../notification'
-import { users } from '../users'
+import { emitToUsers, ROLE_SUPPORT, users } from '../users'
 import { generateHash } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'
+import { handleMessage } from '../messages'
 
 const texts = setTexts({
     signupRewardMsg: `
@@ -392,6 +393,7 @@ const processUnsuccessfulRewards = async () => {
     )
 
     let failCount = 0
+    let successCount = 0
     for (let entry of rewardEntries) {
         const { _id, data = {}, type, userId } = entry
         const { referredUserId } = data
@@ -410,6 +412,7 @@ const processUnsuccessfulRewards = async () => {
                     break
             }
             if (error) throw new Error(error)
+            successCount++
         } catch (err) {
             log(debugTag, '[UnsuccessfulRewards] payout request failed', `${err}`)
             failCount++
@@ -419,8 +422,39 @@ const processUnsuccessfulRewards = async () => {
     log('Processed incomplete signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
-        success: rewardEntries.length - failCount
+        success: successCount,
     })
+
+
+
+    // send ACK messge to support users
+    handleMessage.call(
+        [{}, { id: ROLE_SUPPORT }]
+        [ROLE_SUPPORT],
+        `Finished reprocessing failed signup+referral rewards. \n\n${JSON.stringify({
+            total: rewardEntries.length,
+            successCount,
+            failCount,
+        }, null, 4)}`,
+        false,
+        () => { }
+    )
+    // // send ACK messge to support users
+    // emitToUsers(
+    //     [ROLE_SUPPORT],
+    //     'message',
+    //     [
+    //         `Finished reprocessing failed Twitter rewards \n\n${JSON.stringify({
+    //             total: rewardEntries.length,
+    //             successCount,
+    //             failCount,
+    //         }, null, 4)}`,
+    //         ROLE_SUPPORT,
+    //         [ROLE_SUPPORT],
+    //         false,
+    //         new Date().toISOString(),
+    //     ]
+    // )
 }
 setTimeout(async () => {
     // create an index for the field `userId`, ignores if already exists
