@@ -8,7 +8,7 @@ import { users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
 
-const reprocessRewards = process.env.reprocessTwitterRewards === 'yes'
+const reprocessRewards = process.env.ReprocessRewards === 'yes'
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',

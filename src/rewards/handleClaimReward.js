@@ -5,9 +5,11 @@ import { claimSignupTwitterReward } from './twitter'
 import { log } from './rewards'
 
 const messages = setTexts({
+    inactive: 'Twitter rewards campaign has ended! Please stay tuned for rewards oppotunities in the future.',
     invalidRequest: 'Invalid request',
 })
-const debugTag = '[handleClaimReward]'
+const active = process.env.SocialRewardsDisabled !== 'YES'
+const debugTag = '[rewards][claim][twitter]'
 const supportedPlatforms = [
     'twitter'
 ]
@@ -43,6 +45,8 @@ const validationConf = {
 export async function handleClaimRewards(platform, handle, postId, callback) {
     if (!isFn(callback)) return
 
+    if (!active) return callback(messages.inactive)
+
     const [_, user] = this
     let err = validateObj(
         { handle, platform, postId },
@@ -54,7 +58,7 @@ export async function handleClaimRewards(platform, handle, postId, callback) {
 
     switch (platform) {
         case 'twitter':
-            log(`[rewards][claim][twitter]`, user.id)
+            log(debugTag, user.id)
             err = await claimSignupTwitterReward(user.id, handle, postId)
             break
         default:

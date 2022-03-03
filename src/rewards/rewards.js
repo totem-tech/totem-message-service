@@ -17,7 +17,7 @@ const texts = setTexts({
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
-const reprocessFailedRewards = process.env.reprocessTwitterRewards === 'YES'
+const reprocessFailedRewards = process.env.ReprocessRewards === 'YES'
 const isDebug = `${process.env.Debug}`.toLowerCase() === 'true'
 const timeout = 120000
 const debugTag = '[rewards]'

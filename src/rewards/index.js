@@ -5,21 +5,24 @@ import { log, payReferralReward, paySignupReward } from "./rewards"
 import { isObj } from '../utils/utils'
 
 const debugTag = '[rewards]'
+const signupActive = process.env.SignupRewardsDisabled !== 'YES'
+const referralActive = process.env.ReferralRewardsDisabled !== 'YES'
 // Listen for new user registrations and process referral and signup rewards
-rxUserRegistered.subscribe(async ({ addressIsUsed, userId, referredBy }) => {
+rxUserRegistered.subscribe(async ({ userId, referredBy }) => {
     try {
+        if (!signupActive && !referralActive) return
         referredBy = isObj(referredBy)
             ? referredBy.userId
             : referredBy
         log(debugTag, 'Initiating post-registration payouts', { userId, referredBy })
         // pay signup reward to the user
-        let err = await paySignupReward(userId)
+        let err = signupActive && await paySignupReward(userId)
         if (err) log(debugTag, 'Signup reward payment faild: ', err)
 
         // pay referral reward (if any)
         if (!referredBy) return
 
-        err = await payReferralReward(referredBy, userId)
+        err = referralActive && await payReferralReward(referredBy, userId)
         if (err) log(debugTag, 'Referral reward payment faild: ', err)
 
     } catch (err) {
