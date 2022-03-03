@@ -2,6 +2,7 @@ import { isFn } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import { setTexts } from '../language'
 import { claimSignupTwitterReward } from './twitter'
+import { log } from './rewards'
 
 const messages = setTexts({
     invalidRequest: 'Invalid request',
@@ -53,6 +54,7 @@ export async function handleClaimRewards(platform, handle, postId, callback) {
 
     switch (platform) {
         case 'twitter':
+            log(`[rewards][claim][twitter]`, user.id)
             err = await claimSignupTwitterReward(user.id, handle, postId)
             break
         default:
