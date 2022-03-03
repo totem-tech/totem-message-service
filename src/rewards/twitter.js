@@ -482,7 +482,7 @@ setTimeout(async () => {
             await PromisE.delay(3000)
             const rewardEntry = rewardEntries[i]
             log('Reprocessing twitter reward entry', rewardEntry._id, rewardEntry.status)
-            const error = await processNext(rewardEntry, false)
+            let error = await processNext(rewardEntry, false)
                 .catch(err => err)
             if (isError(error)) error = error.message
             if (error) {
