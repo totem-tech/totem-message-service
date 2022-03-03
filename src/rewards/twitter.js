@@ -8,9 +8,7 @@ import { users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
 
-const {
-    reprocessTwitterRewards,
-} = process.env
+const reprocessRewards = process.env.reprocessTwitterRewards === 'yes'
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
@@ -145,9 +143,22 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // end of the pending queue
     if (!rewardEntry) {
-        isDetached && console.log(debugTag, 'No pending reward entry found')
+        isDetached && console.log(debugTag, 'No pending twitter reward entry found')
         inProgressKey = null
         return
+    }
+
+    const saveWithError = async (error, ignore = false, next = true) => {
+        rewardEntry.status = ignore
+            ? rewardEntry.ignore // indicates entry should be ignored from any re-processing attempts
+            : rewardStatus.error
+        rewardEntry.data.error = `${error}`
+        console.log(debugTag, { rewardEntry, error })
+        await dbRewards.set(rewardId, rewardEntry)
+        if (!next) return
+
+        inProgressKey = null
+        processNext()
     }
 
     // make sure faucet server is connected
@@ -159,11 +170,10 @@ const processNext = async (rewardEntry, isDetached = true) => {
     delete data.error
     let { statusCode, tweetId, twitterHandle } = data
     const user = await users.get(userId)
-    if (!user) {
-        inProgressKey = null
-        console.log(debugTag, 'User not found:', userId)
-        return processNext()
-    }
+    if (!user) return await saveWithError(`User not found: ${userId}`, true)
+
+    const addressUsers = await users.search({ address: user.address }, 2)
+    if (addressUsers.length > 1) return await saveWithError('Identity used by another user', true)
 
     const { address, referredBy, socialHandles = {} } = user
     user.socialHandles = socialHandles
@@ -248,16 +258,10 @@ const processNext = async (rewardEntry, isDetached = true) => {
         await dbRewards.set(rewardId, rewardEntry)
         console.log(debugTag, 'reward payments complete', rewardId)
     } catch (err) {
-        data.statusCode = errorCode || statusCodes.error
-        rewardEntry.status = rewardStatus.error
-        rewardEntry.data.error = `${err}`
-        await dbRewards.set(rewardId, rewardEntry)
         // execution failed
-        console.log(debugTag, 'processNext():catch', {
-            err,
-            rewardEntry,
-        })
-        error = err
+        data.statusCode = errorCode || statusCodes.error
+        await saveWithError(err, false, false)
+        error = `${err}`.replace('Error: ', '')
     } finally {
         setTimeout(async () => {
             // wait one minute, if Twitter API was used
@@ -451,7 +455,7 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 
 // process any pending or half-finished items on startup
 setTimeout(async () => {
-    if (reprocessTwitterRewards === 'YES') {
+    if (reprocessRewards) {
         const rewardEntries = await dbRewards.search({
             'data.statusCode': {
                 $in: [

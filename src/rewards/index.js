@@ -6,7 +6,7 @@ import { isObj } from '../utils/utils'
 
 const debugTag = '[rewards]'
 // Listen for new user registrations and process referral and signup rewards
-rxUserRegistered.subscribe(async ({ address, userId, referredBy }) => {
+rxUserRegistered.subscribe(async ({ addressIsUsed, userId, referredBy }) => {
     try {
         referredBy = isObj(referredBy)
             ? referredBy.userId

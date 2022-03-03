@@ -24,23 +24,6 @@ import { TYPES, validateObj } from './utils/validator'
 // }
 // 
 const notifications = new CouchDBStorage(null, 'notifications')
-// initialize
-setTimeout(async () => {
-    // create an index for the field `timestamp`, ignores if already exists
-    const indexDefs = [
-        {   // index is used to retrieve latest undeleted notifications
-            index: { fields: ['deleted', 'to', 'tsCreated'] },
-            name: 'notification-index',
-        },
-        {
-            // index for sorting purposes
-            index: { fields: ['tsCreated'] },
-            name: 'tsCreated-index',
-        }
-    ]
-    const db = await notifications.getDB()
-    indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
-})
 // maximum number of recent unreceived notifications user can receive
 const UNRECEIVED_LIMIT = 200
 const errMessages = setTexts({
@@ -305,6 +288,8 @@ export async function handleNotificationGetRecent(tsLastReceived, callback) {
     // only retrieve notifications after specified timestamp
     if (tsLastReceived) selector.$and.push({ tsCreated: { $gt: tsLastReceived } })
 
+    console.log(JSON.stringify(selector, null, 4))
+
     // retrieve latest notifications
     let result = (await notifications.search(
         selector,
@@ -451,3 +436,25 @@ export async function handleNotification(recipients, type, childType, message, d
     callback(err)
 }
 handleNotification.requireLogin = true
+
+// initialize
+setTimeout(async () => {
+    // create an index for the field `timestamp`, ignores if already exists
+    const indexDefs = [
+        {   // index is used to retrieve latest undeleted notifications after specific time
+            index: { fields: ['deleted', 'to', 'tsCreated'] },
+            name: 'notification-index',
+        },
+        {   // index is used to retrieve latest undeleted notifications
+            index: { fields: ['deleted', 'to'] },
+            name: 'to-deleted-index',
+        },
+        {
+            // index for sorting purposes
+            index: { fields: ['tsCreated'] },
+            name: 'tsCreated-index',
+        }
+    ]
+    const db = await notifications.getDB()
+    indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
+})

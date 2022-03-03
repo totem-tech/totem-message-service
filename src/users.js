@@ -23,6 +23,8 @@ export const userClientIds = new Map()
 export const systemUserSymbol = Symbol('I am the system meawser!')
 const onlineSupportUsers = new Map()
 const userIdRegex = /^[a-z][a-z0-9]+$/
+const getTime = () => new Date().toISOString()
+const log = (...args) => console.log(getTime(), '[users]', ...args)
 // Error messages
 const messages = setTexts({
     alreadyRegistered: `
@@ -39,10 +41,11 @@ const messages = setTexts({
 })
 export const ROLE_ADMIN = 'admin'
 export const ROLE_SUPPORT = 'support'
+export const USER_CAPTCHA = 'captcha'
 // User IDs for use by the application ONLY.
 export const SYSTEM_IDS = Object.freeze([
-    'here',
-    'me',
+    // captcha verifier
+    'captcha',
     // catch-all type support user ID
     'support',
     // Troll bolx user IDs
@@ -51,8 +54,15 @@ export const SYSTEM_IDS = Object.freeze([
     // User ID for the Totem price aggregator micro service
     // This will be used to trigger currency list hash update
     'price_aggregator',
+    // rewards confirmation notifications sender
     'rewards',
+    // reserved
+    'here',
+    'me',
+    'bot',
+    'robot',
     'system',
+    'totem',
 ])
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([
@@ -78,7 +88,25 @@ export const RESERVED_IDS = Object.freeze([
     'medium',
     'tiktok',
     'instragram',
-    'pinterest'
+    'pinterest',
+
+    'human',
+    'alien',
+    'ceo',
+    'cfo',
+    'websocket',
+    'www',
+    'open',
+    'close',
+    'kapex',
+    'polkadot',
+    'dot',
+    'kusama',
+    'ksm',
+    'bitcoin',
+    'btc',
+    'ethereum',
+    'eth',
 ])
 
 // Broadcast message to all users except ignoreClientIds
@@ -195,7 +223,7 @@ export async function handleDisconnect() {
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
     userClientIds.set(user._id, arrUnique(clientIds))
-    console.info('Client disconnected | User ID:', user._id, ' | Client ID: ', client.id)
+    log('Client disconnected | User ID:', user._id, ' | Client ID: ', client.id)
 
     if (!onlineSupportUsers.get(user._id) || clientIds.length > 0) return
     // user is not online
@@ -251,7 +279,7 @@ export async function handleLogin(userId, secret, callback) {
 
     const client = this
     const user = await users.find({ _id: userId, secret })
-    console.info(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
+    log(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
     if (!user) return callback(messages.loginFailed)
 
     const { roles = [] } = user
@@ -317,6 +345,7 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         // removes referrer ID if referrer user not found
         referredBy = _id
     } else if (isObj(referredBy) && !!referredBy.handle) {
+        // Check if referrer user is valid and referrer's social handle has been verified
         let referrer
         let { handle, platform } = referredBy
         handle = `${handle}`.toLowerCase()
@@ -333,8 +362,8 @@ export async function handleRegister(userId, secret, address, referredBy, callba
 
         }
 
-        // Check if referrer user is valid and or referrer's social handle has been verified
-        referredBy = !referrer
+        // ignore if referrer and referred user's address is the same
+        referredBy = !referrer || referrer.address === address
             ? undefined
             : {
                 handle,
@@ -344,16 +373,16 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     } else {
         referredBy = undefined
     }
-    // save user data to database
+
     await users.set(userId, { ...newUser, referredBy })
     // add to websocket client list
     clients.set(client.id, client)
     // add client ID to user's clientId list
-    console.info('New User registered:', JSON.stringify({ userId, referredBy }))
+    log('New User registered:', JSON.stringify({ userId, referredBy }))
     userClientIds.set(userId, [client.id])
 
     rxUserRegistered.next({
-        address,
+        addressIsUsed,
         clientId: client.id,
         userId,
         referredBy,
@@ -411,6 +440,10 @@ setTimeout(async () => {
     // create an index for the field `roles`, ignores if already exists
     const indexDefs = [
         {
+            index: { fields: ['address'] },
+            name: 'address-index',
+        },
+        {
             index: { fields: ['roles'] },
             name: 'roles-index',
         },
@@ -433,6 +466,6 @@ setTimeout(async () => {
         .find(key => !(designDoc.views || {})[key])
     if (!updateRequired) return
 
-    console.log('Creating design document: users/_design/lowercase')
+    log('Creating design document: users/_design/lowercase')
     await users.set('_design/lowercase', { views, language: 'javascript' })
 })

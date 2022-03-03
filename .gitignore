@@ -15,6 +15,7 @@ startmes.sh
 startmesdev.sh
 ui-start.sh
 tools/importCompanies.sh
+start-*.sh
 
 # bundled JS file
 docs/bundle.js

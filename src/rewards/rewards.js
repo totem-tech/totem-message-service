@@ -17,6 +17,7 @@ const texts = setTexts({
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
+const reprocessFailedRewards = process.env.reprocessTwitterRewards === 'YES'
 const isDebug = `${process.env.Debug}`.toLowerCase() === 'true'
 const timeout = 120000
 const debugTag = '[rewards]'
@@ -172,6 +173,14 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
 
     log(_debugTag, `${referrerUserId} referred ${referredUserId}`)
 
+    const addressUsers = await users.search({ address }, 2, 0, false)
+    if (addressUsers.length > 1) {
+        rewardEntry.status = rewardStatus.ignore
+        rewardEntry.error = `Referred user's address is used by more than one user`
+        await saveEntry(true, false)
+        return rewardEntry.error
+    }
+
     rewardEntry.status = rewardStatus.processing
     await saveEntry()
 
@@ -262,12 +271,22 @@ export const paySignupReward = async (userId, _rewardId) => {
         }, 100)
 
     }
+
     // user has already been rewarded
     if (rewardEntry.status === rewardStatus.success && !rewardEntry.notification) {
         log('already paid', { rewardEntry })
         await saveEntry(false, true)
         log(_debugTag, `payout was already successful for ${userId}`)
         return
+    }
+
+    const addressUsers = await users.search({ address }, 2, 0, false)
+    if (addressUsers.length > 1) {
+        rewardEntry.error = 'Address is used by more than one user'
+        rewardEntry.status = rewardStatus.ignore
+        if (!!rewardEntry._id) await saveEntry(true, false)
+
+        return rewardEntry.error
     }
 
     log(_debugTag, userId)
@@ -350,9 +369,9 @@ const processUnsuccessfulRewards = async () => {
     const selector = {
         status: {
             $in: [
-                rewardStatus.error,
+                reprocessFailedRewards && rewardStatus.error,
                 rewardStatus.pending,
-            ]
+            ].filter(Boolean)
         },
         type: {
             $in: [
@@ -363,15 +382,18 @@ const processUnsuccessfulRewards = async () => {
     }
     const rewardEntries = await dbRewards.search(selector, 9999, 0, false)
     if (rewardEntries.length === 0) return
+    log(
+        debugTag,
+        `Pending${reprocessFailedRewards ? ' & error' : ''} signup & referral`,
+        `reward entries: ${rewardEntries.length}`,
+    )
 
-    log(`Processing incomplete signup & referral rewards ${rewardEntries.length}`)
 
     let failCount = 0
-    log(debugTag, { rewardEntries: rewardEntries.length })
     for (let entry of rewardEntries) {
         const { _id, data = {}, type, userId } = entry
         const { referredUserId } = data
-        log(debugTag, '[UnsuccessfulRewards] Processing', _id)
+        log(debugTag, 'Processing', _id)
         try {
             let error
             switch (type) {
@@ -403,9 +425,15 @@ setTimeout(async () => {
     const indexDefs = [
         {
             index: {
-                fields: ['userId']
+                fields: ['status']
             },
-            name: 'userId-index',
+            name: 'status-index',
+        },
+        {
+            index: {
+                fields: ['status', 'type']
+            },
+            name: 'status-type-index',
         },
         {
             index: {
@@ -413,8 +441,20 @@ setTimeout(async () => {
                     { tsCreated: 'desc' }
                 ]
             },
+            name: 'tsCreated-index',
+        },
+        {
+            index: {
+                fields: ['type']
+            },
+            name: 'type-index',
+        },
+        {
+            index: {
+                fields: ['userId']
+            },
             name: 'userId-index',
-        }
+        },
     ]
     indexDefs.forEach(async (def) =>
         await (
