@@ -203,7 +203,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 verified: true,
             }
             await users.set(userId, user)
-            console.log(debugTag, 'User after verification complete', await users.get(userId))
+            // console.log(debugTag, 'User after verification complete', await users.get(userId))
 
             // update reward entry
             data.twitterId = twitterId
