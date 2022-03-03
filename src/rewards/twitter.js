@@ -505,7 +505,7 @@ setTimeout(async () => {
             handleMessage.call(
                 [{}, { id: ROLE_SUPPORT }]
                 [ROLE_SUPPORT],
-                `Finished reprocessing failed Twitter rewards. \n\n${JSON.stringify({
+                `[AUTOMATED MESSAGE] \n\nFinished reprocessing failed Twitter rewards. \n\n${JSON.stringify({
                     total: rewardEntries.length,
                     successCount,
                     failCount,
