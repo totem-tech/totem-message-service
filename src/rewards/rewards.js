@@ -384,7 +384,18 @@ const processUnsuccessfulRewards = async () => {
             ]
         }
     }
-    const rewardEntries = await dbRewards.search(selector, 9999, 0, false)
+    const rewardEntries = await dbRewards.search(
+        selector,
+        9999,
+        0,
+        false,
+        { sort: [{ tsCreated: 'asc' }] },
+    )
+    console.log({
+        reprocessFailedRewards,
+        selector,
+        rewardEntries: rewardEntries.length,
+    })
     if (rewardEntries.length === 0) return
     log(
         debugTag,
@@ -429,7 +440,7 @@ const processUnsuccessfulRewards = async () => {
 
     // send ACK messge to support users
     handleMessage.call(
-        [{}, { id: ROLE_SUPPORT }]
+        [{}, { id: ROLE_SUPPORT }],
         [ROLE_SUPPORT],
         `Finished reprocessing failed signup+referral rewards. \n\n${JSON.stringify({
             total: rewardEntries.length,

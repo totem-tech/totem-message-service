@@ -468,7 +468,7 @@ setTimeout(async () => {
         //     },
         //     type: rewardTypes.signupTwitter,
         // }, 0, 0, false)
-        const rewardEntries = await dbRewards.search({
+        const selector = {
             'status': {
                 $in: [
                     rewardStatus.error,
@@ -476,7 +476,14 @@ setTimeout(async () => {
                 ]
             },
             type: rewardTypes.signupTwitter,
-        }, 0, 0, false)
+        }
+        const rewardEntries = await dbRewards.search(
+            selector,
+            999999,
+            0,
+            false,
+            { sort: { tsCreated: 'asc' } }
+        )
         let failCount = 0
         let successCount = 0
         for (let i = 0; i < rewardEntries.length; i++) {
@@ -503,7 +510,7 @@ setTimeout(async () => {
 
             // send ACK messge to support users
             handleMessage.call(
-                [{}, { id: ROLE_SUPPORT }]
+                [{}, { id: ROLE_SUPPORT }],
                 [ROLE_SUPPORT],
                 `[AUTOMATED MESSAGE] \n\nFinished reprocessing failed Twitter rewards. \n\n${JSON.stringify({
                     total: rewardEntries.length,

@@ -57,7 +57,9 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     const timestamp = new Date().toISOString()
     const senderId = user.id
     // convert single to array
-    receiverIds = isStr(receiverIds) ? [receiverIds] : receiverIds
+    receiverIds = isStr(receiverIds)
+        ? [receiverIds]
+        : receiverIds
     const err = validateObj({ message, receiverIds }, handleMessage.validationConf, true, true)
     if (err) return callback(err)
 
