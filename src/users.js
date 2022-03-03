@@ -382,7 +382,6 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     userClientIds.set(userId, [client.id])
 
     rxUserRegistered.next({
-        addressIsUsed,
         clientId: client.id,
         userId,
         referredBy,
