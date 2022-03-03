@@ -288,8 +288,6 @@ export async function handleNotificationGetRecent(tsLastReceived, callback) {
     // only retrieve notifications after specified timestamp
     if (tsLastReceived) selector.$and.push({ tsCreated: { $gt: tsLastReceived } })
 
-    console.log(JSON.stringify(selector, null, 4))
-
     // retrieve latest notifications
     let result = (await notifications.search(
         selector,
