@@ -47,6 +47,7 @@ const twitterTags = [
 ].map(x => x.toLowerCase())
 // To avoid hitting Twitter API query limit queue any Twitter API requests and process them on specific time interval. 
 let inProgressKey = null
+const log = (...args) => console.log(new Date().toISOString(), debugTag, ...args)
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     twitterHandle = `${twitterHandle || ''}`
@@ -97,7 +98,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
         userId,
     }
     await dbRewards.set(rewardId, rewardEntry)
-    console.log(debugTag, 'added to queue', rewardId)
+    log('added to queue', rewardId)
     return await processNext(rewardEntry, false)
 }
 
@@ -143,7 +144,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // end of the pending queue
     if (!rewardEntry) {
-        isDetached && console.log(debugTag, 'No pending twitter reward entry found')
+        isDetached && log('No pending twitter reward entry found')
         inProgressKey = null
         return
     }
@@ -153,7 +154,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             ? rewardEntry.ignore // indicates entry should be ignored from any re-processing attempts
             : rewardStatus.error
         rewardEntry.data.error = `${error}`
-        console.log(debugTag, { rewardEntry, error })
+        log({ rewardEntry, error })
         await dbRewards.set(rewardId, rewardEntry)
         if (!next) return
 
@@ -163,7 +164,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // make sure faucet server is connected
     await waitTillFSConnected(0, `${debugTag} [processNext]`)
-    console.log(debugTag, 'processing Twitter signup reward', rewardEntry._id)
+    log('processing Twitter signup reward', rewardEntry._id)
     let { data, userId } = rewardEntry
     // force lowercase existing twitter handles
     data.twitterHandle = `${data.twitterHandle}`.toLowerCase()
@@ -192,7 +193,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             doWait = true
             const [verifyErr, twitterId] = await verifyTweet(userId, twitterHandle, tweetId)
             if (verifyErr) {
-                console.log(debugTag, { verifyErr })
+                log({ verifyErr })
                 errorCode = statusCodes.verificationFailed
                 throw verifyErr
             }
@@ -203,13 +204,13 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 verified: true,
             }
             await users.set(userId, user)
-            // console.log(debugTag, 'User after verification complete', await users.get(userId))
+            // log('User after verification complete', await users.get(userId))
 
             // update reward entry
             data.twitterId = twitterId
             data.statusCode = statusCodes.verified
             await dbRewards.set(rewardId, rewardEntry)
-            console.log(debugTag, 'Tweet and follow verified', twitterHandle)
+            log('Tweet and follow verified', twitterHandle)
             // if (verifyErr) {
             //     inProgressKey = null
             //     return !isDetached
@@ -256,7 +257,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             : statusCodes.paymentSuccess
         rewardEntry.status = rewardStatus.success
         await dbRewards.set(rewardId, rewardEntry)
-        console.log(debugTag, 'reward payments complete', rewardId)
+        log('reward payments complete', rewardId)
     } catch (err) {
         // execution failed
         data.statusCode = errorCode || statusCodes.error
@@ -306,7 +307,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
  * @returns 
  */
 const payReward = async (address, rewardId, referrer, referredUserId, twitterHandle) => {
-    console.log(debugTag, `Pay Twitter reward to ${!!referrer ? 'referrer' : 'user'} ${rewardId}`)
+    log(`Pay Twitter reward to ${!!referrer ? 'referrer' : 'user'} ${rewardId}`)
     const rewardEntry = (await dbRewards.get(rewardId)) || {}
     const { _id, status } = rewardEntry
     if (!!_id && status === rewardStatus.success) {
@@ -314,7 +315,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         return [null, data]
     }
 
-    console.log(debugTag, 'Sending payment request faucet server', rewardId)
+    log('Sending payment request faucet server', rewardId)
     const [err, data = {}] = await emitToFaucetServer(
         'reward-payment',
         {
@@ -326,7 +327,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         },
         120000,
     )
-    console.log(debugTag, 'Payment success', rewardId)
+    log('Payment success', rewardId)
     if (!referrer) return [err, data]
 
     const { amount, txId, txHash } = data || {}
@@ -370,7 +371,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
  * @returns {Array} [errorMessage, twitterId]
  */
 const verifyTweet = async (userId, twitterHandle, tweetId) => {
-    console.log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
+    log('Verifying tweet', { twitterHandle, tweetId })
     try {
         // check if user is following Totem 
         let {
@@ -456,11 +457,20 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 // process any pending or half-finished items on startup
 setTimeout(async () => {
     if (reprocessRewards) {
+        // const rewardEntries = await dbRewards.search({
+        //     'data.statusCode': {
+        //         $in: [
+        //             statusCodes.paymentSuccess, // payment successful but referrer payment has not been processed yet
+        //             statusCodes.paymentErrorReferrrer,
+        //         ]
+        //     },
+        //     type: rewardTypes.signupTwitter,
+        // }, 0, 0, false)
         const rewardEntries = await dbRewards.search({
-            'data.statusCode': {
+            'status': {
                 $in: [
-                    statusCodes.paymentSuccess, // payment successful but referrer payment has not been processed yet
-                    statusCodes.paymentErrorReferrrer,
+                    rewardStatus.error,
+                    rewardStatus.processing,
                 ]
             },
             type: rewardTypes.signupTwitter,
@@ -468,9 +478,9 @@ setTimeout(async () => {
         for (let i = 0; i < rewardEntries.length; i++) {
             await PromisE.delay(3000)
             const rewardEntry = rewardEntries[i]
-            console.log('Reprocessing reward entry', rewardEntry._id)
+            log('Reprocessing reward entry', rewardEntry._id, rewardEntry.status)
             const error = await processNext(rewardEntry)
-            error && console.log({ error })
+            error && log(rewardEntry._id, { error })
         }
     }
     await processNext()

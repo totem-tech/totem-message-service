@@ -1,10 +1,9 @@
 import { emitToFaucetServer } from '../faucetRequests'
 import { sendNotification } from '../notification'
-import { RESERVED_IDS, users } from '../users'
-import { arrSort, generateHash, isObj } from '../utils/utils'
+import { users } from '../users'
+import { generateHash } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'
-import './discord'
 
 const texts = setTexts({
     signupRewardMsg: `
@@ -370,6 +369,7 @@ const processUnsuccessfulRewards = async () => {
         status: {
             $in: [
                 reprocessFailedRewards && rewardStatus.error,
+                reprocessFailedRewards && rewardStatus.processing,
                 rewardStatus.pending,
             ].filter(Boolean)
         },
@@ -387,7 +387,6 @@ const processUnsuccessfulRewards = async () => {
         `Pending${reprocessFailedRewards ? ' & error' : ''} signup & referral`,
         `reward entries: ${rewardEntries.length}`,
     )
-
 
     let failCount = 0
     for (let entry of rewardEntries) {
@@ -423,6 +422,22 @@ const processUnsuccessfulRewards = async () => {
 setTimeout(async () => {
     // create an index for the field `userId`, ignores if already exists
     const indexDefs = [
+        // {
+        //     index: {
+        //         fields: ['data.statusCode', 'type']
+        //     },
+        //     name: 'data.statusCode-type-index',
+        // },
+        {
+            index: {
+                fields: [
+                    'data.twitterId',
+                    'data.statusCode',
+                    'userId',
+                ]
+            },
+            name: 'data.twitterId-data.statusCode-userId-index',
+        },
         {
             index: {
                 fields: ['status']
