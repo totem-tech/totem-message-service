@@ -7,8 +7,9 @@ import { sendNotification } from '../notification'
 import { users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
+import { isError } from '@polkadot/util'
 
-const reprocessRewards = process.env.ReprocessRewards === 'yes'
+let reprocessRewards = process.env.ReprocessRewards === 'yes'
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
@@ -99,7 +100,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
     }
     await dbRewards.set(rewardId, rewardEntry)
     log('added to queue', rewardId)
-    return await processNext(rewardEntry, false)
+    return !reprocessRewards && await processNext(rewardEntry, false)
 }
 
 const notifyUser = async (message, userId, status, rewardId) => {
@@ -159,7 +160,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
         if (!next) return
 
         inProgressKey = null
-        processNext()
+        !reprocessRewards && processNext()
     }
 
     // make sure faucet server is connected
@@ -268,7 +269,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             // wait one minute, if Twitter API was used
             doWait && await PromisE.delay(60 * 1000)
             inProgressKey = null
-            processNext()
+            !reprocessRewards && processNext()
         })
     }
 
@@ -479,9 +480,12 @@ setTimeout(async () => {
             await PromisE.delay(3000)
             const rewardEntry = rewardEntries[i]
             log('Reprocessing reward entry', rewardEntry._id, rewardEntry.status)
-            const error = await processNext(rewardEntry)
+            const error = await processNext(rewardEntry, false)
+                .catch(err => err)
+            if (isError(error)) error = error.message
             error && log(rewardEntry._id, { error })
         }
+        reprocessRewards = false
     }
     await processNext()
 })

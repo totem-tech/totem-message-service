@@ -180,8 +180,11 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
         return rewardEntry.error
     }
 
-    rewardEntry.status = rewardStatus.processing
+    rewardEntry.status = reprocessFailedRewards
+        ? rewardStatus.pending
+        : rewardStatus.processing
     await saveEntry()
+    if (reprocessFailedRewards) return
 
     try {
         log(_debugTag, `Sending payout request to faucet server for ${referrerUserId}`)
