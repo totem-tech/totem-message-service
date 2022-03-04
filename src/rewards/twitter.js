@@ -495,6 +495,12 @@ setTimeout(async () => {
         for (let i = 0; i < rewardEntries.length; i++) {
             await PromisE.delay(200)
             const rewardEntry = rewardEntries[i]
+            if (rewardEntry.data.statusCode === statusCodes.verificationFailed) {
+                // twitter verification failed ==> ignore
+                rewardEntry.status = rewardStatus.ignore
+                await dbRewards.set(rewardEntry._id, rewardEntry, true, true)
+                continue
+            }
             log(debugTag, 'Reprocessing twitter reward entry', rewardEntry._id, rewardEntry.status)
             let error = await processNext(rewardEntry, false)
                 .catch(err => err)
