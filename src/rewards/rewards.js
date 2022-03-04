@@ -19,13 +19,12 @@ export const dbRewards = new CouchDBStorage(null, 'rewards')
 const dbSettings = new CouchDBStorage(null, 'settings')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = process.env.ReprocessRewards === 'YES'
-const isDebug = `${process.env.Debug}`.toLowerCase() === 'true'
 const timeout = 120000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
 const initialRewardAmount = 108154 // only used where amount has not been saved (initial drop)
-export const log = (...args) => isDebug && console.log(...args)
+export const log = (...args) => console.log(...args)
 export const rewardStatus = {
     error: 'error', // payment failed
     ignore: 'ignore',
