@@ -372,10 +372,11 @@ export const paySignupReward = async (userId, _rewardId) => {
 // }
 
 const processUnsuccessfulRewards = async () => {
-    const { tsLastReprocess = {} } = (await dbSettings.get('rewards')) || {}
+    const settings = (await dbSettings.get('rewards')) || {}
+    settings.backlog = settings.backlog || {}
     const {
-        signupReferral = new Date('2000:01:01').toISOString()
-    } = tsLastReprocess
+        tsSignupReferral = new Date('2000:01:01').toISOString()
+    } = settings.backlog
     const selector = {
         status: {
             $in: [
@@ -385,7 +386,7 @@ const processUnsuccessfulRewards = async () => {
             ].filter(Boolean)
         },
         tsCreated: {
-            $gt: signupReferral,
+            $gt: tsSignupReferral,
         },
         type: {
             $in: [
@@ -441,6 +442,8 @@ const processUnsuccessfulRewards = async () => {
         }
     }
 
+    settings.backlog.tsSignupReferral = new Date().toISOString()
+    dbSettings.set('rewards', settings)
     log('Finished reprocessing signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
