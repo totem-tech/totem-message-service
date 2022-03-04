@@ -1,10 +1,10 @@
 import CouchDBStorage from '../../src/utils/CouchDBStorage'
 import DataStorage from '../../src/utils/DataStorage'
 
-async function init() {
+async function exportDb() {
     const url = process.env.CouchDB_URL
     const dbName = process.env.DBName
-    const fileName = process.env.FILENAME
+    let fileName = process.env.FILENAME
     const limit = parseInt(process.env.LIMIT || 99999999)
     const skip = parseInt(process.env.SKIP || 0)
     if (!dbName) throw new Error('COLLECTION_NAME required')
@@ -12,10 +12,15 @@ async function init() {
 
     const db = new CouchDBStorage(url, dbName)
     const result = await db.getAll([], true, limit, skip)
-    fileName = fileName || `${dbName}-${skip || 1}-${skip + result.size}-${new Date().toISOString()}.json`
+    const ts = new Date()
+        .toISOString()
+        .replace(/\:/g, '-')
+
+    fileName = fileName || `${dbName}-${skip || 1}-${skip + result.size}-${ts}.json`
+    console.log({ fileName })
     const json = new DataStorage(fileName)
     await json.setAll(result)
     console.log(`${result.size} entries saved to ${fileName}`)
 }
 
-init()
+exportDb()

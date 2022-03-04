@@ -1,6 +1,6 @@
 import PromisE from '../utils/PromisE'
 import twitterHelper from '../utils/twitterHelper'
-import { objClean } from '../utils/utils'
+import { isObj, objClean } from '../utils/utils'
 import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
@@ -10,7 +10,7 @@ import generateCode from './socialVerificationCode'
 import { isError } from '@polkadot/util'
 import { handleMessage } from '../messages'
 
-let reprocessRewards = process.env.ReprocessRewards === 'yes'
+let reprocessRewards = (process.env.ReprocessTwitterRewards || '').toLowerCase() === 'yes'
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
@@ -101,7 +101,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
         userId,
     }
     await dbRewards.set(rewardId, rewardEntry)
-    log('added to queue', rewardId)
+    log(debugTag, 'added to queue', rewardId)
     return !reprocessRewards && await processNext(rewardEntry, false)
 }
 
@@ -126,28 +126,33 @@ const notifyUser = async (message, userId, status, rewardId) => {
  * @returns 
  */
 const processNext = async (rewardEntry, isDetached = true) => {
-    let error, errorCode, doWait
     // an item is already being executed
     if (!!inProgressKey) return
 
+    let error
     // reserve this for execution to avoid any possible race condition may be caused due to database query delay
     inProgressKey = Symbol('reserved')
 
     // retrieve next queue item from database
-    rewardEntry = !!rewardEntry
+    rewardEntry = isObj(rewardEntry)
         ? rewardEntry
-        : await dbRewards.find({
-            status: rewardStatus.pending,
-            // status: {
-            //     $ne: rewardStatus.success,
-            // },
-            // 'data.statusCode': statusCodes.pending,
-            type: rewardTypes.signupTwitter,
-        })
+        : await dbRewards.find(
+            {
+                status: rewardStatus.pending,
+                // status: {
+                //     $ne: rewardStatus.success,
+                // },
+                // 'data.statusCode': statusCodes.pending,
+                type: rewardTypes.signupTwitter,
+            },
+            {
+                sort: [{ tsCreated: 'asc' }],
+            },
+        )
 
     // end of the pending queue
     if (!rewardEntry) {
-        isDetached && log('No pending twitter reward entry found')
+        isDetached && log(debugTag, 'No pending twitter reward entry found')
         inProgressKey = null
         return
     }
@@ -157,7 +162,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
             ? rewardEntry.ignore // indicates entry should be ignored from any re-processing attempts
             : rewardStatus.error
         rewardEntry.data.error = `${error}`
-        log({ rewardEntry, error })
+        log(debugTag, { rewardEntry, error })
         await dbRewards.set(rewardId, rewardEntry)
         if (!next) return
 
@@ -167,7 +172,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // make sure faucet server is connected
     await waitTillFSConnected(0, `${debugTag} [processNext]`)
-    log('processing Twitter signup reward', rewardEntry._id)
+    log(debugTag, 'processing Twitter signup reward', rewardEntry._id)
     let { data, userId } = rewardEntry
     // force lowercase existing twitter handles
     data.twitterHandle = `${data.twitterHandle}`.toLowerCase()
@@ -197,12 +202,10 @@ const processNext = async (rewardEntry, isDetached = true) => {
     })
     try {
         if (statusCode <= statusCodes.verificationFailed) {
-            doWait = true
             const [verifyErr, twitterId] = await verifyTweet(userId, twitterHandle, tweetId)
             if (verifyErr) {
-                log({ verifyErr })
-                errorCode = statusCodes.verificationFailed
-                throw verifyErr
+                rewardEntry.data.statusCode = statusCodes.verificationFailed
+                return await saveWithError(verifyErr, true, true)
             }
             // verification succes
             socialHandles.twitter = {
@@ -211,24 +214,12 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 verified: true,
             }
             await users.set(userId, user)
-            // log('User after verification complete', await users.get(userId))
 
             // update reward entry
             data.twitterId = twitterId
             data.statusCode = statusCodes.verified
             await dbRewards.set(rewardId, rewardEntry)
-            log('Tweet and follow verified', twitterHandle)
-            // if (verifyErr) {
-            //     inProgressKey = null
-            //     return !isDetached
-            //         ? verifyErr
-            //         : await notifyUser(
-            //             verifyErr,
-            //             userId,
-            //             'error',
-            //             rewardId,
-            //         )
-            // }
+            log(debugTag, 'Tweet and follow verified', twitterHandle)
         }
 
         const shouldSkip = (data = {}) => {
@@ -247,8 +238,8 @@ const processNext = async (rewardEntry, isDetached = true) => {
             rewardEntry.txId = iData.txId
 
             if (payErr) {
-                errorCode = statusCodes.paymentError
-                throw new Error(payErr)
+                rewardEntry.data.statusCode = statusCodes.paymentError
+                return await saveWithError(payErr, true, true)
             }
         }
 
@@ -264,8 +255,8 @@ const processNext = async (rewardEntry, isDetached = true) => {
             if (shouldSkip(jData)) return
 
             if (payRefErr) {
-                errorCode = statusCodes.paymentError
-                throw new Error(payRefErr)
+                rewardEntry.data.statusCode = statusCodes.paymentError
+                return await saveWithError(payErr, true, true)
             }
         }
         data.statusCode = referrer
@@ -273,10 +264,10 @@ const processNext = async (rewardEntry, isDetached = true) => {
             : statusCodes.paymentSuccess
         rewardEntry.status = rewardStatus.success
         await dbRewards.set(rewardId, rewardEntry)
-        log('reward payments complete', rewardId)
+        log(debugTag, 'reward payments complete', rewardId)
     } catch (err) {
         // execution failed
-        data.statusCode = errorCode || statusCodes.error
+        data.statusCode = statusCodes.error
         await saveWithError(err, false, false)
         error = `${err}`.replace('Error: ', '')
     } finally {
@@ -318,7 +309,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
  * @returns 
  */
 const payReward = async (address, rewardId, referrer, referredUserId, twitterHandle) => {
-    log(`Pay Twitter reward to ${!!referrer ? 'referrer' : 'user'} ${rewardId}`)
+    log(debugTag, `Pay Twitter reward to ${!!referrer ? 'referrer' : 'user'} ${rewardId}`)
     const rewardEntry = (await dbRewards.get(rewardId)) || {}
     const { _id, status } = rewardEntry
     if (!!_id && status === rewardStatus.success) {
@@ -326,7 +317,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         return [null, data]
     }
 
-    log('Sending payment request faucet server', rewardId)
+    log(debugTag, 'Sending payment request faucet server', rewardId)
     const [err, data = {}] = await emitToFaucetServer(
         'reward-payment',
         {
@@ -338,7 +329,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         },
         120000,
     )
-    log('Payment success', rewardId)
+    log(debugTag, 'Payment success', rewardId)
     if (!referrer || data.status === rewardStatus.todo) return [err, data]
 
     const { amount, txId, txHash } = data || {}
@@ -382,7 +373,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
  * @returns {Array} [errorMessage, twitterId]
  */
 const verifyTweet = async (userId, twitterHandle, tweetId) => {
-    log('Verifying tweet', { twitterHandle, tweetId })
+    log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
     try {
         const diffMs = new Date() - twitterApiLastUse
         const diffMin = diffMs / 1000 / 60
@@ -488,7 +479,6 @@ setTimeout(async () => {
                 $in: [
                     rewardStatus.error,
                     rewardStatus.processing,
-                    rewardStatus.pending,
                 ]
             },
             type: rewardTypes.signupTwitter,
@@ -503,14 +493,14 @@ setTimeout(async () => {
         let failCount = 0
         let successCount = 0
         for (let i = 0; i < rewardEntries.length; i++) {
-            await PromisE.delay(3000)
+            await PromisE.delay(200)
             const rewardEntry = rewardEntries[i]
-            log('Reprocessing twitter reward entry', rewardEntry._id, rewardEntry.status)
+            log(debugTag, 'Reprocessing twitter reward entry', rewardEntry._id, rewardEntry.status)
             let error = await processNext(rewardEntry, false)
                 .catch(err => err)
             if (isError(error)) error = error.message
             if (error) {
-                log(rewardEntry._id, { error })
+                log(debugTag, rewardEntry._id, { error })
                 failCount++
             } else {
                 successCount++
@@ -518,7 +508,7 @@ setTimeout(async () => {
         }
         reprocessRewards = false
         if (rewardEntries.length > 0) {
-            log('Finished reprocessing failed twitter reward entries', {
+            log(debugTag, 'Finished reprocessing failed twitter reward entries', {
                 total: rewardEntries.length,
                 successCount,
                 failCount,

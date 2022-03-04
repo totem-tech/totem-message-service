@@ -27,4 +27,5 @@
 # ReferralRewardsDisabled="string: (optional) YES/NO" \
 # SocialRewardsDisabled="string: (optional) YES/NO" \
 # ReprocessRewards="string: (optional) YES/NO" \
+# ReprocessTwitterRewards="string: (optional) YES/NO" \
 # yarn run dev

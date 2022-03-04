@@ -18,7 +18,7 @@ const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
 const dbSettings = new CouchDBStorage(null, 'settings')
 const notificationSenderId = 'rewards'
-const reprocessFailedRewards = process.env.ReprocessRewards === 'YES'
+const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
 const timeout = 120000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
