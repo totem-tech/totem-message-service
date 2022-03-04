@@ -49,6 +49,7 @@ const twitterTags = [
 ].map(x => x.toLowerCase())
 // To avoid hitting Twitter API query limit queue any Twitter API requests and process them on specific time interval. 
 let inProgressKey = null
+let twitterApiLastUse = new Date()
 const log = (...args) => console.log(new Date().toISOString(), debugTag, ...args)
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
@@ -190,6 +191,10 @@ const processNext = async (rewardEntry, isDetached = true) => {
     const rewardIdReferrer = referrer
         && getRewardId(rewardTypes.referralTwitter, twitterHandle)
 
+    const _processNext = () => setTimeout(async () => {
+        inProgressKey = null
+        !reprocessRewards && processNext()
+    })
     try {
         if (statusCode <= statusCodes.verificationFailed) {
             doWait = true
@@ -226,9 +231,17 @@ const processNext = async (rewardEntry, isDetached = true) => {
             // }
         }
 
+        const shouldSkip = (data = {}) => {
+            if (data.status !== rewardStatus.todo) return false
+            inProgressKey = null
+            return true
+        }
+
         // pay user
         if (data.statusCode <= statusCodes.paymentError) {
             const [payErr, iData = {}] = await payReward(address, rewardId, null)
+            if (shouldSkip(iData)) return
+
             rewardEntry.amount = iData.amount
             rewardEntry.txHash = iData.txHash
             rewardEntry.txId = iData.txId
@@ -241,13 +254,14 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
         // pay referrer
         if (!!referrer && data.statusCode <= statusCodes.paymentErrorReferrrer) {
-            const [payRefErr] = await payReward(
+            const [payRefErr, jData = {}] = await payReward(
                 referrer.address,
                 rewardIdReferrer,
                 referrer,
                 userId,
                 twitterHandle,
             )
+            if (shouldSkip(jData)) return
 
             if (payRefErr) {
                 errorCode = statusCodes.paymentError
@@ -266,12 +280,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
         await saveWithError(err, false, false)
         error = `${err}`.replace('Error: ', '')
     } finally {
-        setTimeout(async () => {
-            // wait one minute, if Twitter API was used
-            doWait && await PromisE.delay(60 * 1000)
-            inProgressKey = null
-            !reprocessRewards && processNext()
-        })
+        _processNext()
     }
 
     if (error && isDetached) return await notifyUser(
@@ -330,7 +339,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         120000,
     )
     log('Payment success', rewardId)
-    if (!referrer) return [err, data]
+    if (!referrer || data.status === rewardStatus.todo) return [err, data]
 
     const { amount, txId, txHash } = data || {}
     const entry = {
@@ -375,7 +384,13 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
 const verifyTweet = async (userId, twitterHandle, tweetId) => {
     log('Verifying tweet', { twitterHandle, tweetId })
     try {
+        const diffMs = new Date() - twitterApiLastUse
+        const diffMin = diffMs / 1000 / 60
+        // delay making Twitter API query if last request was made within the last minute
+        if (diffMin < 1) await PromisE.delay(diffMs + 100)
+
         // check if user is following Totem 
+        twitterApiLastUse = new Date()
         let {
             following,
             id: twitterId,
@@ -398,15 +413,15 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
             userId: { $ne: userId }
         })
 
-        if (!!claimer) return [message.handleAlreadyClaimed]
+        if (!!claimer) return [messages.handleAlreadyClaimed]
 
         // retrieve Tweet
+        twitterApiLastUse = new Date()
         let {
             entities: { urls },
             full_text,
             user: { screen_name }
         } = await twitterHelper.getTweetById(tweetId)
-
         // force lowercase twitter handle
         screen_name = `${screen_name}`.toLowerCase()
         if (!full_text || screen_name !== twitterHandle) return [messages.invalidTweet]

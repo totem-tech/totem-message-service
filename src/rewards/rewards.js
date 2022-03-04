@@ -31,6 +31,7 @@ export const rewardStatus = {
     pending: 'pending', // payment is yet to be processed
     processing: 'processing', // payment is being processed
     success: 'success', // payment was successful
+    todo: 'todo',
 }
 export const rewardTypes = {
     referral: 'referral-reward',
@@ -198,7 +199,8 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
             },
             timeout
         )
-        const { amount, txId, txHash } = data || {}
+        const { amount, status, txId, txHash } = data || {}
+        if (status === rewardStatus.todo) return
 
         rewardEntry.amount = amount
         rewardEntry.error = err || undefined
@@ -307,7 +309,7 @@ export const paySignupReward = async (userId, _rewardId) => {
             },
             timeout,
         )
-        const { amount, txId, txHash } = data || {}
+        const { amount, status, txId, txHash } = data || {}
         rewardEntry.status = !!err
             ? rewardStatus.error
             : 'success'
@@ -315,7 +317,7 @@ export const paySignupReward = async (userId, _rewardId) => {
         rewardEntry.error = err || undefined
         rewardEntry.txId = txId
         rewardEntry.txHash = txHash
-
+        if (status === rewardStatus.todo) return
     } catch (faucetServerError) {
         log(debugTag, { event: 'signup-reward', faucetServerError })
         rewardEntry.status = rewardStatus.error
@@ -386,7 +388,7 @@ const processUnsuccessfulRewards = async () => {
     }
     const rewardEntries = await dbRewards.search(
         selector,
-        9999,
+        99999,
         0,
         false,
         { sort: [{ tsCreated: 'asc' }] },
