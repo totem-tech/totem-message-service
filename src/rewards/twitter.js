@@ -488,7 +488,7 @@ setTimeout(async () => {
             999999,
             0,
             false,
-            { sort: { tsCreated: 'asc' } }
+            { sort: ['tsCreated'] }
         )
         let failCount = 0
         let successCount = 0

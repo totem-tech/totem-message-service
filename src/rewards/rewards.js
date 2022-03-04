@@ -444,7 +444,7 @@ const processUnsuccessfulRewards = async () => {
     }
 
     settings.backlog.tsSignupReferral = new Date().toISOString()
-    dbSettings.set('rewards', settings)
+    await dbSettings.set('rewards', settings)
     log('Finished reprocessing signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
