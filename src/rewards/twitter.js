@@ -4,7 +4,7 @@ import { objClean } from '../utils/utils'
 import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
-import { emitToUsers, ROLE_SUPPORT, users } from '../users'
+import { emitToUsers, getSupportUsers, ROLE_SUPPORT, users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
 import { isError } from '@polkadot/util'
@@ -507,11 +507,12 @@ setTimeout(async () => {
                 successCount,
                 failCount,
             })
+            const supportUsers = await getSupportUsers()
 
             // send ACK messge to support users
             handleMessage.call(
                 [{}, { id: ROLE_SUPPORT }],
-                [ROLE_SUPPORT],
+                [supportUsers.map(x => x._id)],
                 `[AUTOMATED MESSAGE] \n\nFinished reprocessing failed Twitter rewards. \n\n${JSON.stringify({
                     total: rewardEntries.length,
                     successCount,
@@ -520,21 +521,6 @@ setTimeout(async () => {
                 false,
                 () => { }
             )
-            // emitToUsers(
-            //     [ROLE_SUPPORT],
-            //     'message',
-            //     [
-            //         `Finished reprocessing failed Twitter rewards \n\n${JSON.stringify({
-            //             total: rewardEntries.length,
-            //             successCount,
-            //             failCount,
-            //         }, null, 4)}`,
-            //         ROLE_SUPPORT,
-            //         [ROLE_SUPPORT],
-            //         false,
-            //         new Date().toISOString(),
-            //     ]
-            // )
         }
     }
     await processNext()

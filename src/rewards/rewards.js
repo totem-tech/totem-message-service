@@ -1,6 +1,6 @@
 import { emitToFaucetServer } from '../faucetRequests'
 import { sendNotification } from '../notification'
-import { emitToUsers, ROLE_SUPPORT, users } from '../users'
+import { emitToUsers, getSupportUsers, ROLE_SUPPORT, users } from '../users'
 import { generateHash } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'
@@ -436,12 +436,12 @@ const processUnsuccessfulRewards = async () => {
         success: successCount,
     })
 
-
+    const supportUsers = await getSupportUsers()
 
     // send ACK messge to support users
     handleMessage.call(
         [{}, { id: ROLE_SUPPORT }],
-        [ROLE_SUPPORT],
+        [supportUsers.map(x => x._id)],
         `Finished reprocessing failed signup+referral rewards. \n\n${JSON.stringify({
             total: rewardEntries.length,
             successCount,
@@ -450,22 +450,6 @@ const processUnsuccessfulRewards = async () => {
         false,
         () => { }
     )
-    // // send ACK messge to support users
-    // emitToUsers(
-    //     [ROLE_SUPPORT],
-    //     'message',
-    //     [
-    //         `Finished reprocessing failed Twitter rewards \n\n${JSON.stringify({
-    //             total: rewardEntries.length,
-    //             successCount,
-    //             failCount,
-    //         }, null, 4)}`,
-    //         ROLE_SUPPORT,
-    //         [ROLE_SUPPORT],
-    //         false,
-    //         new Date().toISOString(),
-    //     ]
-    // )
 }
 setTimeout(async () => {
     // create an index for the field `userId`, ignores if already exists
