@@ -12,7 +12,7 @@ const connection = {
 }
 let connectionPromsie
 let nodes = [
-    'wss://node1.totem.live',
+    process.env.URL_TOTEM_NODE || 'wss://node.totem.live',
 ]
 export const recordTypes = {
     /// 1000
