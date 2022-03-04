@@ -16,6 +16,7 @@ const texts = setTexts({
 // existing faucet requests to retreive user's address if users db doesn't already have it
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
+const dbSettings = new CouchDBStorage(null, 'settings')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = process.env.ReprocessRewards === 'YES'
 const isDebug = `${process.env.Debug}`.toLowerCase() === 'true'
@@ -371,6 +372,10 @@ export const paySignupReward = async (userId, _rewardId) => {
 // }
 
 const processUnsuccessfulRewards = async () => {
+    const { tsLastReprocess = {} } = (await dbSettings.get('rewards')) || {}
+    const {
+        signupReferral = new Date('2000:01:01').toISOString()
+    } = tsLastReprocess
     const selector = {
         status: {
             $in: [
@@ -379,12 +384,15 @@ const processUnsuccessfulRewards = async () => {
                 rewardStatus.pending,
             ].filter(Boolean)
         },
+        tsCreated: {
+            $gt: signupReferral,
+        },
         type: {
             $in: [
                 rewardTypes.signup,
                 rewardTypes.referral,
             ]
-        }
+        },
     }
     const rewardEntries = await dbRewards.search(
         selector,
@@ -392,13 +400,13 @@ const processUnsuccessfulRewards = async () => {
         0,
         false,
         { sort: [{ tsCreated: 'asc' }] },
+        60000,
     )
-    console.log({
-        reprocessFailedRewards,
-        selector,
+    log(debugTag, {
+        reprocessFailedRewards: selector.$in,
         rewardEntries: rewardEntries.length,
     })
-    if (rewardEntries.length === 0) return
+    if (rewardEntries.length === 0) return log(debugTag, 'no signup & referral entries to reprocess', { rewardEntries })
     log(
         debugTag,
         `Pending${reprocessFailedRewards ? ' & error' : ''} signup & referral`,
@@ -407,7 +415,8 @@ const processUnsuccessfulRewards = async () => {
 
     let failCount = 0
     let successCount = 0
-    for (let entry of rewardEntries) {
+    for (let i = 0; i < rewardEntries.length; i++) {
+        const entry = rewardEntries[i]
         const { _id, data = {}, type, userId } = entry
         const { referredUserId } = data
         log(debugTag, 'Processing', _id)
@@ -432,7 +441,7 @@ const processUnsuccessfulRewards = async () => {
         }
     }
 
-    log('Processed incomplete signup & referral rewards', {
+    log('Finished reprocessing signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
         success: successCount,
@@ -483,6 +492,12 @@ setTimeout(async () => {
                 fields: ['status', 'type']
             },
             name: 'status-type-index',
+        },
+        {
+            index: {
+                fields: ['status', 'tsCreated', 'type']
+            },
+            name: 'status-tsCreated-type-index',
         },
         {
             index: {

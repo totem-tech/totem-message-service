@@ -229,27 +229,27 @@ const interceptHandler = (name, handler) => async function (...args) {
         // print the error stack trace
         console.log(`${err}`, err.stack)
 
-        if (!DISCORD_WEBHOOK_URL) return
-
-        // send message to discord
-        const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
-        const content = '>>> ' + [
-            `**RequestID:** ${requestId}`,
-            `**Event:** *${name}*`,
-            '**Error:** ' + `${err}`.replace('Error:', ''),
-            user ? `**UserID:** ${user.id}` : '',
-        ].join('\n')
-        request({
-            json: true,
-            method: 'POST',
-            timeout: 30000,
-            url: DISCORD_WEBHOOK_URL,
-            body: {
-                avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-                content,
-                username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
-            }
-        }, handleReqErr)
+        if (DISCORD_WEBHOOK_URL) {
+            // send message to discord
+            const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
+            const content = '>>> ' + [
+                `**RequestID:** ${requestId}`,
+                `**Event:** *${name}*`,
+                '**Error:** ' + `${err}`.replace('Error:', ''),
+                user ? `**UserID:** ${user.id}` : '',
+            ].join('\n')
+            request({
+                json: true,
+                method: 'POST',
+                timeout: 30000,
+                url: DISCORD_WEBHOOK_URL,
+                body: {
+                    avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+                    content,
+                    username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+                }
+            }, handleReqErr)
+        }
     } finally {
         requestCount--
         maintenanceMode && console.info('Request Count', requestCount)
