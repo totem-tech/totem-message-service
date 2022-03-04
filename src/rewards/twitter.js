@@ -501,7 +501,12 @@ setTimeout(async () => {
                 await dbRewards.set(rewardEntry._id, rewardEntry, true, true)
                 continue
             }
-            log(debugTag, 'Reprocessing twitter reward entry', rewardEntry._id, rewardEntry.status)
+            log(
+                debugTag,
+                `${i + 1}/${rewardEntries.length} Reprocessing twitter reward entry`,
+                rewardEntry._id,
+                rewardEntry.status,
+            )
             let error = await processNext(rewardEntry, false)
                 .catch(err => err)
             if (isError(error)) error = error.message
