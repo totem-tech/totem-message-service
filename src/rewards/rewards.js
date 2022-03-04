@@ -399,11 +399,13 @@ const processUnsuccessfulRewards = async () => {
         99999,
         0,
         false,
-        { sort: [{ tsCreated: 'asc' }] },
+        {
+            sort: ['tsCreated'],
+        },
         60000,
     )
-    log(debugTag, {
-        reprocessFailedRewards: selector.$in,
+    log(debugTag, selector, {
+        reprocessFailedRewards: selector.status.$in,
         rewardEntries: rewardEntries.length,
     })
     if (rewardEntries.length === 0) return log(debugTag, 'no signup & referral entries to reprocess', { rewardEntries })
@@ -534,4 +536,4 @@ setTimeout(() => {
     //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
     processUnsuccessfulRewards()
         .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
-}, 3000)
+})

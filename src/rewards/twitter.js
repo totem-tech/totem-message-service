@@ -146,7 +146,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 type: rewardTypes.signupTwitter,
             },
             {
-                sort: [{ tsCreated: 'asc' }],
+                sort: ['tsCreated'],
             },
         )
 
