@@ -529,7 +529,7 @@ setTimeout(async () => {
             // send ACK messge to support users
             handleMessage.call(
                 [{}, { id: ROLE_SUPPORT }],
-                [supportUsers.map(x => x._id)],
+                supportUsers.map(x => x._id),
                 `[AUTOMATED MESSAGE] \n\nFinished reprocessing failed Twitter rewards. \n\n${JSON.stringify({
                     total: rewardEntries.length,
                     successCount,
