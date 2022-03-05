@@ -101,7 +101,7 @@ export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
         userId,
     }
     await dbRewards.set(rewardId, rewardEntry)
-    log(debugTag, 'added to queue', rewardId)
+    log('added to queue', rewardId)
     return !reprocessRewards && await processNext(rewardEntry, false)
 }
 
@@ -129,7 +129,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
     // an item is already being executed
     if (!!inProgressKey) return
 
-    let error
+    let error, status
     // reserve this for execution to avoid any possible race condition may be caused due to database query delay
     inProgressKey = Symbol('reserved')
 
@@ -152,27 +152,28 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     // end of the pending queue
     if (!rewardEntry) {
-        isDetached && log(debugTag, 'No pending twitter reward entry found')
+        isDetached && log('No pending twitter reward entry found')
         inProgressKey = null
         return
     }
 
+    const _processNext = () => setTimeout(async () => {
+        inProgressKey = null
+        !reprocessRewards && processNext()
+    })
     const saveWithError = async (error, ignore = false, next = true) => {
         rewardEntry.status = ignore
             ? rewardEntry.ignore // indicates entry should be ignored from any re-processing attempts
             : rewardStatus.error
         rewardEntry.data.error = `${error}`
-        log(debugTag, { rewardEntry, error })
+        log({ rewardEntry, error })
         await dbRewards.set(rewardId, rewardEntry)
-        if (!next) return
-
-        inProgressKey = null
-        !reprocessRewards && processNext()
+        next && _processNext()
     }
 
     // make sure faucet server is connected
     await waitTillFSConnected(0, `${debugTag} [processNext]`)
-    log(debugTag, 'processing Twitter signup reward', rewardEntry._id)
+    log('processing Twitter signup reward', rewardEntry._id)
     let { data, userId } = rewardEntry
     // force lowercase existing twitter handles
     data.twitterHandle = `${data.twitterHandle}`.toLowerCase()
@@ -196,10 +197,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
     const rewardIdReferrer = referrer
         && getRewardId(rewardTypes.referralTwitter, twitterHandle)
 
-    const _processNext = () => setTimeout(async () => {
-        inProgressKey = null
-        !reprocessRewards && processNext()
-    })
     try {
         if (statusCode <= statusCodes.verificationFailed) {
             const [verifyErr, twitterId] = await verifyTweet(userId, twitterHandle, tweetId)
@@ -219,28 +216,22 @@ const processNext = async (rewardEntry, isDetached = true) => {
             data.twitterId = twitterId
             data.statusCode = statusCodes.verified
             await dbRewards.set(rewardId, rewardEntry)
-            log(debugTag, 'Tweet and follow verified', twitterHandle)
-        }
-
-        const shouldSkip = (data = {}) => {
-            if (data.status !== rewardStatus.todo) return false
-            inProgressKey = null
-            return true
+            log('Tweet and follow verified', twitterHandle)
         }
 
         // pay user
         if (data.statusCode <= statusCodes.paymentError) {
             const [payErr, iData = {}] = await payReward(address, rewardId, null)
-            if (shouldSkip(iData)) return
-
-            rewardEntry.amount = iData.amount
-            rewardEntry.txHash = iData.txHash
-            rewardEntry.txId = iData.txId
-
             if (payErr) {
                 rewardEntry.data.statusCode = statusCodes.paymentError
                 return await saveWithError(payErr, true, true)
             }
+            rewardEntry.amount = iData.amount
+            rewardEntry.txHash = iData.txHash
+            rewardEntry.txId = iData.txId
+            status = iData.status === rewardStatus.todo
+                ? rewardStatus.todo
+                : status
         }
 
         // pay referrer
@@ -252,8 +243,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
                 userId,
                 twitterHandle,
             )
-            if (shouldSkip(jData)) return
-
             if (payRefErr) {
                 rewardEntry.data.statusCode = statusCodes.paymentError
                 return await saveWithError(payErr, true, true)
@@ -262,9 +251,9 @@ const processNext = async (rewardEntry, isDetached = true) => {
         data.statusCode = referrer
             ? statusCodes.paymentSuccessReferrer
             : statusCodes.paymentSuccess
-        rewardEntry.status = rewardStatus.success
+        rewardEntry.status = status || rewardStatus.success
         await dbRewards.set(rewardId, rewardEntry)
-        log(debugTag, 'reward payments complete', rewardId)
+        log('reward payments complete', rewardId)
     } catch (err) {
         // execution failed
         data.statusCode = statusCodes.error
@@ -309,7 +298,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
  * @returns 
  */
 const payReward = async (address, rewardId, referrer, referredUserId, twitterHandle) => {
-    log(debugTag, `Pay Twitter reward to ${!!referrer ? 'referrer' : 'user'} ${rewardId}`)
+    log(`Pay Twitter reward to ${!!referrer ? 'referrer' : 'user'} ${rewardId}`)
     const rewardEntry = (await dbRewards.get(rewardId)) || {}
     const { _id, status } = rewardEntry
     if (!!_id && status === rewardStatus.success) {
@@ -317,7 +306,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         return [null, data]
     }
 
-    log(debugTag, 'Sending payment request faucet server', rewardId)
+    log('Sending payment request faucet server', rewardId)
     const [err, data = {}] = await emitToFaucetServer(
         'reward-payment',
         {
@@ -329,8 +318,8 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         },
         120000,
     )
-    log(debugTag, 'Payment success', rewardId)
-    if (!referrer || data.status === rewardStatus.todo) return [err, data]
+    log('Payment success', rewardId)
+    if (!referrer) return [err, data]
 
     const { amount, txId, txHash } = data || {}
     const entry = {
@@ -340,7 +329,9 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
             twitterHandle,
             statusCode: statusCodes.paymentSuccessReferrer,
         },
-        status: rewardStatus.success,
+        status: data.status === rewardStatus.todo
+            ? rewardStatus.todo
+            : rewardStatus.success,
         txHash,
         txId,
         type: rewardTypes.referralTwitter,
@@ -373,12 +364,14 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
  * @returns {Array} [errorMessage, twitterId]
  */
 const verifyTweet = async (userId, twitterHandle, tweetId) => {
-    log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
+    log('Verifying tweet', { twitterHandle, tweetId })
     try {
         const diffMs = new Date() - twitterApiLastUse
         const diffMin = diffMs / 1000 / 60
+        log('verify tweet', { diffMin, delay: diffMs + 100 })
         // delay making Twitter API query if last request was made within the last minute
         if (diffMin < 1) await PromisE.delay(diffMs + 100)
+        return ['Testing Twiter API usage']
 
         // check if user is following Totem 
         twitterApiLastUse = new Date()
@@ -502,7 +495,6 @@ setTimeout(async () => {
                 continue
             }
             log(
-                debugTag,
                 `${i + 1}/${rewardEntries.length} Reprocessing twitter reward entry`,
                 rewardEntry._id,
                 rewardEntry.status,
@@ -511,7 +503,7 @@ setTimeout(async () => {
                 .catch(err => err)
             if (isError(error)) error = error.message
             if (error) {
-                log(debugTag, rewardEntry._id, { error })
+                log(rewardEntry._id, { error })
                 failCount++
             } else {
                 successCount++
@@ -519,7 +511,7 @@ setTimeout(async () => {
         }
         reprocessRewards = false
         if (rewardEntries.length > 0) {
-            log(debugTag, 'Finished reprocessing failed twitter reward entries', {
+            log('Finished reprocessing failed twitter reward entries', {
                 total: rewardEntries.length,
                 successCount,
                 failCount,

@@ -16,7 +16,6 @@ const texts = setTexts({
 // existing faucet requests to retreive user's address if users db doesn't already have it
 const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
-const dbSettings = new CouchDBStorage(null, 'settings')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
 const timeout = 120000
@@ -24,7 +23,7 @@ const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
 const initialRewardAmount = 108154 // only used where amount has not been saved (initial drop)
-export const log = (...args) => console.log(...args)
+export const log = (...args) => console.log(new Date().toISOString(), debugTag, ...args)
 export const rewardStatus = {
     error: 'error', // payment failed
     ignore: 'ignore',
@@ -47,7 +46,7 @@ export const rewardTypes = {
 //  * @summary process payout for existing users who missed payout or signed up before reward payouts were activated
 //  */
 // const processMissedPayouts = async (skip = 0) => {
-//     const _debugTag = `${debugTag} [processMissedPayouts]`
+//     const _debugTag = `[processMissedPayouts]`
 //     const limit = 100
 //     const selector = {
 //         // 'rewards.signupReward.status': {
@@ -106,6 +105,15 @@ export const getRewardId = (rewardType, uniqueData) => generateHash(
     hashBitLength,
 )
 
+const saveWithError = async (rewardEntry = {}, error, status = rewardStatus.error) => {
+    if (!!rewardEntry._id) {
+        rewardEntry.status = status
+        rewardEntry.error = error
+        await dbRewards.set(rewardEntry._id, rewardEntry)
+    }
+    return error
+}
+
 /**
  * @name    referralPayout
  * @summary triggers signup payout
@@ -114,22 +122,31 @@ export const getRewardId = (rewardType, uniqueData) => generateHash(
  * @param   {String} referredUserId
  */
 export const payReferralReward = async (referrerUserId, referredUserId) => {
-    const _debugTag = `${debugTag} [ReferralPayout]`
+    const _debugTag = `[ReferralPayout]`
     const rewardType = rewardTypes.referral
     const rewardId = getRewardId(rewardType, referredUserId)
     // retrieve referrer's address
     let user = await users.get(referrerUserId, ['_id', 'address', 'rewards'])
-    if (!user) return 'User not found'
+    let rewardEntry = (await dbRewards.get(rewardId)) || {}
+    if (!user) return await saveWithError(
+        rewardEntry,
+        'User not found',
+        rewardStatus.ignore,
+    )
 
     let { address } = user
     if (!address) {
         address = await getLastestFaucetAddress(referrerUserId)
         // update user document with latest faucet request address
         if (!!address) await users.set(referrerUserId, { ...user, address })
-        if (!address) return 'Could not initiate payout. No address found for user'
+        if (!address) return await saveWithError(
+            rewardEntry,
+            'Could not initiate payout. No address found for user',
+            rewardStatus.ignore,
+        )
     }
 
-    const rewardEntry = (await dbRewards.get(rewardId)) || {
+    rewardEntry = {
         amount: null,
         data: { referredUserId },
         notification: false,
@@ -140,10 +157,14 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
         txId: null,
         type: rewardTypes.referral,
         userId: referrerUserId,
+        ...rewardEntry,
     }
     // Save/update reward entry
     const saveEntry = async (save = true, notify = false) => {
-        if (save) await dbRewards.set(rewardId, rewardEntry)
+        if (save) {
+            if (rewardEntry.status !== rewardStatus.error) rewardEntry.error = null
+            await dbRewards.set(rewardId, rewardEntry)
+        }
         if (!notify) return
 
         log(_debugTag, 'Sending notification to user', referrerUserId)
@@ -175,18 +196,14 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     log(_debugTag, `${referrerUserId} referred ${referredUserId}`)
 
     const addressUsers = await users.search({ address }, 2, 0, false)
-    if (addressUsers.length > 1) {
-        rewardEntry.status = rewardStatus.ignore
-        rewardEntry.error = `Referred user's address is used by more than one user`
-        await saveEntry(true, false)
-        return rewardEntry.error
-    }
+    if (addressUsers.length > 1) return await saveWithError(
+        rewardEntry,
+        `Referred user's address is used by more than one user`,
+        rewardStatus.ignore,
+    )
 
-    rewardEntry.status = reprocessFailedRewards
-        ? rewardStatus.pending
-        : rewardStatus.processing
+    rewardEntry.status = rewardStatus.processing
     await saveEntry()
-    if (reprocessFailedRewards) return
 
     try {
         log(_debugTag, `Sending payout request to faucet server for ${referrerUserId}`)
@@ -200,19 +217,19 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
             timeout
         )
         const { amount, status, txId, txHash } = data || {}
-        if (status === rewardStatus.todo) return
-
         rewardEntry.amount = amount
         rewardEntry.error = err || undefined
         rewardEntry.status = !!err
             ? rewardStatus.error
-            : rewardStatus.success
+            : status === rewardStatus.todo
+                ? rewardStatus.todo
+                : rewardStatus.success
         rewardEntry.txId = txId
         rewardEntry.txHash = txHash
     } catch (faucetServerError) {
         log(_debugTag, 'payout faucet request failed with error', faucetServerError)
         rewardEntry.status = rewardStatus.error
-        rewardEntry.error = err
+        rewardEntry.error = `[FaucetError] ${err}`
     }
     await saveEntry(true, true)
     return rewardEntry.error
@@ -226,18 +243,26 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
  * @param   {String} _rewardId (only used when dealing with legacy rewardIds)
  */
 export const paySignupReward = async (userId, _rewardId) => {
-    const _debugTag = `${debugTag} [SignupPayout]`
+    const _debugTag = `[SignupPayout]`
     const rewardType = rewardTypes.signup
     const rewardId = _rewardId || getRewardId(rewardType, userId)
-
+    let rewardEntry = (await dbRewards.get(rewardId)) || {}
     const user = await users.get(userId)
-    if (!user) return `User not found: ${userId}`
+    if (!user) return await saveWithError(
+        rewardEntry,
+        'User not found',
+        rewardStatus.ignore,
+    )
 
     user.address = user.address || await getLastestFaucetAddress(userId)
-    if (!user.address) return 'Could not initiate payout. No address found for user'
+    if (!user.address) return saveWithError(
+        rewardEntry,
+        'Could not initiate payout. No address found for user',
+        rewardStatus.ignore,
+    )
 
     const { address } = user
-    const rewardEntry = (await dbRewards.get(rewardId)) || {
+    rewardEntry = {
         amount: null,
         notification: false,
         status: rewardStatus.pending,
@@ -247,11 +272,15 @@ export const paySignupReward = async (userId, _rewardId) => {
         txId: null,
         type: rewardTypes.signup,
         userId,
+        ...rewardEntry
     }
 
     const saveEntry = async (save = true, notify = false) => {
-        // log(debugTag, { rewardEntry, notify })
-        if (save) await dbRewards.set(rewardId, rewardEntry)
+        // log({ rewardEntry, notify })
+        if (save) {
+            if (rewardEntry.status !== rewardStatus.error) rewardEntry.error = null
+            await dbRewards.set(rewardId, rewardEntry)
+        }
         if (!notify) return
         setTimeout(async () => {
             // notify user
@@ -286,13 +315,11 @@ export const paySignupReward = async (userId, _rewardId) => {
     }
 
     const addressUsers = await users.search({ address }, 2, 0, false)
-    if (addressUsers.length > 1) {
-        rewardEntry.error = 'Address is used by more than one user'
-        rewardEntry.status = rewardStatus.ignore
-        if (!!rewardEntry._id) await saveEntry(true, false)
-
-        return rewardEntry.error
-    }
+    if (addressUsers.length > 1) return await saveWithError(
+        rewardEntry,
+        'Address is used by more than one user',
+        rewardStatus.ignore,
+    )
 
     log(_debugTag, userId)
     rewardEntry.status = rewardStatus.processing
@@ -312,16 +339,17 @@ export const paySignupReward = async (userId, _rewardId) => {
         const { amount, status, txId, txHash } = data || {}
         rewardEntry.status = !!err
             ? rewardStatus.error
-            : 'success'
+            : status === rewardStatus.todo
+                ? rewardStatus.todo
+                : rewardStatus.success
         rewardEntry.amount = amount
         rewardEntry.error = err || undefined
         rewardEntry.txId = txId
         rewardEntry.txHash = txHash
-        if (status === rewardStatus.todo) return
     } catch (faucetServerError) {
-        log(debugTag, { event: 'signup-reward', faucetServerError })
         rewardEntry.status = rewardStatus.error
-        rewardEntry.error = faucetServerError
+        rewardEntry.error = `[FaucetError] ${faucetServerError}`
+        log(_debugTag, '[FaucetError]', { event: 'signup-reward', faucetServerError })
     }
     await saveEntry(true, rewardEntry.status === rewardStatus.success)
 
@@ -371,11 +399,6 @@ export const paySignupReward = async (userId, _rewardId) => {
 // }
 
 const processUnsuccessfulRewards = async () => {
-    const settings = (await dbSettings.get('rewards')) || {}
-    settings.backlog = settings.backlog || {}
-    const {
-        tsSignupReferral = new Date('2000:01:01').toISOString()
-    } = settings.backlog
     const selector = {
         status: {
             $in: [
@@ -383,9 +406,6 @@ const processUnsuccessfulRewards = async () => {
                 reprocessFailedRewards && rewardStatus.processing,
                 rewardStatus.pending,
             ].filter(Boolean)
-        },
-        tsCreated: {
-            $gt: tsSignupReferral,
         },
         type: {
             $in: [
@@ -414,14 +434,15 @@ const processUnsuccessfulRewards = async () => {
         `Pending${reprocessFailedRewards ? ' & error' : ''} signup & referral`,
         `reward entries: ${rewardEntries.length}`,
     )
-
     let failCount = 0
     let successCount = 0
+    let tag
     for (let i = 0; i < rewardEntries.length; i++) {
         const entry = rewardEntries[i]
         const { _id, data = {}, type, userId } = entry
         const { referredUserId } = data
-        log(debugTag, 'Processing', _id)
+        tag = `[${type === rewardTypes.signup ? 'SignupPayout' : 'ReferralPayout'}]`
+        log(debugTag, `${tag} Processing`, _id)
         try {
             let error
             switch (type) {
@@ -437,14 +458,14 @@ const processUnsuccessfulRewards = async () => {
             }
             if (error) throw new Error(error)
             successCount++
+
+            // process.exit(0)
         } catch (err) {
-            log(debugTag, '[UnsuccessfulRewards] payout request failed', `${err}`)
+            log(debugTag, `${tag}[UnsuccessfulRewards] payout request failed ${err}`)
             failCount++
         }
     }
 
-    settings.backlog.tsSignupReferral = new Date().toISOString()
-    await dbSettings.set('rewards', settings)
     log('Finished reprocessing signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
@@ -457,7 +478,7 @@ const processUnsuccessfulRewards = async () => {
     handleMessage.call(
         [{}, { id: ROLE_SUPPORT }],
         supportUsers.map(x => x._id),
-        `Finished reprocessing failed signup+referral rewards. \n\n${JSON.stringify({
+        `[AUTOMATED MESSAGE] Finished reprocessing failed signup+referral rewards. \n\n${JSON.stringify({
             total: rewardEntries.length,
             successCount,
             failCount,
@@ -534,6 +555,6 @@ setTimeout(async () => {
 setTimeout(() => {
     // migrateOldRewards()
     //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
-    processUnsuccessfulRewards()
+    reprocessFailedRewards && processUnsuccessfulRewards()
         .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
 })
