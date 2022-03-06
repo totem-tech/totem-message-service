@@ -54,7 +54,7 @@ faucetClient.on('connect_error', (err) => {
  * 
  * @returns {Promise}
  */
-export const waitTillFSConnected = (timeout = 15000, tag) => new Promise((resolve, reject) => {
+export const waitTillFSConnected = (timeout = timeoutMS, tag) => new Promise((resolve, reject) => {
     const sub = rxFSConnected
         .subscribe(connected => {
             if (!connected) return console.log(tag, 'Waiting for faucet server to be connected')
@@ -64,7 +64,7 @@ export const waitTillFSConnected = (timeout = 15000, tag) => new Promise((resolv
 
     timeout && setTimeout(() => {
         sub.unsubscribe()
-        reject('Faucet server did not connect after timeout')
+        reject('Faucet server did not connect after timeout', timeout)
     }, timeout)
 })
 
