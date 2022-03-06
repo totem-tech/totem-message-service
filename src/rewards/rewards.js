@@ -451,33 +451,35 @@ const processUnsuccessfulRewards = async () => {
         let tag
         // for (let i = 0; i < rewardEntries.length; i++) {
         //     const entry = rewardEntries[i]
-        await Promise.all(async () => {
-            const { _id, data = {}, tsCreated, type, userId } = entry
-            lastTsCreated = tsCreated
-            const { referredUserId } = data
-            tag = `[${type === rewardTypes.signup ? 'SignupPayout' : 'ReferralPayout'}]`
-            log(debugTag, `${tag} Processing`, _id)
-            try {
-                let error
-                switch (type) {
-                    case rewardTypes.referral:
-                        error = await payReferralReward(userId, referredUserId)
-                        break
-                    case rewardTypes.signup:
-                        error = await paySignupReward(userId, _id)
-                        break
-                    default:
-                        error = 'Unsupported type'
-                        break
+        await Promise.all(
+            rewardEntries.map(async (entry) => {
+                const { _id, data = {}, tsCreated, type, userId } = entry
+                lastTsCreated = tsCreated
+                const { referredUserId } = data
+                tag = `[${type === rewardTypes.signup ? 'SignupPayout' : 'ReferralPayout'}]`
+                log(debugTag, `${tag} Processing`, _id)
+                try {
+                    let error
+                    switch (type) {
+                        case rewardTypes.referral:
+                            error = await payReferralReward(userId, referredUserId)
+                            break
+                        case rewardTypes.signup:
+                            error = await paySignupReward(userId, _id)
+                            break
+                        default:
+                            error = 'Unsupported type'
+                            break
+                    }
+                    if (error) throw new Error(error)
+                    successCount++
+                    // process.exit(0)
+                } catch (err) {
+                    log(debugTag, `${tag}[UnsuccessfulRewards] payout request failed ${err}`)
+                    failCount++
                 }
-                if (error) throw new Error(error)
-                successCount++
-                // process.exit(0)
-            } catch (err) {
-                log(debugTag, `${tag}[UnsuccessfulRewards] payout request failed ${err}`)
-                failCount++
-            }
-        })
+            })
+        )
         // }
         return rewardEntries.length
     }
