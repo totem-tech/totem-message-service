@@ -355,6 +355,19 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
     return [null, data]
 }
 
+const getFollower = async (twitterHandle) => {
+    const dbResult = await dbFollowers.find({ ['screen-name']: twitterHandle })
+        .catch(() => null)
+    if (dbResult) return {
+        following: true,
+        id: parseInt(dbResult['twitter-unique-id']),
+        screen_name: dbResult['screen-name'],
+    }
+
+
+    twitterApiLastUse = new Date()
+    return await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
+}
 /**
  * @name    verifyTweet
  * @summary check if user follows Totem official channel and then validate Tweet for reward claim
@@ -375,12 +388,11 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
         if (diffMin < 1) await PromisE.delay(diffMs + 100)
 
         // check if user is following Totem 
-        twitterApiLastUse = new Date()
         let {
             following,
             id: twitterId,
             screen_name: followerHandle
-        } = await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
+        } = await getFollower(twitterHandle)
 
         // force lowercase twitter handle
         followerHandle = `${followerHandle}`.toLowerCase()
@@ -462,17 +474,13 @@ setTimeout(async () => {
     const indexDefs = [
         {
             index: {
-                fields: [
-                    'screen-name'
-                ]
+                fields: ['screen-name']
             },
             name: 'screen-name-index',
         },
         {
             index: {
-                fields: [
-                    'twitter-unique-id'
-                ]
+                fields: ['twitter-unique-id']
             },
             name: 'twitter-unique-id-index',
         },

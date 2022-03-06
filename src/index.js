@@ -360,12 +360,15 @@ async function importToDB(fileNames) {
         const numBatches = data.size / limit
         for (let i = 0; i < numBatches; i++) {
             const start = i * limit
+            const end = start + limit
+            if (numBatches > 1) console.log(`\Processing ${file}: ${start + 1}/${end} entries`)
             const result = await db.setAll(
                 new Map(
                     Array.from(data)
-                        .slice(start, start + limit)
+                        .slice(start, end)
                 ),
                 !allowUpdates.includes(dbName),
+
             )
             okIds.push(
                 ...result
