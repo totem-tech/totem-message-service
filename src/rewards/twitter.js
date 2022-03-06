@@ -4,13 +4,15 @@ import { isObj, objClean } from '../utils/utils'
 import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
-import { emitToUsers, getSupportUsers, ROLE_SUPPORT, users } from '../users'
+import { getSupportUsers, ROLE_SUPPORT, users } from '../users'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 import generateCode from './socialVerificationCode'
 import { isError } from '@polkadot/util'
 import { handleMessage } from '../messages'
+import CouchDBStorage from '../utils/CouchDBStorage'
 
 let reprocessRewards = (process.env.ReprocessTwitterRewards || '').toLowerCase() === 'yes'
+const dbFollowers = new CouchDBStorage(null, 'followers_twitter')
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
     invalidTweet: 'Invalid tweet or tweet does not belong to designated Twitter handle',
@@ -182,8 +184,8 @@ const processNext = async (rewardEntry, isDetached = true) => {
     const user = await users.get(userId)
     if (!user) return await saveWithError(`User not found: ${userId}`, true)
 
-    const addressUsers = await users.search({ address: user.address }, 2)
-    if (addressUsers.length > 1) return await saveWithError('Identity used by another user', true)
+    // const addressUsers = await users.search({ address: user.address }, 2)
+    // if (addressUsers.length > 1) return await saveWithError('Identity used by more than user', true)
 
     const { address, referredBy, socialHandles = {} } = user
     user.socialHandles = socialHandles
@@ -371,7 +373,6 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
         log('verify tweet', { diffMin, delay: diffMs + 100 })
         // delay making Twitter API query if last request was made within the last minute
         if (diffMin < 1) await PromisE.delay(diffMs + 100)
-        return ['Testing Twiter API usage']
 
         // check if user is following Totem 
         twitterApiLastUse = new Date()
@@ -457,6 +458,31 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
 
 // process any pending or half-finished items on startup
 setTimeout(async () => {
+    // create indexes
+    const indexDefs = [
+        {
+            index: {
+                fields: [
+                    'screen-name'
+                ]
+            },
+            name: 'screen-name-index',
+        },
+        {
+            index: {
+                fields: [
+                    'twitter-unique-id'
+                ]
+            },
+            name: 'twitter-unique-id-index',
+        },
+    ]
+    indexDefs.forEach(async (def) =>
+        await (
+            await dbFollowers.getDB()
+        ).createIndex(def)
+    )
+
     if (reprocessRewards) {
         // const rewardEntries = await dbRewards.search({
         //     'data.statusCode': {

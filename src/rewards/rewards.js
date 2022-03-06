@@ -195,12 +195,12 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
 
     log(_debugTag, `${referrerUserId} referred ${referredUserId}`)
 
-    const addressUsers = await users.search({ address }, 2, 0, false)
-    if (addressUsers.length > 1) return await saveWithError(
-        rewardEntry,
-        `Referred user's address is used by more than one user`,
-        rewardStatus.ignore,
-    )
+    // const addressUsers = await users.search({ address }, 2, 0, false)
+    // if (addressUsers.length > 1) return await saveWithError(
+    //     rewardEntry,
+    //     'Identity used by more than user',
+    //     rewardStatus.ignore,
+    // )
 
     rewardEntry.status = rewardStatus.processing
     await saveEntry()
@@ -314,12 +314,12 @@ export const paySignupReward = async (userId, _rewardId) => {
         return
     }
 
-    const addressUsers = await users.search({ address }, 2, 0, false)
-    if (addressUsers.length > 1) return await saveWithError(
-        rewardEntry,
-        'Address is used by more than one user',
-        rewardStatus.ignore,
-    )
+    // const addressUsers = await users.search({ address }, 2, 0, false)
+    // if (addressUsers.length > 1) return await saveWithError(
+    //     rewardEntry,
+    //     'Identity used by more than user',
+    //     rewardStatus.ignore,
+    // )
 
     log(_debugTag, userId)
     rewardEntry.status = rewardStatus.processing

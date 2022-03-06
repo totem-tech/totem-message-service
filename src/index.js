@@ -353,12 +353,26 @@ async function importToDB(fileNames) {
                 break
         }
 
-        // insert data into database
-        const result = await db.setAll(data, !allowUpdates.includes(dbName))
         // IDs of successful inserts
-        const okIds = result
-            .map(({ ok, id }) => ok && id)
-            .filter(Boolean)
+        const okIds = []
+        // insert data into database
+        const limit = 999
+        const numBatches = data.size / limit
+        for (let i = 0; i < numBatches; i++) {
+            const start = i * limit
+            const result = await db.setAll(
+                new Map(
+                    Array.from(data)
+                        .slice(start, start + limit)
+                ),
+                !allowUpdates.includes(dbName),
+            )
+            okIds.push(
+                ...result
+                    .map(({ ok, id }) => ok && id)
+                    .filter(Boolean)
+            )
+        }
 
         // database specifc post-save actions 
         switch (dbName) {
