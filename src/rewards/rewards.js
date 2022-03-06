@@ -18,6 +18,7 @@ const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
+const reprocessBatchLimit = parseInt(process.env.ReprocessBatchLimit) || 100
 const timeout = 120000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
@@ -402,73 +403,89 @@ export const paySignupReward = async (userId, _rewardId) => {
 // }
 
 const processUnsuccessfulRewards = async () => {
-    const selector = {
-        status: {
-            $in: [
-                reprocessFailedRewards && rewardStatus.error,
-                reprocessFailedRewards && rewardStatus.processing,
-                rewardStatus.pending,
-            ].filter(Boolean)
-        },
-        type: {
-            $in: [
-                rewardTypes.signup,
-                rewardTypes.referral,
-            ]
-        },
-    }
-    const rewardEntries = await dbRewards.search(
-        selector,
-        99999,
-        0,
-        false,
-        {
-            sort: ['tsCreated'],
-        },
-        60000,
-    )
-    log(debugTag, selector, {
-        reprocessFailedRewards: selector.status.$in,
-        rewardEntries: rewardEntries.length,
-    })
-    if (rewardEntries.length === 0) return log(debugTag, 'no signup & referral entries to reprocess', { rewardEntries })
-    log(
-        debugTag,
-        `Pending${reprocessFailedRewards ? ' & error' : ''} signup & referral`,
-        `reward entries: ${rewardEntries.length}`,
-    )
     let failCount = 0
     let successCount = 0
-    let tag
-    for (let i = 0; i < rewardEntries.length; i++) {
-        const entry = rewardEntries[i]
-        const { _id, data = {}, type, userId } = entry
-        const { referredUserId } = data
-        tag = `[${type === rewardTypes.signup ? 'SignupPayout' : 'ReferralPayout'}]`
-        log(debugTag, `${tag} Processing`, _id)
-        try {
-            let error
-            switch (type) {
-                case rewardTypes.referral:
-                    error = await payReferralReward(userId, referredUserId)
-                    break
-                case rewardTypes.signup:
-                    error = await paySignupReward(userId, _id)
-                    break
-                default:
-                    error = 'Unsupported type'
-                    break
-            }
-            if (error) throw new Error(error)
-            successCount++
+    let total = 0
+    let lastTsCreated
 
-            // process.exit(0)
-        } catch (err) {
-            log(debugTag, `${tag}[UnsuccessfulRewards] payout request failed ${err}`)
-            failCount++
+    const execute = async () => {
+        const selector = {
+            status: {
+                $in: [
+                    reprocessFailedRewards && rewardStatus.error,
+                    reprocessFailedRewards && rewardStatus.processing,
+                    rewardStatus.pending,
+                ].filter(Boolean)
+            },
+            tsCreated: { $gt: lastTsCreated },
+            type: {
+                $in: [
+                    rewardTypes.signup,
+                    rewardTypes.referral,
+                ]
+            },
         }
+        if (!lastTsCreated) delete selector.tsCreated
+
+        const rewardEntries = await dbRewards.search(
+            selector,
+            reprocessBatchLimit,
+            0,
+            false,
+            {
+                sort: ['tsCreated'],
+            },
+            60000,
+        )
+        log(debugTag, selector, {
+            reprocessFailedRewards: selector.status.$in,
+            rewardEntries: rewardEntries.length,
+        })
+        if (rewardEntries.length === 0) return 0
+        log(
+            debugTag,
+            `Pending${reprocessFailedRewards ? ' & error' : ''} signup & referral`,
+            `reward entries: ${rewardEntries.length}`,
+        )
+        total += rewardEntries.length
+        let tag
+        for (let i = 0; i < rewardEntries.length; i++) {
+            const entry = rewardEntries[i]
+            const { _id, data = {}, tsCreated, type, userId } = entry
+            lastTsCreated = tsCreated
+            const { referredUserId } = data
+            tag = `[${type === rewardTypes.signup ? 'SignupPayout' : 'ReferralPayout'}]`
+            log(debugTag, `${tag} Processing`, _id)
+            try {
+                let error
+                switch (type) {
+                    case rewardTypes.referral:
+                        error = await payReferralReward(userId, referredUserId)
+                        break
+                    case rewardTypes.signup:
+                        error = await paySignupReward(userId, _id)
+                        break
+                    default:
+                        error = 'Unsupported type'
+                        break
+                }
+                if (error) throw new Error(error)
+                successCount++
+                // process.exit(0)
+            } catch (err) {
+                log(debugTag, `${tag}[UnsuccessfulRewards] payout request failed ${err}`)
+                failCount++
+            }
+        }
+        return rewardEntries.length
     }
 
+    let lastCount
+    do {
+        lastCount = await execute()
+    } while (lastCount >= reprocessBatchLimit)
+
+    if (total === 0) return
     log('Finished reprocessing signup & referral rewards', {
         total: rewardEntries.length,
         error: failCount,
