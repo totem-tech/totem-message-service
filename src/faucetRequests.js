@@ -210,6 +210,8 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
     )
 
     if (!faucetClient.connected) throw texts.faucetServerDown
+
+    const tsStart = new Date()
     const promise = PromisE.timeout((resolve, reject) => {
         try {
             faucetClient.emit(
@@ -227,7 +229,9 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
         return await promise
     } catch (err) {
         if (promise.timeout.rejected) {
-            err = new Error(`Faucet server request timed out. Event name: ${eventName}`)
+            const diff = (new Date() - start) / 1000
+            err = new Error(`Faucet server request timed out (${diff}/${timeout / 1000}). 
+            Event name: ${eventName}`)
         }
         throw err
     }
