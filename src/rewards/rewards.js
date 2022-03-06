@@ -19,7 +19,6 @@ export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
 const reprocessBatchLimit = parseInt(process.env.ReprocessBatchLimit) || 100
-const timeout = 120000
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
@@ -216,7 +215,6 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
                 rewardId,
                 rewardType: 'referral-reward',
             },
-            timeout
         )
         const { amount, status, txId, txHash } = data || {}
         rewardEntry.amount = amount
@@ -338,7 +336,6 @@ export const paySignupReward = async (userId, _rewardId) => {
                 rewardId,
                 rewardType,
             },
-            timeout,
         )
         const { amount, status, txId, txHash } = data || {}
         rewardEntry.status = !!err
