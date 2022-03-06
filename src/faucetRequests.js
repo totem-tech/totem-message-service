@@ -23,6 +23,7 @@ const TIME_LIMIT = 365000 * 24 * 60 * 60 * 1000 // allow only one more request
 const TIMEOUT_DURATION = 15 * 60 * 1000 // 15 minutes in milliseconds. if changed make sure toupdate `errMsgs.faucetTransferInProgress`
 // Environment variables
 const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:3002'
+const timeoutMS = parseInt(process.env.FAUCET_TIMEOUT_MS) || 5 * 60 * 1000
 let KEY_DATA, SECRET_KEY, SIGN_PUBLIC_KEY, SIGN_SECRET_KEY, EXTERNAL_PUBLIC_KEY, EXTERNAL_SERVER_NAME
 let shouldLogError = false // whether to send connection error to discord
 // connect to faucet server
@@ -195,7 +196,7 @@ handleFaucetRequest.requireLogin = true
  * 
  * @returns {Array}  [err, result]
  */
-export const emitToFaucetServer = async (eventName, data, timeout = 60000) => {
+export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) => {
     const lenNumChars = 9
     const dataStr = isStr(data) && data || JSON.stringify(data)
     const lenStr = JSON.stringify(dataStr.length).padStart(lenNumChars)
