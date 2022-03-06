@@ -449,8 +449,9 @@ const processUnsuccessfulRewards = async () => {
         )
         total += rewardEntries.length
         let tag
-        for (let i = 0; i < rewardEntries.length; i++) {
-            const entry = rewardEntries[i]
+        // for (let i = 0; i < rewardEntries.length; i++) {
+        //     const entry = rewardEntries[i]
+        await Promise.all(async () => {
             const { _id, data = {}, tsCreated, type, userId } = entry
             lastTsCreated = tsCreated
             const { referredUserId } = data
@@ -476,7 +477,8 @@ const processUnsuccessfulRewards = async () => {
                 log(debugTag, `${tag}[UnsuccessfulRewards] payout request failed ${err}`)
                 failCount++
             }
-        }
+        })
+        // }
         return rewardEntries.length
     }
 
