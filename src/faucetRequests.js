@@ -229,7 +229,7 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
         return await promise
     } catch (err) {
         if (promise.timeout.rejected) {
-            const diff = (new Date() - start) / 1000
+            const diff = (new Date() - tsStart) / 1000
             err = new Error(`Faucet server request timed out (${diff}/${timeout / 1000}). 
             Event name: ${eventName}`)
         }
