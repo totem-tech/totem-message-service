@@ -506,6 +506,7 @@ setTimeout(async () => {
                 $in: [
                     rewardStatus.error,
                     rewardStatus.processing,
+                    rewardStatus.todo,
                 ]
             },
             type: rewardTypes.signupTwitter,

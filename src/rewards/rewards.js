@@ -414,6 +414,7 @@ const processUnsuccessfulRewards = async () => {
                 $in: [
                     reprocessFailedRewards && rewardStatus.error,
                     reprocessFailedRewards && rewardStatus.processing,
+                    reprocessFailedRewards && rewardStatus.todo,
                     rewardStatus.pending,
                 ].filter(Boolean)
             },
