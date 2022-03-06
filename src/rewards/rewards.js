@@ -229,7 +229,7 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     } catch (faucetServerError) {
         log(_debugTag, 'payout faucet request failed with error', faucetServerError)
         rewardEntry.status = rewardStatus.error
-        rewardEntry.error = `[FaucetError] ${err}`
+        rewardEntry.error = `[FaucetError] ${faucetServerError}`
     }
     await saveEntry(true, true)
     return rewardEntry.error
