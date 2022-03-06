@@ -327,6 +327,8 @@ export const paySignupReward = async (userId, _rewardId) => {
     await saveEntry()
 
     try {
+        // make sure faucet server is connected
+        await waitTillFSConnected(0, `${debugTag} [payReward]`)
         log(_debugTag, `Sending payout request to faucet server for ${userId}`)
         const [err, data] = await emitToFaucetServer(
             'reward-payment',
