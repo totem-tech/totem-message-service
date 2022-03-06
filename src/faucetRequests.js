@@ -14,7 +14,7 @@ import PromisE from './utils/PromisE'
 
 const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
 // faucet server connected
-const rxFSConnected = new BehaviorSubject(false)
+export const rxFSConnected = new BehaviorSubject(false)
 // Maximum number of requests within @TIME_LIMIT
 const REQUEST_LIMIT = 1
 const TIME_LIMIT = 365000 * 24 * 60 * 60 * 1000 // allow only one more request

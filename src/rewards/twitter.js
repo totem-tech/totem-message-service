@@ -173,8 +173,6 @@ const processNext = async (rewardEntry, isDetached = true) => {
         next && _processNext()
     }
 
-    // make sure faucet server is connected
-    await waitTillFSConnected(0, `${debugTag} [processNext]`)
     log('processing Twitter signup reward', rewardEntry._id)
     let { data, userId } = rewardEntry
     // force lowercase existing twitter handles
@@ -308,6 +306,8 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
         return [null, data]
     }
 
+    // make sure faucet server is connected
+    await waitTillFSConnected(0, `${debugTag} [payReward]`)
     log('Sending payment request faucet server', rewardId)
     const [err, data = {}] = await emitToFaucetServer(
         'reward-payment',

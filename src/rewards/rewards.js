@@ -1,4 +1,4 @@
-import { emitToFaucetServer } from '../faucetRequests'
+import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
 import { sendNotification } from '../notification'
 import { emitToUsers, getSupportUsers, ROLE_SUPPORT, users } from '../users'
 import { generateHash } from '../utils/utils'
@@ -206,6 +206,7 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     await saveEntry()
 
     try {
+        await waitTillFSConnected(0, `${_debugTag}`)
         log(_debugTag, `Sending payout request to faucet server for ${referrerUserId}`)
         const [err, data] = await emitToFaucetServer(
             'reward-payment',
@@ -550,11 +551,10 @@ setTimeout(async () => {
             await dbRewards.getDB()
         ).createIndex(def)
     )
-})
-
-setTimeout(() => {
     // migrateOldRewards()
     //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
+
+    await waitTillFSConnected(0, `${debugTag}`)
     reprocessFailedRewards && processUnsuccessfulRewards()
         .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
 })
