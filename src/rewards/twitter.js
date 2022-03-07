@@ -1,7 +1,7 @@
 import PromisE from '../utils/PromisE'
 import twitterHelper from '../utils/twitterHelper'
 import { isObj, objClean } from '../utils/utils'
-import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
+import { emitToFaucetServer, rewardsPaymentPaused, waitTillFSConnected } from '../faucetRequests'
 import { setTexts } from '../language'
 import { sendNotification } from '../notification'
 import { getSupportUsers, ROLE_SUPPORT, users } from '../users'
@@ -12,7 +12,6 @@ import { handleMessage } from '../messages'
 import CouchDBStorage from '../utils/CouchDBStorage'
 
 let reprocessRewards = (process.env.ReprocessTwitterRewards || '').toLowerCase() === 'yes'
-const rewardsPaymentPaused = (process.env.RewardsPaymentPaused || '').toLowerCase() === 'yes'
 const dbFollowers = new CouchDBStorage(null, 'followers_twitter')
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
@@ -128,9 +127,9 @@ const notifyUser = async (message, userId, status, rewardId) => {
  * @param   {Boolean}   isDetached  (optional) whether to return error message or notify user
  * @returns 
  */
-const processNext = async (rewardEntry, isDetached = true) => {
+const processNext = async (rewardEntry, isDetached = true, deferPayment = rewardsPaymentPaused) => {
     // an item is already being executed
-    if (!!inProgressKey || rewardsPaymentPaused) return
+    if (deferPayment || !!inProgressKey) return
 
     let error, status
     // reserve this for execution to avoid any possible race condition may be caused due to database query delay
@@ -162,7 +161,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
 
     const _processNext = () => setTimeout(async () => {
         inProgressKey = null
-        !reprocessRewards && processNext()
+        !reprocessRewards && processNext(null, true, deferPayment)
     })
     const saveWithError = async (error, ignore = false, next = true) => {
         rewardEntry.status = ignore
@@ -171,7 +170,7 @@ const processNext = async (rewardEntry, isDetached = true) => {
         rewardEntry.data.error = `${error}`
         log({ rewardEntry, error })
         await dbRewards.set(rewardId, rewardEntry)
-        next && _processNext()
+        next && _processNext(null, true, deferPayment)
     }
 
     log('processing Twitter signup reward', rewardEntry._id)
@@ -507,6 +506,7 @@ setTimeout(async () => {
                 $in: [
                     rewardStatus.error,
                     rewardStatus.processing,
+                    rewardStatus.success,
                     rewardStatus.todo,
                 ]
             },
@@ -535,7 +535,7 @@ setTimeout(async () => {
                 rewardEntry._id,
                 rewardEntry.status,
             )
-            let error = await processNext(rewardEntry, false)
+            let error = await processNext(rewardEntry, false, false)
                 .catch(err => err)
             if (isError(error)) error = error.message
             if (error) {
@@ -568,5 +568,5 @@ setTimeout(async () => {
             )
         }
     }
-    await processNext()
+    await processNext(null, true, rewardsPaymentPaused)
 })

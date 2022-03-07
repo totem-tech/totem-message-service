@@ -8,7 +8,7 @@ import {
     newSignature,
     keyInfoFromKeyData,
 } from './utils/naclHelper'
-import { isFn, isStr } from './utils/utils'
+import { isFn, isStr, randomInt } from './utils/utils'
 import { setTexts } from './language'
 import PromisE from './utils/PromisE'
 
@@ -22,6 +22,7 @@ const TIME_LIMIT = 365000 * 24 * 60 * 60 * 1000 // allow only one more request
 // After timeout, assume something went wrong and allow user to create a new request
 const TIMEOUT_DURATION = 15 * 60 * 1000 // 15 minutes in milliseconds. if changed make sure toupdate `errMsgs.faucetTransferInProgress`
 // Environment variables
+export let rewardsPaymentPaused = (process.env.RewardsPaymentPaused || '').toLowerCase() === 'yes'
 const FAUCET_SERVER_URL = process.env.FAUCET_SERVER_URL || 'https://127.0.0.1:3002'
 const timeoutMS = parseInt(process.env.FAUCET_TIMEOUT_MS) || 5 * 60 * 1000
 let KEY_DATA, SECRET_KEY, SIGN_PUBLIC_KEY, SIGN_SECRET_KEY, EXTERNAL_PUBLIC_KEY, EXTERNAL_SERVER_NAME
@@ -34,10 +35,18 @@ const faucetClient = ioClient(FAUCET_SERVER_URL, {
     timeout: 5000,
     transports: ['websocket'],
 })
-faucetClient.on('connect', () => {
+faucetClient.on('connect', async () => {
     shouldLogError = true
+
+    const data = {
+        random: randomInt(1e6, 1e9),
+        title: 'test-decrypt',
+    }
+    const [err, resultData] = await emitToFaucetServer('test-decrypt', data)
     console.log('Connected to faucet server')
-    rxFSConnected.next(true)
+    const isEqual = JSON.stringify(resultData) === JSON.stringify(data)
+    if (err || !isEqual) console.log('----------------------Update faucet server public keys.---------------\nReason: ', err)
+    rxFSConnected.next(!err)
 })
 faucetClient.on('connect_error', (err) => {
     // send message to discord error logger channel
@@ -56,7 +65,7 @@ faucetClient.on('connect_error', (err) => {
  */
 export const waitTillFSConnected = (timeout = timeoutMS, tag) => new Promise((resolve, reject) => {
     const sub = rxFSConnected
-        .subscribe(connected => {
+        .subscribe(async (connected) => {
             if (!connected) return console.log(tag, 'Waiting for faucet server to be connected')
             setTimeout(() => sub.unsubscribe())
             resolve(true)

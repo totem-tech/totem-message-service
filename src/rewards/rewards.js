@@ -1,10 +1,11 @@
-import { emitToFaucetServer, waitTillFSConnected } from '../faucetRequests'
+import { emitToFaucetServer, rewardsPaymentPaused, waitTillFSConnected } from '../faucetRequests'
 import { sendNotification } from '../notification'
 import { emitToUsers, getSupportUsers, ROLE_SUPPORT, users } from '../users'
 import { generateHash } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'
 import { handleMessage } from '../messages'
+import PromisE from '../utils/PromisE'
 
 const texts = setTexts({
     signupRewardMsg: `
@@ -19,7 +20,6 @@ export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
 const reprocessBatchLimit = parseInt(process.env.ReprocessBatchLimit) || 100
-const rewardsPaymentPaused = (process.env.RewardsPaymentPaused || '').toLowerCase() === 'yes'
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
@@ -122,7 +122,7 @@ const saveWithError = async (rewardEntry = {}, error, status = rewardStatus.erro
  * @param   {String} referrerUserId 
  * @param   {String} referredUserId
  */
-export const payReferralReward = async (referrerUserId, referredUserId) => {
+export const payReferralReward = async (referrerUserId, referredUserId, deferPayment = rewardsPaymentPaused) => {
     const _debugTag = `[ReferralPayout]`
     const rewardType = rewardTypes.referral
     const rewardId = getRewardId(rewardType, referredUserId)
@@ -203,12 +203,11 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     //     rewardStatus.ignore,
     // )
 
-    rewardEntry.status = rewardsPaymentPaused
+    rewardEntry.status = deferPayment
         ? rewardEntry.pending
         : rewardStatus.processing
     await saveEntry()
-    if (rewardsPaymentPaused) return
-
+    if (deferPayment) return log(_debugTag, `Deferring payment for ${referrerUserId}`)
 
     try {
         await waitTillFSConnected(0, `${_debugTag}`)
@@ -247,7 +246,7 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
  * @param   {String} userId
  * @param   {String} _rewardId (only used when dealing with legacy rewardIds)
  */
-export const paySignupReward = async (userId, _rewardId) => {
+export const paySignupReward = async (userId, _rewardId, deferPayment = true) => {
     const _debugTag = `[SignupPayout]`
     const rewardType = rewardTypes.signup
     const rewardId = _rewardId || getRewardId(rewardType, userId)
@@ -326,12 +325,11 @@ export const paySignupReward = async (userId, _rewardId) => {
     //     rewardStatus.ignore,
     // )
 
-    log(_debugTag, userId)
-    rewardEntry.status = rewardsPaymentPaused
+    rewardEntry.status = deferPayment
         ? rewardEntry.pending
         : rewardStatus.processing
     await saveEntry()
-    if (rewardsPaymentPaused) return
+    if (deferPayment) return log(_debugTag, `Deferring payment for ${referrerUserId}`)
 
     try {
         // make sure faucet server is connected
@@ -421,6 +419,7 @@ const processUnsuccessfulRewards = async () => {
                     reprocessFailedRewards && rewardStatus.processing,
                     reprocessFailedRewards && rewardStatus.todo,
                     rewardStatus.pending,
+                    rewardStatus.s,
                 ].filter(Boolean)
             },
             tsCreated: { $gt: lastTsCreated },
@@ -443,7 +442,7 @@ const processUnsuccessfulRewards = async () => {
             },
             60000,
         )
-        log(debugTag, selector, {
+        log(debugTag, {
             reprocessFailedRewards: selector.status.$in,
             rewardEntries: rewardEntries.length,
         })
@@ -455,23 +454,24 @@ const processUnsuccessfulRewards = async () => {
         )
         total += rewardEntries.length
         let tag
-        // for (let i = 0; i < rewardEntries.length; i++) {
-        //     const entry = rewardEntries[i]
         await Promise.all(
             rewardEntries.map(async (entry) => {
                 const { _id, data = {}, tsCreated, type, userId } = entry
                 lastTsCreated = tsCreated
                 const { referredUserId } = data
-                tag = `[${type === rewardTypes.signup ? 'SignupPayout' : 'ReferralPayout'}]`
+                const typeTag = type === rewardTypes.signup
+                    ? 'SignupPayout'
+                    : 'ReferralPayout'
+                tag = `[${typeTag}]`
                 log(debugTag, `${tag} Processing`, _id)
                 try {
                     let error
                     switch (type) {
                         case rewardTypes.referral:
-                            error = await payReferralReward(userId, referredUserId)
+                            error = await payReferralReward(userId, referredUserId, false)
                             break
                         case rewardTypes.signup:
-                            error = await paySignupReward(userId, _id)
+                            error = await paySignupReward(userId, _id, false)
                             break
                         default:
                             error = 'Unsupported type'
@@ -486,13 +486,15 @@ const processUnsuccessfulRewards = async () => {
                 }
             })
         )
-        // }
         return rewardEntries.length
     }
 
     let lastCount
     do {
-        lastCount = await execute()
+        lastCount = (
+            await execute()
+                .catch(() => reprocessBatchLimit) // continue executing next transactions ones
+        ) || 0
     } while (lastCount >= reprocessBatchLimit)
 
     if (total === 0) return
