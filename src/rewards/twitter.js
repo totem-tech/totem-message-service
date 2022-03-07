@@ -506,7 +506,6 @@ setTimeout(async () => {
                 $in: [
                     rewardStatus.error,
                     rewardStatus.processing,
-                    rewardStatus.success,
                     rewardStatus.todo,
                 ]
             },

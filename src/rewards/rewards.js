@@ -419,7 +419,6 @@ const processUnsuccessfulRewards = async () => {
                     reprocessFailedRewards && rewardStatus.processing,
                     reprocessFailedRewards && rewardStatus.todo,
                     rewardStatus.pending,
-                    rewardStatus.s,
                 ].filter(Boolean)
             },
             tsCreated: { $gt: lastTsCreated },
