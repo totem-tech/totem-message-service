@@ -12,6 +12,7 @@ import { handleMessage } from '../messages'
 import CouchDBStorage from '../utils/CouchDBStorage'
 
 let reprocessRewards = (process.env.ReprocessTwitterRewards || '').toLowerCase() === 'yes'
+const rewardsPaymentPaused = (process.env.RewardsPaymentPaused || '').toLowerCase() === 'yes'
 const dbFollowers = new CouchDBStorage(null, 'followers_twitter')
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
@@ -129,7 +130,7 @@ const notifyUser = async (message, userId, status, rewardId) => {
  */
 const processNext = async (rewardEntry, isDetached = true) => {
     // an item is already being executed
-    if (!!inProgressKey) return
+    if (!!inProgressKey || rewardsPaymentPaused) return
 
     let error, status
     // reserve this for execution to avoid any possible race condition may be caused due to database query delay
@@ -491,7 +492,7 @@ setTimeout(async () => {
         ).createIndex(def)
     )
 
-    if (reprocessRewards) {
+    if (!rewardsPaymentPaused && reprocessRewards) {
         // const rewardEntries = await dbRewards.search({
         //     'data.statusCode': {
         //         $in: [

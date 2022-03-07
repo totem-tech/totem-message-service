@@ -19,6 +19,7 @@ export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
 const reprocessBatchLimit = parseInt(process.env.ReprocessBatchLimit) || 100
+const rewardsPaymentPaused = (process.env.RewardsPaymentPaused || '').toLowerCase() === 'yes'
 const debugTag = '[rewards]'
 const hashAlgo = 'blake2'
 const hashBitLength = 256
@@ -202,8 +203,12 @@ export const payReferralReward = async (referrerUserId, referredUserId) => {
     //     rewardStatus.ignore,
     // )
 
-    rewardEntry.status = rewardStatus.processing
+    rewardEntry.status = rewardsPaymentPaused
+        ? rewardEntry.pending
+        : rewardStatus.processing
     await saveEntry()
+    if (rewardsPaymentPaused) return
+
 
     try {
         await waitTillFSConnected(0, `${_debugTag}`)
@@ -322,8 +327,11 @@ export const paySignupReward = async (userId, _rewardId) => {
     // )
 
     log(_debugTag, userId)
-    rewardEntry.status = rewardStatus.processing
+    rewardEntry.status = rewardsPaymentPaused
+        ? rewardEntry.pending
+        : rewardStatus.processing
     await saveEntry()
+    if (rewardsPaymentPaused) return
 
     try {
         // make sure faucet server is connected
@@ -576,6 +584,10 @@ setTimeout(async () => {
     //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
 
     await waitTillFSConnected(0, `${debugTag}`)
-    reprocessFailedRewards && processUnsuccessfulRewards()
-        .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
+    !rewardsPaymentPaused
+        && reprocessFailedRewards
+        && processUnsuccessfulRewards()
+            .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
+
+    if (rewardsPaymentPaused) log(debugTag, 'All rewards payments are paused!')
 })
