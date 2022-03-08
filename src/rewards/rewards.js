@@ -210,7 +210,7 @@ export const payReferralReward = async (referrerUserId, referredUserId, deferPay
     if (deferPayment) return log(_debugTag, `Deferring payment for ${referrerUserId}`)
 
     try {
-        await waitTillFSConnected(0, `${_debugTag}`)
+        await waitTillFSConnected(undefined, `${_debugTag}`)
         log(_debugTag, `Sending payout request to faucet server for ${referrerUserId}`)
         const [err, data] = await emitToFaucetServer(
             'reward-payment',
@@ -333,7 +333,7 @@ export const paySignupReward = async (userId, _rewardId, deferPayment = true) =>
 
     try {
         // make sure faucet server is connected
-        await waitTillFSConnected(0, `${debugTag} [payReward]`)
+        await waitTillFSConnected(undefined, `${debugTag} [payReward]`)
         log(_debugTag, `Sending payout request to faucet server for ${userId}`)
         const [err, data] = await emitToFaucetServer(
             'reward-payment',
