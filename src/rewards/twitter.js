@@ -307,7 +307,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
     }
 
     // make sure faucet server is connected
-    await waitTillFSConnected(0, `${debugTag} [payReward]`)
+    await waitTillFSConnected(undefined, `${debugTag} [payReward]`)
     log('Sending payment request faucet server', rewardId)
     const [err, data = {}] = await emitToFaucetServer(
         'reward-payment',
