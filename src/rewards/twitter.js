@@ -465,8 +465,10 @@ const verifyTweet = async (userId, twitterHandle, tweetId, retry = true) => {
         ].find(x => msg.includes(x))
         if (notFound) return [msg]
         if (msg.toLowerCase().includes('rate limit') && retry) {
-            await PromisE.delay(twitterAPIDelay * 3)
-            return verifyTweet = async(userId, twitterHandle, tweetId, false)
+            const delay = twitterAPIDelay * 3
+            log(debugTag, `Twitter rate limit exceeded. Delaying ${delay / 1000} seconds before retrying`)
+            await PromisE.delay(delay)
+            return verifyTweet(userId, twitterHandle, tweetId, false)
         }
         throw err
     }
