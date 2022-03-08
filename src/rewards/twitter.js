@@ -364,6 +364,7 @@ const getFollower = async (twitterHandle) => {
         screen_name: dbResult['screen-name'],
     }
 
+    log(debugTag, 'Checking follower')
     twitterApiLastUse = new Date()
     return await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
 }
@@ -378,11 +379,11 @@ const getFollower = async (twitterHandle) => {
  * 
  * @returns {Array} [errorMessage, twitterId]
  */
-const verifyTweet = async (userId, twitterHandle, tweetId) => {
-    log('Verifying tweet', { twitterHandle, tweetId })
+const verifyTweet = async (userId, twitterHandle, tweetId, retry = true) => {
+    log(debugTag, 'Verifying tweet', { twitterHandle, tweetId })
     try {
         const diffMs = new Date() - twitterApiLastUse
-        log('Verifying tweet', { diffMs })
+        log(debugTag, 'Verifying tweet', { diffMs })
         // delay making Twitter API query if last request was made within the last minute
         if (diffMs < twitterAPIDelay) await PromisE.delay(twitterAPIDelay - diffMs)
 
@@ -457,12 +458,16 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
             twitterId
         ]
     } catch (err) {
-        const msg = `${err}`
+        const msg = `${err}`.replace('Error:', 'Tweet verification error:')
         const notFound = [
             'No data',
             'No status'
         ].find(x => msg.includes(x))
-        if (notFound) return [`${msg}`.replace('Error:', 'Tweet verification error:')]
+        if (notFound) return [msg]
+        if (msg.toLowerCase().includes('rate limit') && retry) {
+            await PromisE.delay(twitterAPIDelay * 3)
+            return verifyTweet = async(userId, twitterHandle, tweetId, false)
+        }
         throw err
     }
 }
