@@ -384,7 +384,7 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
         const diffMs = new Date() - twitterApiLastUse
         log('Verifying tweet', { diffMs })
         // delay making Twitter API query if last request was made within the last minute
-        if (diffMs < twitterAPIDelay) await PromisE.delay(diffMs + 100)
+        if (diffMs < twitterAPIDelay) await PromisE.delay(twitterAPIDelay - diffMs)
 
         // check if user is following Totem 
         let {
