@@ -12,6 +12,7 @@ import { handleMessage } from '../messages'
 import CouchDBStorage from '../utils/CouchDBStorage'
 
 let reprocessRewards = (process.env.ReprocessTwitterRewards || '').toLowerCase() === 'yes'
+const twitterAPIDelay = parseInt(process.env.TwitterAPIDelayMS) || 60000
 const dbFollowers = new CouchDBStorage(null, 'followers_twitter')
 const debugTag = '[rewards] [twitter]'
 const messages = setTexts({
@@ -383,8 +384,7 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
         const diffMs = new Date() - twitterApiLastUse
         log('Verifying tweet', { diffMs })
         // delay making Twitter API query if last request was made within the last minute
-        const twitterAPIDelay = parseInt(process.env.TwitterAPIDelayMS) || 10000
-        if (diffMin < twitterAPIDelay) await PromisE.delay(diffMs)
+        if (diffMs < twitterAPIDelay) await PromisE.delay(diffMs + 100)
 
         // check if user is following Totem 
         let {
