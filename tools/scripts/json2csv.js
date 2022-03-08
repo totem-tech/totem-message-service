@@ -1,7 +1,7 @@
 import fs from 'fs'
-import { Parser } from 'json2csv'
+import { Parser, transforms } from 'json2csv'
 import DataStorage from '../../src/utils/DataStorage'
-import { isArr2D } from '../../src/utils/utils'
+import { isArr2D, isFn } from '../../src/utils/utils'
 
 async function execute(storage) {
     const pathSource = process.env.FILENAME
@@ -22,9 +22,20 @@ async function execute(storage) {
     }
     const options = !!pathOptions
         ? JSON.parse(fs.readFileSync(pathOptions))
-        : null
+        : {
+            transforms: {
+                flatten: {
+                    arrays: true,
+                    objects: true,
+                    separator: '.',
+                },
+            }
+        }
 
-    options && console.log({ options })
+    console.log('options:', options)
+    options.transforms = Object.keys(options.transforms)
+        .filter(key => isFn(transforms[key]))
+        .map(key => transforms[key]({ ...options.transforms[key] }))
 
     const parser = new Parser(options || {})
 

@@ -285,7 +285,7 @@ export const paySignupReward = async (userId, _rewardId, deferPayment = true) =>
             if (rewardEntry.status !== rewardStatus.error) rewardEntry.error = null
             await dbRewards.set(rewardId, rewardEntry)
         }
-        if (!notify) return
+        if (rewardEntry.notification || !notify) return
         setTimeout(async () => {
             // notify user
             log(_debugTag, `Sending notification to user ${userId}`)
