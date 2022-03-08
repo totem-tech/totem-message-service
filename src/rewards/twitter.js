@@ -51,7 +51,7 @@ const twitterTags = [
 ].map(x => x.toLowerCase())
 // To avoid hitting Twitter API query limit queue any Twitter API requests and process them on specific time interval. 
 let inProgressKey = null
-let twitterApiLastUse = new Date()
+let twitterApiLastUse = new Date('2000-01-01')
 const log = (...args) => console.log(new Date().toISOString(), debugTag, ...args)
 
 export async function claimSignupTwitterReward(userId, twitterHandle, tweetId) {
@@ -170,7 +170,7 @@ const processNext = async (rewardEntry, isDetached = true, deferPayment = reward
         rewardEntry.data.error = `${error}`
         log({ rewardEntry, error })
         await dbRewards.set(rewardId, rewardEntry)
-        next && _processNext(null, true, deferPayment)
+        next && _processNext()
     }
 
     log('processing Twitter signup reward', rewardEntry._id)
@@ -259,9 +259,8 @@ const processNext = async (rewardEntry, isDetached = true, deferPayment = reward
         data.statusCode = statusCodes.error
         await saveWithError(err, false, false)
         error = `${err}`.replace('Error: ', '')
-    } finally {
-        _processNext()
     }
+    _processNext()
 
     if (error && isDetached) return await notifyUser(
         error,
@@ -382,10 +381,10 @@ const verifyTweet = async (userId, twitterHandle, tweetId) => {
     log('Verifying tweet', { twitterHandle, tweetId })
     try {
         const diffMs = new Date() - twitterApiLastUse
-        const diffMin = diffMs / 1000 / 60
-        log('verify tweet', { diffMin, delay: diffMs + 100 })
+        log('Verifying tweet', { diffMs })
         // delay making Twitter API query if last request was made within the last minute
-        if (diffMin < 1) await PromisE.delay(diffMs + 100)
+        const twitterAPIDelay = parseInt(process.env.TwitterAPIDelayMS) || 10000
+        if (diffMin < twitterAPIDelay) await PromisE.delay(diffMs)
 
         // check if user is following Totem 
         let {
