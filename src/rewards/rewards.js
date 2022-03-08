@@ -498,7 +498,7 @@ const processUnsuccessfulRewards = async () => {
 
     if (total === 0) return
     log('Finished reprocessing signup & referral rewards', {
-        total: rewardEntries.length,
+        total,
         error: failCount,
         success: successCount,
     })
