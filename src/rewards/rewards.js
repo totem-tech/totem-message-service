@@ -329,7 +329,7 @@ export const paySignupReward = async (userId, _rewardId, deferPayment = true) =>
         ? rewardEntry.pending
         : rewardStatus.processing
     await saveEntry()
-    if (deferPayment) return log(_debugTag, `Deferring payment for ${referrerUserId}`)
+    if (deferPayment) return log(_debugTag, `Deferring payment for ${userId}`)
 
     try {
         // make sure faucet server is connected

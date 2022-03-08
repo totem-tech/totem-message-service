@@ -364,10 +364,10 @@ const getFollower = async (twitterHandle) => {
         screen_name: dbResult['screen-name'],
     }
 
-
     twitterApiLastUse = new Date()
     return await twitterHelper.getFollower(totemTwitterHandle, twitterHandle)
 }
+
 /**
  * @name    verifyTweet
  * @summary check if user follows Totem official channel and then validate Tweet for reward claim
