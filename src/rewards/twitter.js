@@ -166,7 +166,7 @@ const processNext = async (rewardEntry, isDetached = true, deferPayment = reward
     })
     const saveWithError = async (error, ignore = false, next = true) => {
         rewardEntry.status = ignore
-            ? rewardEntry.ignore // indicates entry should be ignored from any re-processing attempts
+            ? rewardStatus.ignore // indicates entry should be ignored from any re-processing attempts
             : rewardStatus.error
         rewardEntry.data.error = `${error}`
         log({ rewardEntry, error })
