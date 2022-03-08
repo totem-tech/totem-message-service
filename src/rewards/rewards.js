@@ -584,7 +584,7 @@ setTimeout(async () => {
     // migrateOldRewards()
     //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
 
-    await waitTillFSConnected(0, `${debugTag}`)
+    await waitTillFSConnected(undefined, `${debugTag}`)
     !rewardsPaymentPaused
         && reprocessFailedRewards
         && processUnsuccessfulRewards()
