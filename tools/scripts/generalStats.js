@@ -1,6 +1,5 @@
 import DataStorage from '../../src/utils/DataStorage'
-import { isDefined } from '../../src/utils/utils'
-import exportDb from '../export-db'
+import exportDb from './exportdb'
 
 const filename = process.env.FILENAME
 const keysCount = (process.env.KEYS_COUNT || '')

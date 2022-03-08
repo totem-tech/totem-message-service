@@ -1,6 +1,6 @@
 import DataStorage from '../../src/utils/DataStorage'
 import { arrUnique, isObj } from '../../src/utils/utils'
-import exportDb from '../export-db'
+import exportDb from './exportdb'
 
 const filename = process.env.FILENAME
 const usersStats = async (storage) => {
