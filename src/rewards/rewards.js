@@ -510,7 +510,7 @@ const processUnsuccessfulRewards = async () => {
         [{}, { id: ROLE_SUPPORT }],
         supportUsers.map(x => x._id),
         `[AUTOMATED MESSAGE] Finished reprocessing failed signup+referral rewards. \n\n${JSON.stringify({
-            total: rewardEntries.length,
+            total,
             successCount,
             failCount,
         }, null, 4)}`,
