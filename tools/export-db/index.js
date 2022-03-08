@@ -1,7 +1,7 @@
 import CouchDBStorage from '../../src/utils/CouchDBStorage'
 import DataStorage from '../../src/utils/DataStorage'
 
-async function exportDb() {
+async function execute() {
     const url = process.env.CouchDB_URL
     const dbName = process.env.DBName
     let filename = process.env.FILENAME
@@ -24,4 +24,4 @@ async function exportDb() {
     return storage
 }
 
-export default exportDb()
+export default execute()

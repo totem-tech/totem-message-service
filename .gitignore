@@ -33,4 +33,4 @@ sslcert/*.pem
 .gitmodules
 
 
-tools/scripts
+# tools/scripts

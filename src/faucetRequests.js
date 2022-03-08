@@ -55,6 +55,13 @@ faucetClient.on('connect_error', (err) => {
     console.log('Faucet client connection failed: ', err)
     rxFSConnected.next(false)
 })
+faucetClient.on('disconnect', (err) => {
+    // send message to discord error logger channel
+    // if(shouldLogError) 
+    shouldLogError = false
+    console.log('Faucet client disconnected: ', err)
+    rxFSConnected.next(false)
+})
 /**
  * @name    waitTillFSConnected
  * @summary wait until faucet server is connected or timed out
