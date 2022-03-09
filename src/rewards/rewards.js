@@ -468,9 +468,11 @@ const processUnsuccessfulRewards = async () => {
                     switch (type) {
                         case rewardTypes.referral:
                             error = await payReferralReward(userId, referredUserId, false)
+                                .catch(err => err.message)
                             break
                         case rewardTypes.signup:
                             error = await paySignupReward(userId, _id, false)
+                                .catch(err => err.message)
                             break
                         default:
                             error = 'Unsupported type'
@@ -584,11 +586,15 @@ setTimeout(async () => {
     // migrateOldRewards()
     //     .catch(err => log(debugTag, 'Failed to migrate old reward entries', err))
 
-    await waitTillFSConnected(undefined, `${debugTag}`)
     !rewardsPaymentPaused
-        && reprocessFailedRewards
-        && processUnsuccessfulRewards()
-            .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
+        && reprocessFailedRewards &&
+        await waitTillFSConnected(undefined, `${debugTag}`)
+            .then(() => {
+                processUnsuccessfulRewards()
+                    .catch(err => log(debugTag, 'Failed to process incomplete signup & referral rewards', err))
+            })
+            .catch(() => { })
+
 
     if (rewardsPaymentPaused) log(debugTag, 'All rewards payments are paused!')
 })

@@ -223,6 +223,7 @@ const processNext = async (rewardEntry, isDetached = true, deferPayment = reward
         // pay user
         if (data.statusCode <= statusCodes.paymentError) {
             const [payErr, iData = {}] = await payReward(address, rewardId, null)
+                .catch(err => [`Pay referrer error: ${err.message}`])
             if (payErr) {
                 rewardEntry.data.statusCode = statusCodes.paymentError
                 return await saveWithError(payErr, true, true)
@@ -243,7 +244,7 @@ const processNext = async (rewardEntry, isDetached = true, deferPayment = reward
                 referrer,
                 userId,
                 twitterHandle,
-            )
+            ).catch(err => [`Pay referrer error: ${err.message}`])
             if (payRefErr) {
                 rewardEntry.data.statusCode = statusCodes.paymentError
                 return await saveWithError(payErr, true, true)
@@ -307,7 +308,7 @@ const payReward = async (address, rewardId, referrer, referredUserId, twitterHan
     }
 
     // make sure faucet server is connected
-    await waitTillFSConnected(undefined, `${debugTag} [payReward]`)
+    await waitTillFSConnected(0, `${debugTag} [payReward]`)
     log('Sending payment request faucet server', rewardId)
     const [err, data = {}] = await emitToFaucetServer(
         'reward-payment',
