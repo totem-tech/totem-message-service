@@ -1,18 +1,29 @@
 import DataStorage from '../../src/utils/DataStorage'
-import exportDb from './exportdb'
+import { isValidNumber } from '../../src/utils/utils'
 
 const filename = process.env.FILENAME
-const keysCount = (process.env.KEYS_COUNT || '')
-    .split(',')
-    .filter(Boolean)
+// const keysCount = (process.env.KEYS_COUNT || '')
+//     .split(',')
+//     .filter(Boolean)
 const keysCountUnique = (process.env.KEYS_COUNT || 'address,recipient,userId')
     .split(',')
     .filter(Boolean)
 const keysCountOccurance = (process.env.KEYS_COUNT_OCCURANCE || 'status,type')
     .split(',')
     .filter(Boolean)
+const keysSum = (process.env.KYES_SUM || '')
+    .split(',')
+    .filter(Boolean)
+const CouchDB_URL = process.env.CouchDB_URL
+const DBName = process.env.DBName
+
 const statusStats = async (storage) => {
-    storage = storage || new DataStorage(filename)
+    if (!storage) {
+        storage = CouchDB_URL && DBName
+            ? await require('./exportdb').default
+            : new DataStorage(filename)
+    }
+    if (!storage.name) throw new Error('FILENAME required')
 
     const stats = {
         total: storage.getAll().size,
@@ -39,12 +50,12 @@ const statusStats = async (storage) => {
                         obj[xValue] = (obj[xValue] || 0) + 1
                     })
             })
-            keysCount.forEach(key => {
-                const iValue = value[key]
-                if (iValue === undefined) return
+            // keysCount.forEach(key => {
+            //     const iValue = value[key]
+            //     if (iValue === undefined) return
 
-                stats[key] = (stats[key] || 0) + 1
-            })
+            //     stats[key] = (stats[key] || 0) + 1
+            // })
 
             keysCountUnique.forEach(key => {
                 const iValue = value[key]
@@ -52,7 +63,20 @@ const statusStats = async (storage) => {
 
                 stats[key] = stats[key] || new Map()
                 const map = stats[key]
-                map.set(value[key], true)
+                try {
+                    map.set(value[key], true)
+                } catch (err) {
+                    console.log({ map, stats })
+                    throw err
+                }
+            })
+
+            keysSum.forEach(key => {
+                const iValue = value[key]
+                if (!isValidNumber(iValue)) return console.log({ iValue })
+
+                const iKey = `${key}__sum`
+                stats[iKey] = (stats[iKey] || 0) + iValue
             })
         })
     keysCountUnique.forEach(key =>
@@ -62,4 +86,4 @@ const statusStats = async (storage) => {
 
     return storage
 }
-export default exportDb.then(statusStats)
+export default statusStats

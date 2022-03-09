@@ -361,18 +361,21 @@ async function importToDB(fileNames) {
         for (let i = 0; i < numBatches; i++) {
             const start = i * limit
             const end = start + limit
-            if (numBatches > 1) console.log(`\Processing ${file}: ${start + 1}/${end} entries`)
+            if (numBatches > 1) console.log(`\n${file}: Processing ${start + 1} to ${end} out of ${data.size} entries`)
             const result = await db.setAll(
                 new Map(
                     Array.from(data)
                         .slice(start, end)
+
                 ),
                 !allowUpdates.includes(dbName),
-
             )
             okIds.push(
                 ...result
-                    .map(({ ok, id }) => ok && id)
+                    .map(({ error, reason, ok, id }) => {
+                        if (error) console.log(id, { error, reason, doc: data.get(id) })
+                        return ok && id
+                    })
                     .filter(Boolean)
             )
         }
@@ -393,6 +396,6 @@ async function importToDB(fileNames) {
         okIds.forEach(id => data.delete(id))
         // update JSON file to remove imported entries
         jsonStorage.setAll(data)
-        console.log(`${file} => saved: ${okIds.length}. Ignored existing: ${total - okIds.length}`)
+        console.log(`${file} => saved: ${okIds.length}. Failed or ignored existing: ${total - okIds.length}`)
     }
 }

@@ -3,6 +3,7 @@ const { isFn } = require("../../src/utils/utils")
 const paths = (process.env.SCRIPT || '')
     .split(',')
     .map(x => x.replace('.js', ''))
+console.log({ paths })
 
 const execute = async () => {
     let lastResult
