@@ -287,7 +287,7 @@ export async function handleNotificationGetRecent(tsLastReceived = '2002-01-01',
     }
     let result = await notifications.view(
         'get-recent',
-        'no-deleted',
+        'not-deleted',
         params,
     )
     result.forEach(value => {
