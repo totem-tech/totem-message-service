@@ -1,7 +1,7 @@
 import request from 'request'
 import CouchDBStorage from './utils/CouchDBStorage'
 import uuid from 'uuid'
-import { arrUnique, isFn, isStr } from './utils/utils'
+import { arrUnique, isFn, isStr, objClean } from './utils/utils'
 import { setTexts } from './language'
 import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_IDS, ROLE_SUPPORT } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -20,23 +20,6 @@ const texts = setTexts({
     groupName: 'Group Name',
     groupNameNotAllowed: 'Cannot set name for one to one conversation',
     recipients: 'recipients',
-})
-
-// initialize
-setTimeout(async () => {
-    // create an index for the field `timestamp`, ignores if already exists
-    const indexDefs = [
-        {
-            // index for sorting purposes
-            index: { fields: ['timestamp'] },
-            name: 'timestamp-index',
-        },
-        {
-            index: { fields: ['receiverIds', 'timestamp'] },
-            name: 'receiverIds_timestamp-index',
-        }
-    ]
-    indexDefs.forEach(async (def) => await (await chatMessages.getDB()).createIndex(def))
 })
 
 /**
@@ -124,6 +107,59 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     }, err => err && console.log('Discord Webhook: failed to send support message. ', err))
 }
 handleMessage.requireLogin = true
+
+
+/**
+ * @name    handleMessageGetRecent
+ * @summary get user's most recent messsages. Maximum of 1000 
+ * 
+ * @param   {String}    lastMessageTS UTC timestamp
+ * @param   {*}         callback      Arguments =>
+ *                          @err        string: error message, if any
+ *                          @messages   array: array of messages
+ */
+export async function handleMessageGetRecent(lastMessageTS, callback) {
+    const [_, user] = this
+    if (!isFn(callback) || !user) return
+
+    lastMessageTS = new Date(lastMessageTS || '2002-01-01').getTime()
+    // increment time to prevent most recent from being retrieved again
+    lastMessageTS = new Date(lastMessageTS + 1).toISOString()
+
+    const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
+    const userId = userIsSupport
+        ? ROLE_SUPPORT
+        : user._id
+    const params = {
+        startkey: [userId, lastMessageTS],
+        endkey: [userId, new Date().toISOString()]
+    }
+    const label = `[query-duration] [message-get-recent] ${user._id}`
+    console.time(label)
+    let result = await chatMessages.view(
+        'get-recent',
+        'not-deleted',
+        params,
+    )
+    console.timeEnd(label)
+    const fields = [
+        'encrypted',
+        'id', // redundant
+        'message',
+        'receiverIds',
+        'senderId',
+        'status',
+        'timestamp', // redundant
+        'tsCreated',
+    ]
+
+    result = result.map(x => [
+        x._id,
+        objClean(x, fields),
+    ])
+    callback(null, result)
+}
+handleMessageGetRecent.requireLogin = true
 handleMessageGetRecent.validationConf = {
     message: {
         maxLength: 160,
@@ -149,40 +185,6 @@ handleMessageGetRecent.validationConf = {
         unique: true,
     },
 }
-
-/**
- * @name    handleMessageGetRecent
- * @summary get user's most recent messsages. Maximum of 1000 
- * 
- * @param   {String}    lastMessageTS UTC timestamp
- * @param   {*}         callback      Arguments =>
- *                          @err        string: error message, if any
- *                          @messages   array: array of messages
- */
-export async function handleMessageGetRecent(lastMessageTS, callback) {
-    const [_, user] = this
-    if (!isFn(callback) || !user) return
-    const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
-    let selector = {
-        // select all messages to/from current user
-        'receiverIds': { '$all': [user.id] }
-    }
-    if (userIsSupport) {
-        // include support messages as well
-        selector.receiverIds = { '$in': [user.id, ROLE_SUPPORT] }
-    }
-
-    if (lastMessageTS) selector = {
-        ...selector,
-        timestamp: { '$gt': lastMessageTS }
-    }
-
-    const extraProps = { 'sort': [{ 'timestamp': 'asc' }] }
-    const result = await chatMessages.search(selector, RECENT_MESSAGE_LIMIT, 0, false, extraProps)
-    callback(null, result)
-}
-handleMessageGetRecent.requireLogin = true
-
 /**
  * @name    handleMessageGroupName
  * @summary handle event to set a name for group conversation. Anyone within the group can set name.
@@ -195,7 +197,12 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
     const senderId = user.id
-    const err = validateObj({ receiverIds, name }, handleMessageGroupName.validationConf, true, true)
+    const err = validateObj(
+        { receiverIds, name },
+        handleMessageGroupName.validationConf,
+        true,
+        true,
+    )
     if (err) return callback(err)
 
     const action = {
@@ -241,3 +248,36 @@ handleMessageGroupName.validationConf = {
         unique: true,
     },
 }
+
+// initialize
+setTimeout(async () => {
+    // create an index for the field `timestamp`, ignores if already exists
+    const indexDefs = [
+        {
+            // index for sorting purposes
+            index: { fields: ['timestamp'] },
+            name: 'timestamp-index',
+        },
+        {
+            index: { fields: ['receiverIds', 'timestamp'] },
+            name: 'receiverIds_timestamp-index',
+        }
+    ]
+    indexDefs.forEach(async (def) => await (await chatMessages.getDB()).createIndex(def))
+
+
+    // create views
+    await chatMessages.viewCreateMap(
+        'get-recent',
+        'not-deleted',
+        `function (doc) {
+                if (!Array.isArray(doc.receiverIds)) return
+                for (let i = 0; i < doc.receiverIds.length; i ++) {
+                    const recipient = doc.receiverIds[i]
+                    const ignore = Array.isArray(doc.deleted) && doc.deleted.includes(recipient)
+                    if (ignore) continue;
+                    emit([recipient, doc.tsCreated || doc.timestamp], null)
+                }
+            }`,
+    )
+})

@@ -281,31 +281,30 @@ export async function handleNotificationGetRecent(tsLastReceived = '2002-01-01',
     ]
 
     // retrieve latest notifications
-    console.time('notification-get-recent')
     const params = {
         startkey: [user._id, tsLastReceived],
         endkey: [user._id, new Date().toISOString()]
     }
+    const label = `[query-duration] [notification-get-recent] ${user._id}`
+    console.time(label)
     let result = await notifications.view(
         'get-recent',
         'no-deleted-with-ts',
         params,
     )
+    console.timeEnd(label)
     result.forEach(value => {
         // remove other recipient information and convert to boolean
         value.deleted = (value.deleted || []).includes(user.id)
         value.read = (value.read || []).includes(user.id)
     })
-    console.timeEnd('notification-get-recent')
 
-    // convert to map
-    const resultMap = new Map(
-        result.map(x => [
-            x._id,
-            objClean(x, fields),
-        ])
-    )
-    callback(null, resultMap)
+    // convert to Map/2D array
+    result = result.map(x => [
+        x._id,
+        objClean(x, fields),
+    ])
+    callback(null, result)
 }
 handleNotificationGetRecent.requireLogin = true
 
