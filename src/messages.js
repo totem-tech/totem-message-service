@@ -134,14 +134,11 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
         startkey: [userId, lastMessageTS],
         endkey: [userId, new Date().toISOString()]
     }
-    const label = `[query-duration] [message-get-recent] ${user._id}`
-    console.time(label)
     let result = await chatMessages.view(
         'get-recent',
         'not-deleted',
         params,
     )
-    console.timeEnd(label)
     const fields = [
         'encrypted',
         'id', // redundant

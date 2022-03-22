@@ -285,14 +285,11 @@ export async function handleNotificationGetRecent(tsLastReceived = '2002-01-01',
         startkey: [user._id, tsLastReceived],
         endkey: [user._id, new Date().toISOString()]
     }
-    const label = `[query-duration] [notification-get-recent] ${user._id}`
-    console.time(label)
     let result = await notifications.view(
         'get-recent',
-        'no-deleted-with-ts',
+        'no-deleted',
         params,
     )
-    console.timeEnd(label)
     result.forEach(value => {
         // remove other recipient information and convert to boolean
         value.deleted = (value.deleted || []).includes(user.id)
