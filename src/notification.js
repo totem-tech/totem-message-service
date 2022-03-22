@@ -1,6 +1,6 @@
 import uuid from 'uuid'
 import CouchDBStorage from './utils/CouchDBStorage'
-import { generateHash, isFn, isObj, objClean, objReadOnly } from './utils/utils'
+import { arrSort, generateHash, isFn, isObj, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, idExists, RESERVED_IDS, systemUserSymbol } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -259,49 +259,53 @@ const validatorConfig = {
 // @callback        function: callback args => 
 //                          @err        string: error message, if unsuccessful
 //                          @result     Map: list of notifications
-export async function handleNotificationGetRecent(tsLastReceived, callback) {
-    if (!isFn(callback)) return
-    const [_, user = {}] = this
-    const extraProps = {
-        sort: [{ tsCreated: 'desc' }], // latest first
-        fields: [
-            '_id', // required for Map
-            'from',
-            'type',
-            'childType',
-            'message',
-            'data',
-            'tsCreated',
-            'read',
-            'deleted',
-        ]
-    }
-    let selector = {
-        $and: [
-            // select all notifications where current user is a recipient
-            { to: { $all: [user.id] } },
-            // exclude all where user marked notification as deleted
-            { $not: { deleted: [user.id] } },
-        ]
-    }
+export async function handleNotificationGetRecent(tsLastReceived = '2002-01-01', callback) {
+    const [_, user] = this
+    if (!isFn(callback) || !user) return
 
-    // only retrieve notifications after specified timestamp
-    if (tsLastReceived) selector.$and.push({ tsCreated: { $gt: tsLastReceived } })
+    tsLastReceived = new Date(tsLastReceived || '2002-01-01')
+        .getTime()
+    // increment time to prevent most recent from being retrieved again
+    tsLastReceived = new Date(tsLastReceived + 1)
+        .toISOString()
+    const fields = [
+        '_id', // required for Map
+        'from',
+        'type',
+        'childType',
+        'message',
+        'data',
+        'tsCreated',
+        'read',
+        'deleted',
+    ]
 
     // retrieve latest notifications
-    let result = (await notifications.search(
-        selector,
-        UNRECEIVED_LIMIT,
-        0,
-        true,
-        extraProps
-    ))
-    Array.from(result).forEach(([_, value]) => {
+    console.time('notification-get-recent')
+    const params = {
+        startkey: [user._id, tsLastReceived],
+        endkey: [user._id, new Date().toISOString()]
+    }
+    let result = await notifications.view(
+        'get-recent',
+        'no-deleted-with-ts',
+        params,
+    )
+    result.forEach(value => {
         // remove other recipient information and convert to boolean
         value.deleted = (value.deleted || []).includes(user.id)
         value.read = (value.read || []).includes(user.id)
     })
-    callback(null, result)
+    console.timeEnd('notification-get-recent')
+
+    // convert to map
+    const resultMap = new Map(
+        result.map(x => [
+            x._id,
+            objClean(x, fields),
+        ])
+    )
+    callback(null, resultMap)
 }
 handleNotificationGetRecent.requireLogin = true
 
@@ -454,5 +458,21 @@ setTimeout(async () => {
         }
     ]
     const db = await notifications.getDB()
-    indexDefs.forEach(def => db.createIndex(def).catch(() => { }))
+    indexDefs.forEach(def =>
+        db.createIndex(def).catch(() => { })
+    )
+
+    // create views
+    await notifications.viewCreateMap(
+        'get-recent',
+        'not-deleted',
+        `function (doc) {
+                if (!Array.isArray(doc.to)) return
+                for (let i = 0; i < doc.to.length; i ++) {
+                    const recipient = doc.to[i]
+                    if (doc.deleted.includes(recipient)) continue;
+                    emit([recipient, doc.tsCreated], null)
+                }
+            }`,
+    )
 })
