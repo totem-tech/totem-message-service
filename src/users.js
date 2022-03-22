@@ -4,6 +4,7 @@ import { arrUnique, isArr, isFn, isObj, isStr } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { setTexts } from './language'
 
+let signupCount = 0
 const defaultFields = [
     '_id',
     'address',
@@ -222,7 +223,11 @@ export async function handleDisconnect() {
     const clientIdIndex = clientIds.indexOf(client.id)
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
-    userClientIds.set(user._id, arrUnique(clientIds))
+    const uniqClientIds = arrUnique(clientIds)
+
+    uniqClientIds.length > 0
+        ? userClientIds.set(user._id, uniqClientIds)
+        : userClientIds.delete(user._id)
     log('Client disconnected | User ID:', user._id, ' | Client ID: ', client.id)
 
     if (!onlineSupportUsers.get(user._id) || clientIds.length > 0) return
@@ -289,6 +294,7 @@ export async function handleLogin(userId, secret, callback) {
     clients.set(client.id, client)
     if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user._id, true)
 
+    console.log('Users online:', userClientIds.size)
     callback(null, { roles })
 }
 
@@ -379,6 +385,7 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     clients.set(client.id, client)
     // add client ID to user's clientId list
     log('New User registered:', JSON.stringify({ userId, referredBy }))
+    console.log('signupCount:', ++signupCount)
     userClientIds.set(userId, [client.id])
 
     rxUserRegistered.next({
