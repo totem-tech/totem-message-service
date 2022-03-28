@@ -81,6 +81,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         receiverIds,
         senderId,
         timestamp,
+        tsCreated: timestamp,
     })
     args[5] = id
 
@@ -127,18 +128,23 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     lastMessageTS = new Date(lastMessageTS + 1).toISOString()
 
     const userIsSupport = (user.roles || []).includes(ROLE_SUPPORT)
-    const userId = userIsSupport
-        ? ROLE_SUPPORT
-        : user._id
-    const params = {
-        startkey: [userId, lastMessageTS],
-        endkey: [userId, new Date().toISOString()]
+    const getRecentMessages = userId => {
+        const params = {
+            startkey: [userId, lastMessageTS],
+            endkey: [userId, new Date().toISOString()]
+        }
+        return chatMessages.view(
+            'get-recent',
+            'not-deleted',
+            params,
+        )
     }
-    let result = await chatMessages.view(
-        'get-recent',
-        'not-deleted',
-        params,
-    )
+    let result = [
+        ...await getRecentMessages(user.id),
+        ...userIsSupport && await getRecentMessages(ROLE_SUPPORT),
+    ]
+        .filter(Boolean)
+        .flat()
     const fields = [
         'encrypted',
         'id', // redundant
@@ -150,11 +156,7 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
         'tsCreated',
     ]
 
-    result = result.map(x => [
-        x._id,
-        objClean(x, fields),
-    ])
-    callback(null, result)
+    callback(null, result.map(x => objClean(x, fields)))
 }
 handleMessageGetRecent.requireLogin = true
 handleMessageGetRecent.validationConf = {
@@ -215,7 +217,8 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
         message,
         receiverIds,
         senderId,
-        timestamp,
+        timestamp, // to be deprecated
+        tsCreated: timestamp,
     })
     const event = 'message'
     const args = [message, senderId, receiverIds, encrypted, timestamp, id, action]
