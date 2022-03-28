@@ -1,7 +1,7 @@
 import request from 'request'
 import CouchDBStorage from './utils/CouchDBStorage'
 import uuid from 'uuid'
-import { arrUnique, isFn, isStr, objClean } from './utils/utils'
+import { arrSort, arrUnique, isFn, isStr, objClean } from './utils/utils'
 import { setTexts } from './language'
 import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_IDS, ROLE_SUPPORT } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -145,6 +145,7 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     ]
         .filter(Boolean)
         .flat()
+
     const fields = [
         'encrypted',
         'id', // redundant
@@ -155,8 +156,13 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
         'timestamp', // redundant
         'tsCreated',
     ]
+    // eliminate any duplicate message
+    result = new Map(result.map(x => [x._id, x]))
+    result = Array
+        .from(result)
+        .map(([_, x]) => objClean(x, fields))
 
-    callback(null, result.map(x => objClean(x, fields)))
+    callback(null, arrSort(result, 'tsCreated'))
 }
 handleMessageGetRecent.requireLogin = true
 handleMessageGetRecent.validationConf = {
