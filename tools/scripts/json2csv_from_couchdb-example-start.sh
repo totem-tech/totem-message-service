@@ -1,5 +1,5 @@
 NODE_OPTIONS="--max-old-space-size=8192" \
-SCRIPT="../export-db,json2csv" \
+SCRIPT="exportdb,json2csv" \
 ___CSV_RELATED_ENV____="" \
 FILEPATH_CSV_OPTIONS="string: (optional) options JSON file path. See https://www.npmjs.com/package/json2csv" \
 FILEPATH_CSV_OUTPUT="string: output file path " \

@@ -7,13 +7,13 @@ async function execute(storage) {
     const pathSource = process.env.FILENAME
     const pathOptions = process.env.FILEPATH_CSV_OPTIONS
     const pathOutput = process.env.FILEPATH_CSV_OUTPUT
-    if (!storage && !pathSource) throw new Error('Missing env: FILEPATH_SOURCE')
+    if (!storage && !pathSource) throw new Error('Missing env: FILENAME')
     if (!pathOutput) throw new Error('Missing env: FILEPATH_OUTPUT')
 
     let data = storage
         ? storage.toArray()
         : pathSource.includes('/')
-            ? JSON.parse(fs.readFileSync(pathOptions))
+            ? JSON.parse(fs.readFileSync(pathSource))
             : new DataStorage(pathSource)
                 .toArray()
     if (isArr2D(data)) {
