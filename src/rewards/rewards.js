@@ -34,6 +34,7 @@ export const rewardStatus = {
     todo: 'todo',
 }
 export const rewardTypes = {
+    decoded2206: 'decoded2206', // vote for Polkadot Decoded talk and follow founders
     referral: 'referral-reward',
     referralTwitter: 'referral-twitter-reward',
     signup: 'signup-reward',
@@ -577,6 +578,12 @@ setTimeout(async () => {
             },
             name: 'userId-index',
         },
+        {
+            index: {
+                fields: ['type', 'userId'],
+            },
+            name: 'type-userId-index',
+        }
     ]
     indexDefs.forEach(async (def) =>
         await (

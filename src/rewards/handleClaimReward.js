@@ -2,16 +2,18 @@ import { isFn } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import { setTexts } from '../language'
 import { claimSignupTwitterReward } from './twitter'
-import { log } from './rewards'
+import { dbRewards, getRewardId, log, rewardStatus, rewardTypes } from './rewards'
 
 const messages = setTexts({
+    alreadyClaimed: 'You have already claimed this reward',
     inactive: 'Twitter rewards campaign has ended! Please stay tuned for rewards oppotunities in the future.',
     invalidRequest: 'Invalid request',
 })
 const active = process.env.SocialRewardsDisabled !== 'YES'
 const debugTag = '[rewards][claim][twitter]'
 const supportedPlatforms = [
-    'twitter'
+    'twitter',
+    'polkadot-decoded'
 ]
 const validationConf = {
     handle: {
@@ -60,6 +62,28 @@ export async function handleClaimRewards(platform, handle, postId, callback) {
         case 'twitter':
             log(debugTag, user.id)
             err = await claimSignupTwitterReward(user.id, handle, postId)
+            break
+        case 'polkadot-decoded':
+            const rewardId = getRewardId(rewardTypes.decoded2206, handle)
+            // user already claimed reward
+            err = await dbRewards.get(rewardId)
+                || await dbRewards.find({
+                    type: rewardTypes.decoded2206,
+                    userId: user.id,
+                })
+                ? messages.alreadyClaimed
+                : null
+            if (err) break
+
+            await dbRewards.set(rewardId, {
+                amount: 108154,
+                data: {
+                    twitterHandle: handle,
+                },
+                status: rewardStatus.pending,
+                type: rewardTypes.decoded2206,
+                userId: user.id,
+            })
             break
         default:
             err = messages.invalidRequest
