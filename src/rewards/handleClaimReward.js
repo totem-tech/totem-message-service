@@ -6,10 +6,13 @@ import { dbRewards, getRewardId, log, rewardStatus, rewardTypes } from './reward
 
 const messages = setTexts({
     alreadyClaimed: 'You have already claimed this reward',
-    inactive: 'Twitter rewards campaign has ended! Please stay tuned for rewards oppotunities in the future.',
+    socialInactive: 'Social rewards campaign has ended! Please stay tuned for rewards oppotunities in the future.',
+    twitterInactive: 'Twitter rewards campaign has ended! Please stay tuned for rewards oppotunities in the future.',
     invalidRequest: 'Invalid request',
 })
 const active = process.env.SocialRewardsDisabled !== 'YES'
+const decoded2206Active = process.env.SocialRewardsDecoded2206Disabled !== 'YES'
+const twitterAcive = process.env.SocialRewardTwitterDisabled !== 'YES'
 const debugTag = '[rewards][claim][twitter]'
 const supportedPlatforms = [
     'twitter',
@@ -47,7 +50,7 @@ const validationConf = {
 export async function handleClaimRewards(platform, handle, postId, callback) {
     if (!isFn(callback)) return
 
-    if (!active) return callback(messages.inactive)
+    if (!active) return callback(messages.socialInactive)
 
     const [_, user] = this
     let err = validateObj(
@@ -60,10 +63,13 @@ export async function handleClaimRewards(platform, handle, postId, callback) {
 
     switch (platform) {
         case 'twitter':
+            if (!twitterAcive) return callback(messages.inactive)
+
             log(debugTag, user.id)
             err = await claimSignupTwitterReward(user.id, handle, postId)
             break
         case 'polkadot-decoded':
+            if (!decoded2206Active) return callback(messages.socialInactive)
             const rewardId = getRewardId(rewardTypes.decoded2206, handle)
             // user already claimed reward
             err = await dbRewards.get(rewardId)
