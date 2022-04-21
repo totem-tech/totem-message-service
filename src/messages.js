@@ -98,12 +98,12 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     // send support message message to Discord support channel
     request({
         url: DISCORD_WEBHOOK_URL_SUPPORT,
-        method: "POST",
+        method: 'POST',
         json: true,
         body: {
             avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-            content: `>>> **UserID: **${user.id}\n**Message:** ${message}`,
-            username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+            content: `>>> ${message}`,//`>>> **UserID: **${user.id}\n**Message:** ${message}`,
+            username: `${user.id}@${DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'}`
         }
     }, err => err && console.log('Discord Webhook: failed to send support message. ', err))
 }
