@@ -44,7 +44,10 @@ export async function handleCrowdloan(contribution, callback) {
     conf.amountPledged = {
         ...conf.amountPledged,
         // max 10% of total contributed
-        max: totalContribution * PLEDGE_PERCENTAGE,
+        max: Number(
+            (totalContribution * PLEDGE_PERCENTAGE)
+                .toFixed(2)
+        ),
     }
     let err = validateObj(
         contribution,
