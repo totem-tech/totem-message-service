@@ -14,6 +14,11 @@
 # BuildMode="string: TRUE" \ #indicates whether to allow frontend to be able to grab all error messages at once
 # CouchDB_URL="string: https://adminId:password@127.0.0.1:5984" \ # CouchDB URL and admin credentials (if available) to establish a connection 
 # CouchDB_URL_[DBNAME]="string: (optional) define database specific connection URL. Replace ![DBNAME]! with the name of the database. Caution: THIS IS A VARIABLE-ENVIRONEMNT VARIABLE." \
+# _NOTES_="DBName override required due to change of database name in the collection" \
+# CouchDB_DBName_Override_currencies_price_history_daily="currencies_price-history-daily" \
+# CouchDB_DBName_Override_gl_accounts="gl-accounts" \
+# CouchDB_DBName_Override_newsletter_signup="newsletter-signup" \
+# CouchDB_DBName_Override_faucet_requests="faucet-requests" \
 # MigrateFiles="string: comma-separated JSON filenames" \ # migrate JSON storage to CouchDB storage
 # DISCORD_WEBHOOK_URL="string: URL of the Discord channel webhook. https://url-fo-the-discord-webhook" \
 # DISCORD_WEBHOOK_AVATAR_URL="string: URL to the avatar image. Eg: https://url-to-avatar-image" \
