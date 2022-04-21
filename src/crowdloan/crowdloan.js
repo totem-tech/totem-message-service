@@ -10,6 +10,7 @@ const messages = setTexts({
     invalidSignature: 'signature verification failed',
 })
 const storage = new CouchDBStorage(null, 'crowdloan')
+const PLEDGE_PERCENTAGE = 0.3125
 
 /**
  * @name    handleCrowdloan
@@ -43,7 +44,7 @@ export async function handleCrowdloan(contribution, callback) {
     conf.amountPledged = {
         ...conf.amountPledged,
         // max 10% of total contributed
-        max: totalContribution * 0.1,
+        max: totalContribution * PLEDGE_PERCENTAGE,
     }
     let err = validateObj(
         contribution,
