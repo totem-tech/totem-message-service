@@ -12,7 +12,7 @@ import { isFn, isStr, randomInt } from './utils/utils'
 import { setTexts } from './language'
 import PromisE from './utils/PromisE'
 
-const faucetRequests = new CouchDBStorage(null, 'faucet-requests')
+const faucetRequests = new CouchDBStorage(null, 'faucet_requests')
 // faucet server connected
 export const rxFSConnected = new BehaviorSubject(false)
 // Maximum number of requests within @TIME_LIMIT

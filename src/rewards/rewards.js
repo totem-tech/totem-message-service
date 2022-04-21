@@ -15,7 +15,7 @@ const texts = setTexts({
     `
 })
 // existing faucet requests to retreive user's address if users db doesn't already have it
-const dbFaucetRequests = new CouchDBStorage(null, 'faucet-requests')
+const dbFaucetRequests = new CouchDBStorage(null, 'faucet_requests')
 export const dbRewards = new CouchDBStorage(null, 'rewards')
 const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'

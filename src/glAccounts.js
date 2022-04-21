@@ -16,7 +16,7 @@ const fields = [
     'subGrpNr',
     'balanceType',
 ]
-const glAccounts = new CouchDBStorage(null, 'gl-accounts', fields)
+const glAccounts = new CouchDBStorage(null, 'gl_accounts', fields)
 
 /**
  * @name    handleGlAccounts
