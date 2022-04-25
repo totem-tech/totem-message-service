@@ -6,7 +6,7 @@ import { isFn, objClean } from './utils/utils'
 const messages = setTexts({
     signupExists: 'You have already signed up with the email address!'
 })
-const signups = new CouchDBStorage(null, 'newsletter-signup')
+const signups = new CouchDBStorage(null, 'newsletter_signup')
 const validatorConfig = {
     email: {
         required: true,
