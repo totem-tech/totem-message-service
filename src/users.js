@@ -17,15 +17,14 @@ const defaultFields = [
     // rewards and secret is intentionally left out.
 ]
 export const users = new CouchDBStorage(null, 'users', defaultFields)
-export const rxUserRegistered = new Subject() // value: [userId, clientId, referredBy]
-export const rxUserLoggedIn = new Subject() // value: [userId, clientIds]
+export const rxUserRegistered = new Subject() // value: {clientId, referredBy, userId}
+export const rxUserLoggedIn = new Subject() // value: {clientId, clientIds, userId}
 export const clients = new Map()
 export const userClientIds = new Map()
 export const systemUserSymbol = Symbol('I am the system meawser!')
 const onlineSupportUsers = new Map()
 const userIdRegex = /^[a-z][a-z0-9]+$/
-const getTime = () => new Date().toISOString()
-const log = (...args) => console.log(getTime(), '[users]', ...args)
+const log = (...args) => console.log(new Date().toISOString(), '[users]', ...args)
 // Error messages
 const messages = setTexts({
     alreadyRegistered: `
@@ -292,6 +291,11 @@ export async function handleLogin(userId, secret, callback) {
     clientIds.push(client.id)
     userClientIds.set(user._id, arrUnique(clientIds))
     clients.set(client.id, client)
+    rxUserLoggedIn.next({
+        clientId: client.id,
+        clientIds,
+        userId,
+    })
     if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user._id, true)
 
     console.log('Users online:', userClientIds.size)
@@ -393,6 +397,11 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         userId,
         referredBy,
     })
+    rxUserLoggedIn.next({
+        clientId: client.id,
+        clientIds: [client.id],
+        userId,
+    })
     callback(null)
 }
 handleRegister.validationConfig = {
@@ -459,19 +468,12 @@ setTimeout(async () => {
     )
 
     // create design document to enable case-insensitive search of twitter handles
-    const designDoc = await users.getDoc('_design/lowercase')
-    const views = {
-        twitterHandle: {
-            map: `function (doc) {
-                if(!(doc.socialHandles || {}).twitter) return
-                emit(doc.socialHandles.twitter.handle.toLowerCase(), null)
-            }`
-        }
-    }
-    const updateRequired = !designDoc || Object.keys(views)
-        .find(key => !(designDoc.views || {})[key])
-    if (!updateRequired) return
-
-    log('Creating design document: users/_design/lowercase')
-    await users.set('_design/lowercase', { views, language: 'javascript' })
+    await users.viewCreateMap(
+        'lowercase',
+        'twitterHandle',
+        `function (doc) {
+            if(!(doc.socialHandles || {}).twitter) return
+            emit(doc.socialHandles.twitter.handle.toLowerCase(), null)
+        }`
+    )
 })
