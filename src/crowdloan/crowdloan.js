@@ -17,7 +17,8 @@ const PLEDGE_PERCENTAGE = 1 // 100%
 let rxPldegedTotal = new BehaviorSubject()
 const eventPldegedTotal = 'crowdloan-pledged-total'
 const broadcastPledgeTotal = deferred(async () => {
-    const [{ value }] = await dbCrowdloan.view('pledge', 'sum', {}, false)
+    let [{ value } = {}] = await dbCrowdloan.view('pledge', 'sum', {}, false)
+    value = value || 0
     rxPldegedTotal.next(value)
 
     // broadcast to all clients
@@ -47,17 +48,18 @@ export async function handleCrowdloan(contribution, callback) {
     const {
         amountContributed = 0,
         amountPledged = 0,
-        amountToContribute = 0,
         identity,
         signature,
-        totalContribution = 0,
     } = contribution
     let conf = { ...handleCrowdloan.validationConf }
+    const existingEntry = (await dbCrowdloan.get(identity)) || {}
     conf.amountPledged = {
         ...conf.amountPledged,
-        // max 10% of total contributed
+        // must be greatuer or equal to previous contribution
+        min: existingEntry && existingEntry.amountPledged || 0,
+        // max 100% of amounted contributed
         max: Number(
-            (totalContribution * PLEDGE_PERCENTAGE)
+            (amountContributed * PLEDGE_PERCENTAGE)
                 .toFixed(2)
         ),
     }
@@ -69,14 +71,24 @@ export async function handleCrowdloan(contribution, callback) {
     )
     if (err) return callback(err)
 
+    const { history = [] } = existingEntry
     const entry = {
+        ...existingEntry,
         amountContributed,
         amountPledged,
-        amountToContribute,
+        history: [
+            ...history,
+            existingEntry._id && {
+                amountContributed: existingEntry.amountContributed,
+                amountPledged: existingEntry.amountPledged,
+                signature: existingEntry.signature,
+                tsSubmitted: existingEntry.tsUpdated || existingEntry.tsCreated,
+                userId: existingEntry.userId,
+            },
+        ].filter(Boolean),
         identity,
         signature,
         signatureVerified: false,
-        totalContribution,
         userId,
     }
     // signature can be verified later using a script or alternative method
@@ -101,11 +113,6 @@ handleCrowdloan.validationConf = {
         min: 0,
         type: TYPES.number,
     },
-    amountToContribute: {
-        required: true,
-        min: 5,
-        type: TYPES.number,
-    },
     amountPledged: {
         min: 0,
         type: TYPES.number,
@@ -117,11 +124,6 @@ handleCrowdloan.validationConf = {
     signature: {
         required: true,
         type: TYPES.hex,
-    },
-    totalContribution: {
-        required: true,
-        min: 5,
-        type: TYPES.number,
     },
 }
 
