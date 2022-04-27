@@ -10,10 +10,12 @@ import { deferred, isAddress, isDefined, isFn, isObj, isStr } from '../utils/uti
 import { TYPES, validateObj } from '../utils/validator'
 
 const messages = setTexts({
-    invalidSignature: 'signature verification failed',
+    invalidSignature: 'Signature verification failed',
+    pledgeCapReached: 'Your contribution was successful. However, pledge cap was already reached or will exceed. Therefore, your new pledged amount cannot be accepted. If you previously pledged, it will still remain effective.'
 })
 const dbCrowdloan = new CouchDBStorage(null, 'crowdloan')
 const PLEDGE_PERCENTAGE = 1 // 100%
+const PLEDGE_CAP = parseFloat(process.env.PLEDGE_CAP) || 1775000
 let rxPldegedTotal = new BehaviorSubject()
 const eventPldegedTotal = 'crowdloan-pledged-total'
 const broadcastPledgeTotal = deferred(async () => {
@@ -71,14 +73,18 @@ export async function handleCrowdloan(contribution, callback) {
     )
     if (err) return callback(err)
 
-    const { history = [] } = existingEntry
+    const { amountPledged: lastPledge = 0, history = [] } = existingEntry
+    const isUpdate = existingEntry._id
+    const newPledge = amountPledged - lastPledge
+    const pledgeCapReached = (rxPldegedTotal.value + newPledge) > PLEDGE_CAP
+    if (pledgeCapReached) return callback(messages.pledgeCapReached)
     const entry = {
         ...existingEntry,
         amountContributed,
         amountPledged,
         history: [
             ...history,
-            existingEntry._id && {
+            isUpdate && {
                 amountContributed: existingEntry.amountContributed,
                 amountPledged: existingEntry.amountPledged,
                 signature: existingEntry.signature,
