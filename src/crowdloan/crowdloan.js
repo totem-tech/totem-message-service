@@ -50,6 +50,8 @@ export async function handleCrowdloan(contribution, callback) {
     const {
         amountContributed = 0,
         amountPledged = 0,
+        blockHash,
+        blockIndex,
         identity,
         signature,
     } = contribution
@@ -82,11 +84,15 @@ export async function handleCrowdloan(contribution, callback) {
         ...existingEntry,
         amountContributed,
         amountPledged,
+        blockHash,
+        blockIndex,
         history: [
             ...history,
             isUpdate && {
                 amountContributed: existingEntry.amountContributed,
                 amountPledged: existingEntry.amountPledged,
+                blockHash: existingEntry.blockHash,
+                blockIndex: existingEntry.blockIndex,
                 signature: existingEntry.signature,
                 tsSubmitted: existingEntry.tsUpdated || existingEntry.tsCreated,
                 userId: existingEntry.userId,
