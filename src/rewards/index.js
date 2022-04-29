@@ -1,8 +1,9 @@
 import { rxUserRegistered } from "../users"
 import { handleClaimRewards } from "./handleClaimReward"
 import handleGetRewardsData from "./handleGetRewardsData"
-import { log, payReferralReward, paySignupReward } from "./rewards"
-import { isObj } from '../utils/utils'
+import { getRewardId, hashAlgo, hashBitLength, log, payReferralReward, paySignupReward, rewardTypes } from "./rewards"
+import { generateHash, isObj } from '../utils/utils'
+import { sendNotification } from "../notification"
 
 const debugTag = '[rewards]'
 const signupActive = process.env.SignupRewardsDisabled !== 'YES'
@@ -10,10 +11,26 @@ const referralActive = process.env.ReferralRewardsDisabled !== 'YES'
 // Listen for new user registrations and process referral and signup rewards
 rxUserRegistered.subscribe(async ({ userId, referredBy }) => {
     try {
-        if (!signupActive && !referralActive) return
         referredBy = isObj(referredBy)
             ? referredBy.userId
             : referredBy
+
+        if (!referralActive && !!referredBy) {
+            // send referral notification
+            const rewardId = getRewardId(rewardTypes.referral, userId)
+            await sendNotification(
+                userId,
+                [referredBy],
+                'rewards',
+                'referralSuccess',
+                null,
+                {},
+                generateHash(rewardId, hashAlgo, hashBitLength),
+            ).catch(err => log(debugTag, 'Referral notification failed', err))
+        }
+
+        if (!signupActive && !referralActive) return
+
         log(debugTag, 'Initiating post-registration payouts', { userId, referredBy })
         // pay signup reward to the user
         let err = signupActive && await paySignupReward(userId)

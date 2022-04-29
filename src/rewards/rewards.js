@@ -21,8 +21,8 @@ const notificationSenderId = 'rewards'
 const reprocessFailedRewards = (process.env.ReprocessRewards || '').toLowerCase() === 'yes'
 const reprocessBatchLimit = parseInt(process.env.ReprocessBatchLimit) || 100
 const debugTag = '[rewards]'
-const hashAlgo = 'blake2'
-const hashBitLength = 256
+export const hashAlgo = 'blake2'
+export const hashBitLength = 256
 const initialRewardAmount = 108154 // only used where amount has not been saved (initial drop)
 export const log = (...args) => console.log(new Date().toISOString(), debugTag, ...args)
 export const rewardStatus = {
