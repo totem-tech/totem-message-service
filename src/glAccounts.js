@@ -37,7 +37,7 @@ export const handleGlAccounts = async (accountNumbers = [], callback) => {
                 min: 1,
                 max: 9999,
                 required: true,
-                type: TYPES.number,
+                type: TYPES.array,
             }
         },
         true,
@@ -46,7 +46,9 @@ export const handleGlAccounts = async (accountNumbers = [], callback) => {
     if (err) return callback(err)
 
     const selector = {
-        number: { $in: accountNumbers }
+        number: {
+            $in: accountNumbers
+        }
     }
     return callback(null, await glAccounts.search(selector, 0, 0, false))
 }
