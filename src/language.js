@@ -22,25 +22,33 @@ export const setup = async () => {
 
 export const handleLanguageErrorMessages = callback => isFn(callback) && callback(null, build.enList)
 
+/**
+ * @name    handleTranslations
+ * @summary check and update client's translated texts
+ * 
+ * @param   {String}    langCode 
+ * @param   {String}    clientHash 
+ * @param   {Function}  callback 
+ */
 // handleTranslations handles translated text requests
 //
 // Params: 
 // @langCode    string: 2 digit language code
-// @hash        string: (optional) hash of client's existing translated texts' array to compare whether update is required.
+// @clientHash  string: (optional) hash of client's existing translated texts' array to compare whether update is required.
 // @callback    function: arguments =>
 //              @error  string/null: error message, if any. Null indicates no error.
 //              @list   array/null: list of translated texts. Null indicates no update required.
-export async function handleLanguageTranslations(langCode, textsHash, callback) {
+export async function handleLanguageTranslations(langCode, clientHash, callback) {
     if (!isFn(callback)) return
 
     if (!isStr(langCode)) return callback(messages.invalidLang)
 
+    // client already has the latest version of translations. return empty null to indicate no update required
+    const serverHash = hashes.get(langCode)
+    if (clientHash && serverHash === clientHash) return callback(null, null)
+
     const { texts } = (await translations.get(langCode.toUpperCase())) || {}
     if (!texts) return callback(messages.invalidLang)
-
-    // client hash the latest version of translations. return empty null to indicate no update required
-    const serverHash = hashes.get(langCode)
-    if (textsHash && serverHash === textsHash) return callback(null, null)
 
     callback(null, texts)
 }
