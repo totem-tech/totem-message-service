@@ -21,7 +21,7 @@ const messages = setTexts({
 export const updateCache = async (auto = false) => {
     console.log(new Date(), 'Updating currencies cache')
     try {
-        currenciesPromise = getAll(null, false)
+        currenciesPromise = PromisE(getAll(null, false))
         currenciesHash = generateHash(
             arrSort(await currenciesPromise, 'ticker'),
             'blake2',
@@ -129,6 +129,7 @@ export const handleCurrencyList = async (hash, callback) => {
     if (!isFn(callback)) return
     // whether or not client needs to update the list of tickers
     if (hash === currenciesHash) return callback(null, [])
+    if (currenciesPromise.rejected) await updateCache()
     callback(null, await currenciesPromise)
 }
 
