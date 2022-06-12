@@ -20,6 +20,7 @@ export const users = new CouchDBStorage(null, 'users', defaultFields)
 export const rxUserRegistered = new Subject() // value: {clientId, referredBy, userId}
 export const rxUserLoggedIn = new Subject() // value: {clientId, clientIds, userId}
 export const clients = new Map()
+export const onlineUsers = new Map()
 export const userClientIds = new Map()
 export const systemUserSymbol = Symbol('I am the system meawser!')
 const onlineSupportUsers = new Map()
@@ -173,12 +174,16 @@ export const getSupportUsers = async () => {
 //
 // returns object
 export const getUserByClientId = async (clientId) => {
-    const userId = Array.from(userClientIds)
-        .filter(([_, clientIds]) => clientIds.indexOf(clientId) >= 0)
-        .map(([userId]) => userId)[0]
+    // const userId = Array.from(userClientIds)
+    //     .filter(([_, clientIds]) => clientIds.indexOf(clientId) >= 0)
+    //     .map(([userId]) => userId)[0]
 
-    if (!userId) return
-    return await users.get(userId)
+    // if (!userId) return
+    // return await users.get(userId)
+    const { ___userId: userId } = clients.get(clientId) || {}
+    return !userId
+        ? undefined
+        : onlineUsers.get(userId)
 }
 
 /**
@@ -208,14 +213,14 @@ export const idExists = async (userIds = []) => {
 // @userId  string
 export const isUserOnline = userId => {
     if (userId === ROLE_SUPPORT) return onlineSupportUsers.size > 0
-    return (userClientIds.get(userId) || []).length > 0
+    return !!onlineUsers.get(userId)
 }
 
 // cleanup on user client disconnect
 export async function handleDisconnect() {
     const client = this
     clients.delete(client.id)
-    const user = await getUserByClientId(client.id)
+    const user = onlineUsers.get(client.___userId)
     if (!user) return // nothing to do
 
     const clientIds = userClientIds.get(user._id) || []
@@ -223,14 +228,18 @@ export async function handleDisconnect() {
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
     const uniqClientIds = arrUnique(clientIds)
+    const online = uniqClientIds.length > 0
+    if (online) {
+        userClientIds.set(user._id, uniqClientIds)
+    } else {
+        userClientIds.delete(user._id)
+        onlineUsers.delete(user._id)
+    }
 
-    uniqClientIds.length > 0
-        ? userClientIds.set(user._id, uniqClientIds)
-        : userClientIds.delete(user._id)
     log('Client disconnected | User ID:', user._id, ' | Client ID: ', client.id)
 
-    if (!onlineSupportUsers.get(user._id) || clientIds.length > 0) return
-    // user is not online
+    if (!onlineSupportUsers.get(user._id) || online) return
+    // support user went offline
     onlineSupportUsers.delete(user._id)
 }
 
@@ -283,13 +292,21 @@ export async function handleLogin(userId, secret, callback) {
 
     const client = this
     const user = await users.find({ _id: userId, secret })
-    log(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id}`)
+    const {
+        handshake: {
+            headers: { origin = '' } = {},
+        } = {},
+    } = client
+    log(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id} | Origin: `, origin)
     if (!user) return callback(messages.loginFailed)
 
-    const { roles = [] } = user
+    const { address, roles = [] } = user
     const clientIds = userClientIds.get(user._id) || []
     clientIds.push(client.id)
     userClientIds.set(user._id, arrUnique(clientIds))
+    // attach userId to client object
+    client.___userId = userId
+    onlineUsers.set(userId, user)
     clients.set(client.id, client)
     rxUserLoggedIn.next({
         clientId: client.id,
@@ -299,7 +316,7 @@ export async function handleLogin(userId, secret, callback) {
     if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user._id, true)
 
     console.log('Users online:', userClientIds.size)
-    callback(null, { roles })
+    callback(null, { address, roles })
 }
 
 /**
@@ -318,9 +335,8 @@ export async function handleLogin(userId, secret, callback) {
 export async function handleRegister(userId, secret, address, referredBy, callback) {
     if (!isFn(callback)) return
     const client = this
-    // prevent registered user's attempt to register again!
-    const user = await getUserByClientId(client.id)
-    if (user) return callback(messages.alreadyRegistered)
+    // prevent already registered user's attempt to register again!
+    if (!!client.___userId) return callback(messages.alreadyRegistered)
 
     if (isStr(referredBy) && referredBy.includes('@')) {
         const [handle, platform] = referredBy.split('@')
@@ -369,7 +385,6 @@ export async function handleRegister(userId, secret, address, referredBy, callba
                 [`socialHandles.${platform}.handle`]: handle,
                 [`socialHandles.${platform}.verified`]: true
             })
-
         }
 
         // ignore if referrer and referred user's address is the same
@@ -383,10 +398,18 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     } else {
         referredBy = undefined
     }
-
-    await users.set(userId, { ...newUser, referredBy })
+    newUser.referredBy = referredBy
+    await users.set(userId, newUser)
+    // attach userId to client object
+    clients.___userId = userId
+    onlineUsers.set(userId, newUser)
     // add to websocket client list
     clients.set(client.id, client)
+    const {
+        handshake: {
+            headers: { origin = '' } = {},
+        } = {},
+    } = client
     // add client ID to user's clientId list
     log('New User registered:', JSON.stringify({ userId, referredBy }))
     console.log('signupCount:', ++signupCount)

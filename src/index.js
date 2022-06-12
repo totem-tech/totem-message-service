@@ -39,6 +39,7 @@ import { handleGlAccounts } from './glAccounts'
 import { handleNewsletterSignup } from './newsletterSignup'
 import rewardsHandlers from './rewards'
 import { handlers as crowdloanHandlers } from './crowdloan'
+import PromisE from './utils/PromisE'
 
 let maintenanceMode = false
 let requestCount = 0
@@ -101,8 +102,8 @@ async function handleMaintenanceMode(active = false, callback) {
     if (!isFn(callback)) return
 
     const client = this
-    const user = (await getUserByClientId(client.id)) || {}
-    const { roles = [] } = user
+    const user = await getUserByClientId(client.id)
+    const { roles = [] } = user || {}
     const isAdmin = roles.includes(ROLE_ADMIN)
     if (isAdmin && isBool(active)) {
         maintenanceMode = active
@@ -183,7 +184,9 @@ const events = {
 
 const interceptHandler = (name, handler) => async function (...args) {
     if (!isFn(handler)) return
+    const requestId = uuid.v1()
     const client = this
+    const userId = client.___userId
     const { requireLogin } = handler
     if (name === 'message') {
         // pass on extra information along with the client
@@ -196,59 +199,71 @@ const interceptHandler = (name, handler) => async function (...args) {
     // last argument is expected to be the function
     const callback = args.slice(-1)[0]
     const hasCallback = isFn(callback)
-    let user
 
-    if (maintenanceMode && !maintenanceModeEvents.includes(name)) {
-        return hasCallback && callback(texts.maintenanceMode)
-    }
+    const deny = maintenanceMode && !maintenanceModeEvents.includes(name)
+    if (deny) return hasCallback && callback(texts.maintenanceMode)
 
     try {
         requestCount++
         maintenanceMode && console.info('Request Count', requestCount)
-        if (requireLogin) {
-            // user must be logged
-            user = await getUserByClientId(client.id)
-            if (!user) return hasCallback && callback(texts.loginRequired)
-        }
+        // user must be logged
+        if (requireLogin && !userId) return hasCallback && callback(texts.loginRequired)
         // include the user object if login is required for this event
         const thisArg = !requireLogin
             ? client
-            : [client, user]
+            : [client, await getUserByClientId(client.id)]
         await handler.apply(thisArg, args)
     } catch (err) {
-        user = user || await getUserByClientId(client.id)
-        const requestId = uuid.v1()
         hasCallback && callback(`${texts.runtimeError}: ${requestId}`)
 
         // Print error meta data
         console.log([
             '', // adds an empty line before
-            `RequestID: ${requestId}.`,
-            `interceptHandler: uncaught error on event "${name}" handler.`,
+            `${new Date().toISOString()} RequestID: ${requestId}.`,
+            `InterceptHandler Error: uncaught error on event "${name}" handler.`,
         ].join('\n'))
         // print the error stack trace
         console.log(`${err}`, err.stack)
 
         if (DISCORD_WEBHOOK_URL) {
             // send message to discord
-            const handleReqErr = err => err && console.log('Discord Webhook: failed to send error message. ', err)
             const content = '>>> ' + [
                 `**RequestID:** ${requestId}`,
                 `**Event:** *${name}*`,
                 '**Error:** ' + `${err}`.replace('Error:', ''),
-                user ? `**UserID:** ${user.id}` : '',
+                userId ? `**UserID:** ${userId}` : '',
             ].join('\n')
-            request({
-                json: true,
-                method: 'POST',
-                timeout: 30000,
-                url: DISCORD_WEBHOOK_URL,
-                body: {
-                    avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-                    content,
-                    username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
-                }
-            }, handleReqErr)
+
+            // const handleReqErr = err => err && console.log(`Discord Webhook: failed to send error message for request ID ${requestId}. `, err)
+            // request({
+            //     json: true,
+            //     method: 'POST',
+            //     timeout: 30000,
+            //     url: DISCORD_WEBHOOK_URL,
+            //     body: {
+            //         avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+            //         content,
+            //         username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+            //     }
+            // }, handleReqErr)
+
+            PromisE
+                .fetch(
+                    DISCORD_WEBHOOK_URL,
+                    {
+                        json: true,
+                        method: 'POST',
+                        timeout: 60000,
+                        body: {
+                            avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
+                            content,
+                            username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
+                        }
+                    },
+                )
+                .catch(err =>
+                    console.error(`Discord Webhook: failed to log error message for request ID ${requestId}. `, err)
+                )
         }
     } finally {
         requestCount--

@@ -3,7 +3,7 @@ import CouchDBStorage from './utils/CouchDBStorage'
 import uuid from 'uuid'
 import { arrSort, arrUnique, isFn, isStr, objClean } from './utils/utils'
 import { setTexts } from './language'
-import { broadcast, emitToUsers, getSupportUsers, getUserByClientId, RESERVED_IDS, ROLE_SUPPORT } from './users'
+import { broadcast, emitToUsers, getSupportUsers, RESERVED_IDS, ROLE_SUPPORT } from './users'
 import { TYPES, validateObj } from './utils/validator'
 
 const chatMessages = new CouchDBStorage(null, 'messages')
