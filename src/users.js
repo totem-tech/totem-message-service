@@ -401,7 +401,7 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     newUser.referredBy = referredBy
     await users.set(userId, newUser)
     // attach userId to client object
-    clients.___userId = userId
+    client.___userId = userId
     onlineUsers.set(userId, newUser)
     // add to websocket client list
     clients.set(client.id, client)
