@@ -50,6 +50,7 @@ export async function handleCrowdloan(contribution, callback) {
     const {
         amountContributed = 0,
         amountPledged = 0,
+        amountPledgeFulfilled = 0,
         blockHash,
         blockIndex,
         identity,
@@ -59,8 +60,8 @@ export async function handleCrowdloan(contribution, callback) {
     const existingEntry = (await dbCrowdloan.get(identity)) || {}
     conf.amountPledged = {
         ...conf.amountPledged,
-        // must be greatuer or equal to previous contribution
-        min: existingEntry && existingEntry.amountPledged || 0,
+        // must be greatuer or equal to previous amount fulfilled
+        min: existingEntry && existingEntry.amountPledgeFulfilled || 0,
         // max 100% of amounted contributed
         max: Number(
             (amountContributed * PLEDGE_PERCENTAGE)
@@ -84,6 +85,7 @@ export async function handleCrowdloan(contribution, callback) {
         ...existingEntry,
         amountContributed,
         amountPledged,
+        amountPledgeFulfilled,
         blockHash,
         blockIndex,
         history: [
@@ -91,6 +93,7 @@ export async function handleCrowdloan(contribution, callback) {
             isUpdate && {
                 amountContributed: existingEntry.amountContributed,
                 amountPledged: existingEntry.amountPledged,
+                amountPledgeFulfilled: existingEntry.amountPledgeFulfilled,
                 blockHash: existingEntry.blockHash,
                 blockIndex: existingEntry.blockIndex,
                 signature: existingEntry.signature,
@@ -126,6 +129,10 @@ handleCrowdloan.validationConf = {
         type: TYPES.number,
     },
     amountPledged: {
+        min: 0,
+        type: TYPES.number,
+    },
+    amountPledgeFulfilled: {
         min: 0,
         type: TYPES.number,
     },
