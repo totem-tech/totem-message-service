@@ -1,13 +1,24 @@
 import CouchDBStorage from '../../src/utils/CouchDBStorage'
 import DataStorage from '../../src/utils/DataStorage'
 
-async function execute() {
-    const url = process.env.CouchDB_URL
-    const dbName = process.env.DBName
-    let filename = process.env.FILENAME
-    const limit = parseInt(process.env.LIMIT || 99999999)
-    const skip = parseInt(process.env.SKIP || 0)
-    if (!dbName) throw new Error('COLLECTION_NAME required')
+/**
+ * @name    execute 
+ * 
+ * @param   {*} dbName 
+ * @param   {*} filename 
+ * @param   {*} limit 
+ * @param   {*} skip 
+ * @param   {*} url 
+ * 
+ * @returns {DataStorage}
+ */
+export async function execute(dbName, filename, limit, skip, url) {
+    url = url || process.env.CouchDB_URL
+    dbName = dbName || process.env.DBName
+    filename = filename || process.env.FILENAME
+    limit = limit || parseInt(process.env.LIMIT || 99999999)
+    skip = skip || parseInt(process.env.SKIP || 0)
+    if (!dbName) throw new Error('DBName required')
     if (!url) throw new Error('CouchDB_URL required')
 
     const db = new CouchDBStorage(url, dbName)

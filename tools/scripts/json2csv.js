@@ -7,6 +7,7 @@ async function execute(storage) {
     const pathSource = process.env.FILENAME
     const pathOptions = process.env.FILEPATH_CSV_OPTIONS
     const pathOutput = process.env.FILEPATH_CSV_OUTPUT
+    const excludeID = (process.env.EXCLUDE_ID || '').toUpperCase() === 'TRUE'
     if (!storage && !pathSource) throw new Error('Missing env: FILENAME')
     if (!pathOutput) throw new Error('Missing env: FILEPATH_OUTPUT')
 
@@ -18,7 +19,11 @@ async function execute(storage) {
                 .toArray()
     if (isArr2D(data)) {
         // convert DataStorage entries to regular array of objects
-        data = data.map(([_id, doc]) => ({ ...doc, _id }))
+        data = data.map(([_id, doc]) =>
+            excludeID
+                ? doc :
+                { ...doc, _id }
+        )
     }
     const options = !!pathOptions
         ? JSON.parse(fs.readFileSync(pathOptions))
