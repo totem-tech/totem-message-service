@@ -34,6 +34,7 @@ export const rewardStatus = {
     todo: 'todo',
 }
 export const rewardTypes = {
+    meccanoToKapex: 'meccano-to-kapex',
     decoded2206: 'decoded2206', // vote for Polkadot Decoded talk and follow founders
     referral: 'referral-reward',
     referralTwitter: 'referral-twitter-reward',

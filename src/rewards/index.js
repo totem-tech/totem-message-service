@@ -4,6 +4,7 @@ import handleGetRewardsData from "./handleGetRewardsData"
 import { getRewardId, hashAlgo, hashBitLength, log, payReferralReward, paySignupReward, rewardTypes } from "./rewards"
 import { generateHash, isObj } from '../utils/utils'
 import { sendNotification } from "../notification"
+import { handleClaimKAPEX } from "./handleClaimKAPEX"
 
 const debugTag = '[rewards]'
 const signupActive = process.env.SignupRewardsDisabled !== 'YES'
@@ -50,5 +51,6 @@ rxUserRegistered.subscribe(async ({ userId, referredBy }) => {
 
 export default {
     'rewards-claim': handleClaimRewards,
+    'rewards-claim-kapex': handleClaimKAPEX,
     'rewards-get-data': handleGetRewardsData,
 }
