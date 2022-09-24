@@ -1,5 +1,5 @@
 import { setTexts } from '../language'
-import { isAddress, isFn, isValidDate } from '../utils/utils'
+import { isAddress, isFn, isObj, isValidDate } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 
@@ -16,8 +16,9 @@ const messages = setTexts({
  * This is to simply mark that the user has completed the required tasks.
  * At the end of the claim period, all requests will be validated and checked for fradulent claims.
  * 
- * @param   {Boolea|Object} data            Use `null` to check if user is eligible to migrate rewards.
- * @param   {String}        data.identity   Substrate identity that completed the tasks and to distribute $KAPEX.
+ * @param   {Boolea|Object} data.checkEligible To check if user is eligible to migrate rewards.
+ * @param   {Boolea|Object} data.checkSubmitted To check if user already submitted their claim.
+ * @param   {String}        data.identity       Substrate identity that completed the tasks and to distribute $KAPEX.
  * 
  * @param   {Function}  callback 
  */
@@ -28,8 +29,14 @@ export async function handleClaimKAPEX(data, callback) {
     const active = isValidDate(endDate) && new Date(endDate) > new Date()
     if (!active) return callback(messages.errClaimInactive)
 
+    const rewardId = getRewardId(rewardTypes.meccanoToKapex, user._id)
+    // check if user already submitted their claim
+    const alreadyClaimed = !!(await dbRewards.get(rewardId))
+    if (isObj(data) && data.checkSubmitted) return callback(null, alreadyClaimed)
+    if (alreadyClaimed) return callback(null)
+
     const isEligible = !!(await dbRewards.find({ userId: user._id }))
-    if (data === false) return callback(null, isEligible)
+    if (isObj(data) && data.checkEligible) return callback(null, isEligible)
     if (!isEligible) return callback(messages.errIneligible)
 
     const err = validateObj(data, handleClaimKAPEX.validationConf, true, true)
@@ -51,10 +58,6 @@ export async function handleClaimKAPEX(data, callback) {
     const regexIPAddress = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$/
     const ipValid = regexIPAddress.test(clientIPAddress)
     if (!ipValid) return callback(messages.errInvalidIP)
-
-    const rewardId = getRewardId(rewardTypes.meccanoToKapex, user._id)
-    // user already submitted their claim
-    if (await dbRewards.get(rewardId)) return callback(null)
 
     const rewardEntry = {
         clientIPAddress,
