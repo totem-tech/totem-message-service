@@ -28,7 +28,8 @@ const notifications = new CouchDBStorage(null, 'notifications')
 const UNRECEIVED_LIMIT = 200
 const errMessages = setTexts({
     accessDenied: 'Access denied',
-    ethAddressError: 'valid Ethereum address required',
+    ethAddress: 'valid Ethereum address required',
+    phoneRegex: 'invalid phone number!',
     introducingUserIdConflict: 'Introducing user cannot not be a recipient',
     invalidId: 'Invalid notification ID',
     invalidParams: 'Invalid or missing required parameters',
@@ -37,7 +38,7 @@ const errMessages = setTexts({
 export const commonConfs = {
     ethAddress: {
         chainType: 'ethereum',
-        customMessages: { identity: errMessages.ethAddressError },
+        customMessages: { identity: errMessages.ethAddress },
         // number of characters required including '0x'
         minLength: 42,
         maxLength: 42,
@@ -57,7 +58,16 @@ commonConfs.location = {
         addressLine1: commonConfs.str3To64Required,
         addressLine2: { ...commonConfs.str3To64Required, required: false },
         city: commonConfs.str3To64Required,
+        email: { ...commonConfs.str3To160, type: TYPES.email },
         name: commonConfs.str3To64Required,
+        phone: {
+            customMessages: { regex: errMessages.phoneRegex },
+            maxLength: 32,
+            minLength: 3,
+            regex: /^[0-9]*$/,
+            required: false,
+            type: TYPES.string,
+        },
         postcode: { ...commonConfs.str3To64Required, maxLength: 16 },
         state: { ...commonConfs.str3To64Required, minLength: 2 },
         countryCode: { ...commonConfs.str3To64Required, minLength: 2, maxLength: 2 },
