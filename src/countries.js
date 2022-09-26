@@ -1,9 +1,10 @@
 import CouchDBStorage from './utils/CouchDBStorage'
+import DataStorage from './utils/DataStorage'
 import fetch from 'node-fetch'
-import { isFn, generateHash } from './utils/utils'
+import { isFn, generateHash, isArr } from './utils/utils'
 
 const countries = new CouchDBStorage(null, 'countries')
-const source = 'https://restcountries.eu/rest/v2/all'
+const source = 'https://restcountries.com/v3.1/all'
 let countriesHash
 // populate countries list from external source
 setTimeout(async () => {
@@ -13,18 +14,46 @@ setTimeout(async () => {
         return
     }
 
-    const countriesRes = await (await fetch(source)).json()
-    if (countriesRes.length === 0) return
+    const getCountries = async () => await (await fetch(source)).json()
+    const countriesArr = await getCountries()
+        .then(arr => {
+            // save the entire result as JSON file as a backup
+            new DataStorage('countries.json')
+                .setAll(
+                    new Map(
+                        arr.map(c => [c.cca2, c])
+                    )
+                )
+            return arr
+        })
+        .catch(err => {
+            // failed to retrieve list of countries.
+            // check if a JSON file is available
+            const arr = new DataStorage('countries.json')
+                .toArray()
+                .map(([_, c]) => c)
+            return isArr(arr) && arr.length > 0
+                ? arr // resolve with array
+                : new Error(`Failed to retrieve countries. ${err}`) // reject with error
+        })
+    if (countriesArr.length === 0) return
 
     // convert array into Map and strip all unnecessary data
-    const countriesMap = countriesRes.reduce((map, c) => map.set(
-        c.alpha2Code, // use 2 letter code as key
-        {
-            name: c.name,
-            code: c.alpha2Code,     // 2 letter code
-            code3: c.alpha3Code,    // 3 letter code
-        }
-    ), new Map())
+    const countriesMap = countriesArr.reduce((map, c) =>
+        map.set(
+            c.cca2, // use 2 letter code as key
+            {
+                altSpellings: c.altSpellings || [],
+                name: (c.name || {}).official,
+                code: c.cca2,     // 2 letter code
+                code3: c.cca3,    // 3 letter code
+                phoneCode: (c.idd || {}).root
+                    + ((c.idd || {}).suffixes || []).join(''),
+                regexPostCode: (c.postalCode || {}).regex, // only some of the entries contains postalCode regex
+            },
+        ),
+        new Map(),
+    )
 
     countriesHash = generateHash(Array.from(countriesMap))
     await countries.setAll(countriesMap)
