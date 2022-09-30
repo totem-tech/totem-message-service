@@ -6,7 +6,7 @@ import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 const endDate = process.env.KAPEX_CLAIM_END_DATE
 const messages = setTexts({
     errInvalidIP: 'Invalid client IP address',
-    errClaimInactive: 'Migration claim claim period has ended',
+    errClaimInactive: 'Migration claim period has ended',
     errIneligible: 'You are not eligible to migrate your rewards!',
 })
 

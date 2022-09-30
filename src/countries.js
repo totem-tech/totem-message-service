@@ -30,7 +30,6 @@ setTimeout(async () => {
             // failed to retrieve list of countries.
             // check if a JSON file is available
             const arr = new DataStorage('countries.json')
-                .toArray()
                 .map(([_, c]) => c)
             return isArr(arr) && arr.length > 0
                 ? arr // resolve with array
@@ -39,23 +38,34 @@ setTimeout(async () => {
     if (countriesArr.length === 0) return
 
     // convert array into Map and strip all unnecessary data
-    const countriesMap = countriesArr.reduce((map, c) =>
-        map.set(
+    const countriesMap = countriesArr.reduce((map, c) => {
+        const { root, suffixes = [] } = c.idd || {}
+        const suffix = suffixes.length > 1
+            ? '' // ignore suffix if more than one available
+            : suffixes[0]
+
+        return map.set(
             c.cca2, // use 2 letter code as key
             {
                 altSpellings: c.altSpellings || [],
                 name: (c.name || {}).official,
                 code: c.cca2,     // 2 letter code
                 code3: c.cca3,    // 3 letter code
-                phoneCode: (c.idd || {}).root
-                    + ((c.idd || {}).suffixes || []).join(''),
+                phoneCode: !root
+                    ? undefined
+                    : root + suffix,
                 regexPostCode: (c.postalCode || {}).regex, // only some of the entries contains postalCode regex
             },
-        ),
+        )
+    },
         new Map(),
     )
 
-    countriesHash = generateHash(Array.from(countriesMap))
+    countriesHash = generateHash(
+        Array.from(countriesMap),
+        'blake2',
+        256,
+    )
     await countries.setAll(countriesMap)
 })
 
@@ -67,6 +77,7 @@ setTimeout(async () => {
 export const handleCountries = async (hash, callback) => {
     if (!isFn(callback)) return
     if (countriesHash === hash) return callback()
+
     callback(null, await countries.getAll(null, true, 999))
 }
 
