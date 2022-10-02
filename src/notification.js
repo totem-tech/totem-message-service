@@ -53,21 +53,39 @@ export const commonConfs = {
     userId: { maxLength: 16, minLength: 3, required: true, type: TYPES.string },
 }
 // validation config for a location
+commonConfs.contactDetails = {
+    config: {
+        email: {
+            ...commonConfs.str3To160,
+            required: true,
+            type: TYPES.email,
+        },
+        name: {
+            ...commonConfs.str3To64Required,
+            maxLength: 32,
+        },
+        phoneCode: {
+            maxLength: 10,
+            minLength: 2,
+            type: TYPES.string,
+        },
+        phoneNumber: {
+            customMessages: { regex: errMessages.phoneRegex },
+            maxLength: 12,
+            minLength: 6,
+            regex: /^[1-9][0-9]{5,11}$/,
+            type: TYPES.string,
+        },
+    },
+    required: false,
+    type: TYPES.object,
+}
 commonConfs.location = {
     config: {
         addressLine1: commonConfs.str3To64Required,
         addressLine2: { ...commonConfs.str3To64Required, required: false },
         city: commonConfs.str3To64Required,
-        email: { ...commonConfs.str3To160, type: TYPES.email },
         name: commonConfs.str3To64Required,
-        phone: {
-            customMessages: { regex: errMessages.phoneRegex },
-            maxLength: 32,
-            minLength: 3,
-            regex: /^[0-9]*$/,
-            required: false,
-            type: TYPES.string,
-        },
         postcode: { ...commonConfs.str3To64Required, maxLength: 16 },
         state: { ...commonConfs.str3To64Required, minLength: 2 },
         countryCode: { ...commonConfs.str3To64Required, minLength: 2, maxLength: 2 },
@@ -134,11 +152,18 @@ export const VALID_TYPES = Object.freeze({
             dataFields: {
                 // address/identity being shared
                 address: commonConfs.identity,
+                // (optional) contact details
+                contactDetails: commonConfs.contactDetails,
                 // optionally include introducer ID
                 introducedBy: { required: false, type: TYPES.string },
                 // name of the user or the identity
-                name: { maxLength: 64, minLength: 3, required: true, type: TYPES.string },
+                name: commonConfs.str3To64Required,
+                // (optional) location
                 location: commonConfs.location,
+                // (optional) company registered number
+                registeredNumber: { ...commonConfs.str3To64Required, required: false },
+                // (optional) company vat registration number
+                vatNumber: { ...commonConfs.str3To64Required, required: false },
             },
             // validate introducer id, if supplied
             validate: async (_, _1, _2, { introducerId: id }) => !id || await idExists(id)
@@ -373,6 +398,7 @@ export async function sendNotification(senderId, recipients, type, childType, me
         dataKeys.forEach(key => {
             const keyConfig = config.dataFields[key]
             if (!isObj(keyConfig) || keyConfig.type !== TYPES.object) return
+
             data[key] = objClean(data[key], Object.keys(keyConfig.config))
         })
     }
