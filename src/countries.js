@@ -43,12 +43,19 @@ setTimeout(async () => {
         const suffix = suffixes.length > 1
             ? '' // ignore suffix if more than one available
             : suffixes[0]
-
+        const { common, official } = c.name || {}
+        let name = common || official
+        const altSpellings = [...c.altSpellings]
+        // use common name as primary name if available, otherwise use official name
+        if (common !== official) {
+            // add official name to alt spellings list
+            !altSpellings.includes(official) && altSpellings.push(official)
+        }
         return map.set(
             c.cca2, // use 2 letter code as key
             {
-                altSpellings: c.altSpellings || [],
-                name: (c.name || {}).official,
+                altSpellings,
+                name,
                 code: c.cca2,     // 2 letter code
                 code3: c.cca3,    // 3 letter code
                 phoneCode: !root
