@@ -143,7 +143,7 @@ export const VALID_TYPES = Object.freeze({
         request: {
             dataFields: {
                 // one-liner explanation by the requester of why they want receivers identity
-                reason: commonConfs.str3To160Required,
+                reason: commonConfs.str3To64Required,
             },
             messageField: commonConfs.str3To160,
         },
@@ -155,7 +155,10 @@ export const VALID_TYPES = Object.freeze({
                 // (optional) contact details
                 contactDetails: commonConfs.contactDetails,
                 // optionally include introducer ID
-                introducedBy: { required: false, type: TYPES.string },
+                introducedBy: {
+                    ...commonConfs.userId,
+                    required: false,
+                },
                 // name of the user or the identity
                 name: commonConfs.str3To64Required,
                 // (optional) location
