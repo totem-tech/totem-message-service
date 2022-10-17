@@ -3,12 +3,25 @@ import { isAddress, isFn, isObj, isValidDate } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 
-const endDate = process.env.KAPEX_CLAIM_END_DATE
 const messages = setTexts({
-    errInvalidIP: 'Invalid client IP address',
-    errClaimInactive: 'Migration claim period has ended',
-    errIneligible: 'You are not eligible to migrate your rewards!',
+    errAlreadySubmitted: 'You have already submitted your claim.',
+    errEnded: 'Claim period has ended!',
+    errInvalidIP: 'Invalid IP address',
+    errIneligible: 'You are not eligible to claim KAPEX.',
+    errNotStarted: 'Claim period has not started yet!',
 })
+const endDateStr = process.env.KAPEX_CLAIM_END_DATE
+const startDateStr = process.env.KAPEX_CLAIM_START_DATE
+// only indenteded for use in testing environment
+const validateIp = process.env.KAPEX_CLAIM_VALIDATE_IP !== '`-_NO_-`'
+const endDate = isValidDate(endDateStr)
+    ? new Date(endDateStr)
+    : null
+const startDate = isValidDate(startDateStr)
+    ? new Date(startDateStr)
+    : null
+// Regex source: https://www.geeksforgeeks.org/how-to-validate-an-ip-address-using-regex/
+const regexIPAddress = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$/
 
 /**
  * @name    handleClaimKapex
@@ -16,9 +29,8 @@ const messages = setTexts({
  * This is to simply mark that the user has completed the required tasks.
  * At the end of the claim period, all requests will be validated and checked for fradulent claims.
  * 
- * @param   {Boolea|Object} data.checkEligible To check if user is eligible to migrate rewards.
- * @param   {Boolea|Object} data.checkSubmitted To check if user already submitted their claim.
- * @param   {String}        data.identity       Substrate identity that completed the tasks and to distribute $KAPEX.
+ * @param   {Object|Boolean}    data            To check status user `true`
+ * @param   {String}            data.identity   Substrate identity that completed the tasks and to distribute $KAPEX.
  * 
  * @param   {Function}  callback 
  */
@@ -26,22 +38,53 @@ export async function handleClaimKAPEX(data, callback) {
     if (!isFn(callback)) return
 
     const [client, user] = this
-    const active = isValidDate(endDate) && new Date(endDate) > new Date()
-    if (!active) return callback(messages.errClaimInactive)
+    const started = !!startDate
+        && startDate < new Date()
+    const ended = !!endDate
+        && endDate > new Date()
+    const active = started && ended
+    // if request is not to check status then validate the data object
+    let err = data !== true && validateObj(
+        data,
+        handleClaimKAPEX.validationConf,
+        true,
+        true,
+    )
+    if (!!err) return callback(err)
 
     const rewardId = getRewardId(rewardTypes.meccanoToKapex, user._id)
-    // check if user already submitted their claim
-    const alreadyClaimed = !!(await dbRewards.get(rewardId))
-    if (isObj(data) && data.checkSubmitted) return callback(null, alreadyClaimed)
-    if (alreadyClaimed) return callback(null)
+    const eligible = !!(await dbRewards.find({ userId: user._id }))
+    const submitted = !!(await dbRewards.get(rewardId))
+    err = submitted
+        ? messages.errAlreadySubmitted
+        : !active
+            ? !started
+                ? messages.errNotStarted
+                : messages.ended
+            : !eligible
+                ? messages.errIneligible
+                : null
+    console.log('handleClaimKAPEX', { data })
+    if (data === true) {
+        // check status
+        const status = {
+            // whether claim is active
+            active,
+            // whether user is eligible to claim
+            eligible,
+            // claim end date
+            endDate,
+            // any relevant message
+            error: err,
+            // claim start date
+            startDate,
+            // indicates if user already submitted their claim
+            submitted,
+        }
+        return callback(null, status)
+    }
 
-    const isEligible = !!(await dbRewards.find({ userId: user._id }))
-    if (isObj(data) && data.checkEligible) return callback(null, isEligible)
-    if (!isEligible) return callback(messages.errIneligible)
-
-    const err = validateObj(data, handleClaimKAPEX.validationConf, true, true)
     if (!!err) return callback(err)
-    const { identity } = data
 
     let {
         handshake: {
@@ -54,18 +97,20 @@ export async function handleClaimKAPEX(data, callback) {
     const clientIPAddress = address
         .match(/[0-9]|\./g)
         .join('')
-    // Regex source: https://www.geeksforgeeks.org/how-to-validate-an-ip-address-using-regex/
-    const regexIPAddress = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$/
     const ipValid = regexIPAddress.test(clientIPAddress)
-    if (!ipValid) return callback(messages.errInvalidIP)
+    if (validateIp && !ipValid) return callback(messages.errInvalidIP)
 
+    const { identity } = data
+    const { address: rewardIdentity, _id: userId } = user
     const rewardEntry = {
         clientIPAddress,
         clientHost: host,
         identity,
+        rewardIdentity,
+        rewardIdentityChanged: identity !== rewardIdentity,
         status: rewardStatus.pending,
         type: rewardTypes.meccanoToKapex,
-        userId: user._id,
+        userId,
     }
     // save entry
     await dbRewards.set(rewardId, rewardEntry)
@@ -73,6 +118,7 @@ export async function handleClaimKAPEX(data, callback) {
 }
 handleClaimKAPEX.requireLogin = true
 handleClaimKAPEX.validationConf = {
+    // the identity user completed the tasks with and to receive rewards
     identity: {
         required: true,
         type: TYPES.address,
