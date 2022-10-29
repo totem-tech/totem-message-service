@@ -114,6 +114,7 @@ export async function handleClaimKAPEX(data, callback) {
     // user manually submitted with a different identity
     if (rewardsIdentity !== _rewardsIdentity) return callback(messages.errInvalidIdentity)
 
+
     const rewardEntry = {
         clientIPAddress,
         clientHost: host,
@@ -121,7 +122,9 @@ export async function handleClaimKAPEX(data, callback) {
         signature,
         status: rewardStatus.pending,
         token,
+        tweetId: tweetUrl.split('status/')[1].split('?')[0],
         tweetUrl,
+        twitterHandle: tweetUrl.split('/')[3],
         type: rewardTypes.meccanoToKapex,
         userId,
     }
