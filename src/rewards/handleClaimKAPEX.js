@@ -104,9 +104,13 @@ export async function handleClaimKAPEX(data, callback) {
     const {
         rewardsIdentity,
         signature,
+        tweetUrl,
         token,
     } = data
-    const { address: _rewardsIdentity, _id: userId } = user
+    const {
+        address: _rewardsIdentity,
+        _id: userId
+    } = user
     // user manually submitted with a different identity
     if (rewardsIdentity !== _rewardsIdentity) return callback(messages.errInvalidIdentity)
 
@@ -117,6 +121,7 @@ export async function handleClaimKAPEX(data, callback) {
         signature,
         status: rewardStatus.pending,
         token,
+        tweetUrl,
         type: rewardTypes.meccanoToKapex,
         userId,
     }
@@ -141,5 +146,11 @@ handleClaimKAPEX.validationConf = {
     token: {
         required: false,
         type: TYPES.string,
+    },
+    tweetUrl: {
+        maxLength: 100,
+        minLength: 50,
+        required: true,
+        type: TYPES.url,
     },
 }
