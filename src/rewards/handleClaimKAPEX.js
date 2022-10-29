@@ -6,6 +6,7 @@ import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
 const messages = setTexts({
     errAlreadySubmitted: 'You have already submitted your claim.',
     errEnded: 'Claim period has ended!',
+    errInvalidIdentity: 'Please complete the claim process and submit again with your rewards identity.',
     errInvalidIP: 'Invalid IP address',
     errIneligible: 'You are not eligible to claim KAPEX.',
     errNotStarted: 'Claim period has not started yet!',
@@ -13,7 +14,7 @@ const messages = setTexts({
 const endDateStr = process.env.KAPEX_CLAIM_END_DATE
 const startDateStr = process.env.KAPEX_CLAIM_START_DATE
 // only indenteded for use in testing environment
-const validateIp = process.env.KAPEX_CLAIM_VALIDATE_IP !== '`-_NO_-`'
+const validateIp = process.env.KAPEX_CLAIM_VALIDATE_IP !== '^-_NO_-^'
 const endDate = isValidDate(endDateStr)
     ? new Date(endDateStr)
     : null
@@ -44,6 +45,7 @@ export async function handleClaimKAPEX(data, callback) {
         && endDate > new Date()
     const active = started && ended
     // if request is not to check status then validate the data object
+
     let err = data !== true && validateObj(
         data,
         handleClaimKAPEX.validationConf,
@@ -64,7 +66,6 @@ export async function handleClaimKAPEX(data, callback) {
             : !eligible
                 ? messages.errIneligible
                 : null
-    console.log('handleClaimKAPEX', { data })
     if (data === true) {
         // check status
         const status = {
@@ -100,27 +101,45 @@ export async function handleClaimKAPEX(data, callback) {
     const ipValid = regexIPAddress.test(clientIPAddress)
     if (validateIp && !ipValid) return callback(messages.errInvalidIP)
 
-    const { identity } = data
-    const { address: rewardIdentity, _id: userId } = user
+    const {
+        rewardsIdentity,
+        signature,
+        token,
+    } = data
+    const { address: _rewardsIdentity, _id: userId } = user
+    // user manually submitted with a different identity
+    if (rewardsIdentity !== _rewardsIdentity) return callback(messages.errInvalidIdentity)
+
     const rewardEntry = {
         clientIPAddress,
         clientHost: host,
-        identity,
-        rewardIdentity,
-        rewardIdentityChanged: identity !== rewardIdentity,
+        rewardsIdentity,
+        signature,
         status: rewardStatus.pending,
+        token,
         type: rewardTypes.meccanoToKapex,
         userId,
     }
     // save entry
     await dbRewards.set(rewardId, rewardEntry)
     callback(null)
+    console.log(new Date().toISOString(), '[handleClaimKAPEX]', user._id, data.token)
 }
 handleClaimKAPEX.requireLogin = true
 handleClaimKAPEX.validationConf = {
     // the identity user completed the tasks with and to receive rewards
-    identity: {
+    rewardsIdentity: {
         required: true,
-        type: TYPES.address,
+        type: TYPES.identity,
+    },
+    signature: {
+        maxLength: 130,
+        minLength: 130,
+        required: true,
+        type: TYPES.hex,
+    },
+    token: {
+        required: false,
+        type: TYPES.string,
     },
 }
