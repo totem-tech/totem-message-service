@@ -223,24 +223,24 @@ export async function handleDisconnect() {
     const user = onlineUsers.get(client.___userId)
     if (!user) return // nothing to do
 
-    const clientIds = userClientIds.get(user._id) || []
+    const clientIds = userClientIds.get(user.id) || []
     const clientIdIndex = clientIds.indexOf(client.id)
     // remove clientId
     clientIds.splice(clientIdIndex, 1)
     const uniqClientIds = arrUnique(clientIds)
     const online = uniqClientIds.length > 0
     if (online) {
-        userClientIds.set(user._id, uniqClientIds)
+        userClientIds.set(user.id, uniqClientIds)
     } else {
-        userClientIds.delete(user._id)
-        onlineUsers.delete(user._id)
+        userClientIds.delete(user.id)
+        onlineUsers.delete(user.id)
     }
 
-    log('Client disconnected | User ID:', user._id, ' | Client ID: ', client.id)
+    log('Client disconnected | User ID:', user.id, ' | Client ID: ', client.id)
 
-    if (!onlineSupportUsers.get(user._id) || online) return
+    if (!onlineSupportUsers.get(user.id) || online) return
     // support user went offline
-    onlineSupportUsers.delete(user._id)
+    onlineSupportUsers.delete(user.id)
 }
 
 /**
@@ -301,9 +301,9 @@ export async function handleLogin(userId, secret, callback) {
     if (!user) return callback(messages.loginFailed)
 
     const { address, roles = [] } = user
-    const clientIds = userClientIds.get(user._id) || []
+    const clientIds = userClientIds.get(user.id) || []
     clientIds.push(client.id)
-    userClientIds.set(user._id, arrUnique(clientIds))
+    userClientIds.set(user.id, arrUnique(clientIds))
     // attach userId to client object
     client.___userId = userId
     onlineUsers.set(userId, user)
@@ -313,7 +313,7 @@ export async function handleLogin(userId, secret, callback) {
         clientIds,
         userId,
     })
-    if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user._id, true)
+    if (roles.includes(ROLE_SUPPORT)) onlineSupportUsers.set(user.id, true)
 
     console.log('Users online:', userClientIds.size)
     callback(null, { address, roles })

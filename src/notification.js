@@ -320,8 +320,8 @@ export async function handleNotificationGetRecent(tsLastReceived = '2002-01-01',
 
     // retrieve latest notifications
     const params = {
-        startkey: [user._id, tsLastReceived],
-        endkey: [user._id, new Date().toISOString()]
+        startkey: [user.id, tsLastReceived],
+        endkey: [user.id, new Date().toISOString()]
     }
     let result = await notifications.view(
         'get-recent',

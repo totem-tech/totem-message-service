@@ -39,6 +39,7 @@ export async function handleClaimKAPEX(data, callback) {
     if (!isFn(callback)) return
 
     const [client, user] = this
+    console.log({ user })
     const started = !!startDate
         && startDate < new Date()
     const ended = !!endDate
@@ -54,8 +55,8 @@ export async function handleClaimKAPEX(data, callback) {
     )
     if (!!err) return callback(err)
 
-    const rewardId = getRewardId(rewardTypes.meccanoToKapex, user._id)
-    const eligible = !!(await dbRewards.find({ userId: user._id }))
+    const rewardId = getRewardId(rewardTypes.meccanoToKapex, user.id)
+    const eligible = !!(user.id && await dbRewards.find({ userId: user.id }))
     const submitted = !!(await dbRewards.get(rewardId))
     err = submitted
         ? messages.errAlreadySubmitted
@@ -114,7 +115,6 @@ export async function handleClaimKAPEX(data, callback) {
     // user manually submitted with a different identity
     if (rewardsIdentity !== _rewardsIdentity) return callback(messages.errInvalidIdentity)
 
-
     const rewardEntry = {
         clientIPAddress,
         clientHost: host,
@@ -131,7 +131,7 @@ export async function handleClaimKAPEX(data, callback) {
     // save entry
     await dbRewards.set(rewardId, rewardEntry)
     callback(null)
-    console.log(new Date().toISOString(), '[handleClaimKAPEX]', user._id, data.token)
+    console.log(new Date().toISOString(), '[handleClaimKAPEX]', user.id, data.token)
 }
 handleClaimKAPEX.requireLogin = true
 handleClaimKAPEX.validationConf = {

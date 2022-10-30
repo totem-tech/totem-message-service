@@ -8,7 +8,7 @@ async function handleGetRewardsData(callback) {
 
     const [_, user] = this
     const limit = 999
-    const selector = { userId: user._id }
+    const selector = { userId: user.id }
     const extraProps = {
         // fields: [
         //     '_id',

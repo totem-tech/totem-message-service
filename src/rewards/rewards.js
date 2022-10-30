@@ -67,7 +67,7 @@ export const rewardTypes = {
 //     const result = await users.search(selector, limit, skip, false, extraProps)
 //     const payoutUsers = result.filter(user =>
 //         !Object.keys(user.rewards || {}).length
-//         && !RESERVED_IDS.includes(user._id)
+//         && !RESERVED_IDS.includes(user.id)
 //     )
 
 //     console.log({ payoutUsers })
