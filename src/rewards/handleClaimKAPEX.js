@@ -100,9 +100,9 @@ export async function handleClaimKAPEX(data, callback) {
     const clientIPAddress = address
         .match(/[0-9]|\./g)
         .join('')
-    const ipValid = regexIPAddress.test(clientIPAddress, { handshake })
+    const ipValid = regexIPAddress.test(clientIPAddress)
     if (validateIp && !ipValid) {
-        console.log(new Date(), '[handleClaimKAPEX]', clientIPAddress)
+        console.log(new Date(), '[handleClaimKAPEX]', clientIPAddress, { handshake })
         return callback(messages.errInvalidIP)
     }
 
