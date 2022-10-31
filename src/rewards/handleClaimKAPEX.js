@@ -89,17 +89,18 @@ export async function handleClaimKAPEX(data, callback) {
     if (!!err) return callback(err)
 
     let {
-        handshake: {
-            address = '',
-            headers: {
-                host = '',
-            } = {},
-        } = {},
+        handshake = {},
     } = client
+    const {
+        address = '',
+        headers: {
+            host = '',
+        } = {},
+    } = handshake
     const clientIPAddress = address
         .match(/[0-9]|\./g)
         .join('')
-    const ipValid = regexIPAddress.test(clientIPAddress)
+    const ipValid = regexIPAddress.test(clientIPAddress, { handshake })
     if (validateIp && !ipValid) {
         console.log(new Date(), '[handleClaimKAPEX]', clientIPAddress)
         return callback(messages.errInvalidIP)
