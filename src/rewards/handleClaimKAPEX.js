@@ -14,7 +14,7 @@ const messages = setTexts({
 const endDateStr = process.env.KAPEX_CLAIM_END_DATE
 const startDateStr = process.env.KAPEX_CLAIM_START_DATE
 // only indenteded for use in testing environment
-const validateIp = process.env.KAPEX_CLAIM_VALIDATE_IP !== '^-_NO_-^'
+// const validateIp = process.env.KAPEX_CLAIM_VALIDATE_IP !== '^-_NO_-^'
 const endDate = isValidDate(endDateStr)
     ? new Date(endDateStr)
     : null
@@ -22,7 +22,7 @@ const startDate = isValidDate(startDateStr)
     ? new Date(startDateStr)
     : null
 // Regex source: https://www.geeksforgeeks.org/how-to-validate-an-ip-address-using-regex/
-const regexIPAddress = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$/
+// const regexIPAddress = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$/
 
 /**
  * @name    handleClaimKapex
@@ -39,7 +39,6 @@ export async function handleClaimKAPEX(data, callback) {
     if (!isFn(callback)) return
 
     const [client, user] = this
-    console.log({ user })
     const started = !!startDate
         && startDate < new Date()
     const ended = !!endDate
@@ -97,14 +96,14 @@ export async function handleClaimKAPEX(data, callback) {
             host = '',
         } = {},
     } = handshake
-    const clientIPAddress = address
-        .match(/[0-9]|\./g)
-        .join('')
-    const ipValid = regexIPAddress.test(clientIPAddress)
-    if (validateIp && !ipValid) {
-        console.log(new Date(), '[handleClaimKAPEX]', clientIPAddress, { handshake })
-        return callback(messages.errInvalidIP)
-    }
+    // const clientIPAddress = address
+    //     .match(/[0-9]|\./g)
+    //     .join('')
+    // const ipValid = regexIPAddress.test(clientIPAddress)
+    // if (validateIp && !ipValid) {
+    //     console.log(new Date(), '[handleClaimKAPEX]', clientIPAddress, { handshake })
+    //     return callback(messages.errInvalidIP)
+    // }
 
     const {
         rewardsIdentity,
@@ -120,13 +119,15 @@ export async function handleClaimKAPEX(data, callback) {
     if (rewardsIdentity !== _rewardsIdentity) return callback(messages.errInvalidIdentity)
 
     const rewardEntry = {
-        clientIPAddress,
+        clientIPAddress: address || '',
         clientHost: host,
         rewardsIdentity,
         signature,
         status: rewardStatus.pending,
         token,
-        tweetId: tweetUrl.split('status/')[1].split('?')[0],
+        tweetId: tweetUrl
+            .split('status/')[1]
+            .split('?')[0],
         tweetUrl,
         twitterHandle: tweetUrl.split('/')[3],
         type: rewardTypes.meccanoToKapex,
@@ -135,7 +136,7 @@ export async function handleClaimKAPEX(data, callback) {
     // save entry
     await dbRewards.set(rewardId, rewardEntry)
     callback(null)
-    console.log(new Date().toISOString(), '[handleClaimKAPEX]', user.id, data.token)
+    console.log(new Date().toISOString(), '[handleClaimKAPEX]', user.id, data.token, address)
 }
 handleClaimKAPEX.requireLogin = true
 handleClaimKAPEX.validationConf = {
