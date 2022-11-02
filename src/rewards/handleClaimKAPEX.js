@@ -1,7 +1,12 @@
 import { setTexts } from '../language'
-import { isAddress, isFn, isObj, isValidDate } from '../utils/utils'
+import { isFn, isValidDate } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
-import { dbRewards, getRewardId, rewardStatus, rewardTypes } from './rewards'
+import {
+    dbRewards,
+    getRewardId,
+    rewardStatus,
+    rewardTypes,
+} from './rewards'
 
 const messages = setTexts({
     errAlreadySubmitted: 'You have already submitted your claim.',
@@ -9,6 +14,7 @@ const messages = setTexts({
     errInvalidIdentity: 'Please complete the claim process and submit again with your rewards identity.',
     errInvalidIP: 'Invalid IP address',
     errIneligible: 'You are not eligible to claim KAPEX.',
+    errMissingAddress: 'You are eligible to claim rewards. However, your rewards identity is missing. Please contact support as soon as possible.',
     errNotStarted: 'Claim period has not started yet!',
 })
 const endDateStr = process.env.KAPEX_CLAIM_END_DATE
@@ -30,8 +36,11 @@ const startDate = isValidDate(startDateStr)
  * This is to simply mark that the user has completed the required tasks.
  * At the end of the claim period, all requests will be validated and checked for fradulent claims.
  * 
- * @param   {Object|Boolean}    data            To check status user `true`
- * @param   {String}            data.identity   Substrate identity that completed the tasks and to distribute $KAPEX.
+ * @param   {Object|Boolean} data                   To check status user `true`
+ * @param   {String}         data.rewardsIdentity   Rewards identity to complete tasks and receive $KAPEX
+ * @param   {String}         data.signature         A signature created using the rewards identity
+ * @param   {String}         data.token             A random string to be used to generate the signature
+ * @param   {String}         data.tweetUrl          URL of the Tweet user posted when submitting the claim
  * 
  * @param   {Function}  callback 
  */
@@ -65,7 +74,9 @@ export async function handleClaimKAPEX(data, callback) {
                 : messages.ended
             : !eligible
                 ? messages.errIneligible
-                : null
+                : !user.address
+                    ? messages.errMissingAddress
+                    : null
     if (data === true) {
         // check status
         const status = {
