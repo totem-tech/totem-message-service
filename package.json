@@ -1,6 +1,6 @@
 {
   "name": "totem-message-server",
-  "version": "1.0.0",
+  "version": "1.20.0000",
   "description": "Totem Internal Message Server",
   "main": "index.js",
   "scripts": {
