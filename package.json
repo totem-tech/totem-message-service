@@ -70,7 +70,7 @@
     "nano": "^9.0.3",
     "pbkdf2": "^3.0.17",
     "request": "^2.88.2",
-    "socket.io": "^3.0.4",
+    "socket.io": "^4.5.0",
     "socket.io-client": "^3.0.4",
     "twitter-lite": "^1.1.0",
     "uuid": "^3.3.3",
