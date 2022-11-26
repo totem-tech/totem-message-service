@@ -2,7 +2,7 @@ import uuid from 'uuid'
 import CouchDBStorage from './utils/CouchDBStorage'
 import { arrSort, generateHash, isFn, isObj, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
-import { emitToUsers, idExists, RESERVED_IDS, systemUserSymbol } from './users'
+import { emitToUsers, idExists, RESERVED_IDS, systemUserSymbol, users } from './users'
 import { TYPES, validateObj } from './utils/validator'
 
 // Pending notification recipient user IDs
@@ -270,9 +270,10 @@ export const VALID_TYPES = Object.freeze({
         },
     },
 })
+// notificaiton validation config
 const validatorConfig = {
     recipients: {
-        customMessages: {}, //ToDo: add custom error messages
+        maxLength: 10,
         minLength: 1,
         required: true,
         reject: RESERVED_IDS,
@@ -379,7 +380,23 @@ export async function sendNotification(senderId, recipients, type, childType, me
 
     id = id || generateHash(uuid.v1(), 'blake2', 256)
 
-    let err = validateObj({ data, recipients, type }, validatorConfig, true, true)
+    let err = validateObj(
+        {
+            data,
+            recipients,
+            type,
+        },
+        {
+            ...validatorConfig,
+            // prevent user from sending notification to themselves
+            recipients: {
+                ...validatorConfig.recipients,
+                reject: senderId,
+            },
+        },
+        true,
+        true,
+    )
     if (err) return err
 
     const typeConfig = VALID_TYPES[type]
@@ -416,8 +433,9 @@ export async function sendNotification(senderId, recipients, type, childType, me
     if (err) return err
 
     // throw error if any of the user ids are invalid
-    const userIdsExists = !recipients.includes(senderId) && await idExists(recipients)
-    if (!userIdsExists) return errMessages.invalidUserId
+    const usersFound = await users.getAll(recipients, true)
+    const users404 = recipients.filter(id => !usersFound.get(id))
+    if (users404.length > 0) return `${errMessages.invalidUserId}: ${users404.map(id => `@${id}`)}`
 
     // if notification type has a handler function execute it
     err = isFn(config.validate) && await config.validate.call(that, id, senderId, recipients, data, message)

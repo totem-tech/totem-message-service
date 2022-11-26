@@ -1,4 +1,4 @@
-const { isFn } = require("../../src/utils/utils")
+const { isFn } = require('../../src/utils/utils')
 
 const paths = (process.env.SCRIPT || '')
     .split(',')
@@ -17,6 +17,8 @@ const execute = async () => {
             ? await imported(lastResult)
             : imported
     }
+
+    process.exit(0)
 }
 
 execute()
