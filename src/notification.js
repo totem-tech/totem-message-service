@@ -1,6 +1,6 @@
 import uuid from 'uuid'
 import CouchDBStorage from './utils/CouchDBStorage'
-import { arrSort, generateHash, isFn, isObj, objClean, objReadOnly } from './utils/utils'
+import { arrSort, generateHash, isArr, isFn, isObj, objClean, objReadOnly } from './utils/utils'
 import { setTexts } from './language'
 import { emitToUsers, idExists, RESERVED_IDS, systemUserSymbol, users } from './users'
 import { TYPES, validateObj } from './utils/validator'
@@ -27,13 +27,13 @@ const notifications = new CouchDBStorage(null, 'notifications')
 // maximum number of recent unreceived notifications user can receive
 const UNRECEIVED_LIMIT = 200
 const errMessages = setTexts({
-    accessDenied: 'Access denied',
+    accessDenied: 'access denied',
     ethAddress: 'valid Ethereum address required',
+    introducingUserIdConflict: 'introducing user cannot not be a recipient',
+    invalidId: 'invalid notification ID',
+    invalidParams: 'invalid or missing required parameters',
+    invalidUserId: 'invalid User ID supplied',
     phoneRegex: 'invalid phone number!',
-    introducingUserIdConflict: 'Introducing user cannot not be a recipient',
-    invalidId: 'Invalid notification ID',
-    invalidParams: 'Invalid or missing required parameters',
-    invalidUserId: 'Invalid User ID supplied',
 })
 export const commonConfs = {
     ethAddress: {
@@ -380,20 +380,18 @@ export async function sendNotification(senderId, recipients, type, childType, me
 
     id = id || generateHash(uuid.v1(), 'blake2', 256)
 
+    // prevent user from sending notification to themselves
+    recipients = !isArr(recipients)
+        ? []
+        : recipients.filter(x => x !== senderId)
+
     let err = validateObj(
         {
             data,
             recipients,
             type,
         },
-        {
-            ...validatorConfig,
-            // prevent user from sending notification to themselves
-            recipients: {
-                ...validatorConfig.recipients,
-                reject: senderId,
-            },
-        },
+        validatorConfig,
         true,
         true,
     )
