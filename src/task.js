@@ -68,8 +68,9 @@ const validatorConfig = {
         type: TYPES.hex,
     },
     tags: {
+        maxLength: 3,
         required: false,
-        type: TYPES.string
+        type: TYPES.array,
     },
     title: {
         maxLength: 160,
@@ -273,11 +274,10 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
         )
     }
 
-    console.log(JSON.stringify(selector, null, 4))
-    console.log(result, '\n\n')
+    // console.log(JSON.stringify(selector, null, 4))
+    // console.log(result, '\n\n')
 
     processTasksResult(result, userId)
-    console.log(result)
     callback(null, result)
 }
 handleTaskMarketSearch.requireLogin = true
