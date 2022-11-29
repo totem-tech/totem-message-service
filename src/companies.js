@@ -1,5 +1,13 @@
 import CouchDBStorage from './utils/CouchDBStorage'
-import { mapJoin, isFn, isHash, isObj, hasValue, objClean, isAddress } from './utils/utils'
+import {
+    isAddress,
+    isFn,
+    isHash,
+    isObj,
+    hasValue,
+    mapJoin,
+    objClean,
+} from './utils/utils'
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'
 import { setTexts } from './language'
@@ -58,7 +66,7 @@ export async function handleCompany(hash, company, callback) {
     if (!addressToStr(identity)) return callback(messages.invalidIdentity)
 
     // Check if company with identity already exists
-    if (!!(await companies.find({identity}, true, true, true))) 
+    if (!!(await companies.find({ identity }, true, true, true)))
         return callback(messages.identityAlreadyAssociated)
 
     // make sure all the required keys are supplied
@@ -97,21 +105,21 @@ export async function handleCompanySearch(query, searchParentIdentity = false, c
     if (!isFn(callback)) return
     if (isHash(query)) {
         // valid hash supplied
-        const company =  await companies.get(query)
+        const company = await companies.get(query)
         const err = !company ? messages.notFound : null
         return callback(err, !err && new Map([[query, company]]))
     }
 
-    const searchSeq = async (selectors = [], combine) => {
+    const searchSeq = async (selectors = [], any) => {
         let result = new Map()
         for (let i = 0; i < selectors.length; i++) {
-            if (result.size > 0 && !combine) return result
+            if (result.size > 0 && !any) return result
             const selector = selectors[i]
             result = mapJoin(result, await companies.search(selector, RESULT_LIMIT))
         }
         return result
     }
-    
+
     // search by identity or parentIdentity
     if (isAddress(query)) return callback(null, await searchSeq([
         { identity: query },
@@ -121,7 +129,7 @@ export async function handleCompanySearch(query, searchParentIdentity = false, c
 
     return callback(null, await searchSeq([
         { registrationNumber: query }, //{ $eq: query }
-        { salesTaxCode:  query },
+        { salesTaxCode: query },
         { name: { $gte: query } },
     ]))
 }

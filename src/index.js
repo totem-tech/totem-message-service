@@ -5,13 +5,14 @@ import express from 'express'
 import fs from 'fs'
 import https from 'https'
 import socketIO from 'socket.io'
-import request from 'request'
 import uuid from 'uuid'
 import { isFn, isArr, isBool } from './utils/utils'
 import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
 import DataStorage from './utils/DataStorage'
+import PromisE from './utils/PromisE'
 import { handleCompany, handleCompanySearch } from './companies'
 import { handleCountries } from './countries'
+import { handlers as crowdloanHandlers } from './crowdloan'
 import {
     handleCurrencyConvert,
     handleCurrencyList,
@@ -20,10 +21,32 @@ import {
 } from './currencies'
 // import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest } from './faucetRequests'
-import { handleLanguageErrorMessages, handleLanguageTranslations, setTexts, setup as setupLang } from './language'
-import { handleNotification, handleNotificationGetRecent, handleNotificationSetStatus } from './notification'
-import { handleMessage, handleMessageGetRecent, handleMessageGroupName } from './messages'
+import { handleGlAccounts } from './glAccounts'
+import {
+    handleLanguageErrorMessages,
+    handleLanguageTranslations,
+    setTexts,
+    setup as setupLang,
+} from './language'
+import {
+    handleMessage,
+    handleMessageGetRecent,
+    handleMessageGroupName,
+} from './messages'
+import { handleNewsletterSignup } from './newsletterSignup'
+import {
+    handleNotification,
+    handleNotificationGetRecent,
+    handleNotificationSetStatus,
+} from './notification'
 import { handleProject, handleProjectsByHashes } from './projects'
+import rewardsHandlers from './rewards'
+import {
+    handleTask,
+    handleTaskGetById,
+    handleTaskMarketApply,
+    handleTaskMarketSearch,
+} from './task'
 import {
     handleDisconnect,
     handleIdExists,
@@ -34,12 +57,6 @@ import {
     ROLE_ADMIN,
     broadcast,
 } from './users'
-import { handleTask, handleTaskGetById } from './task'
-import { handleGlAccounts } from './glAccounts'
-import { handleNewsletterSignup } from './newsletterSignup'
-import rewardsHandlers from './rewards'
-import { handlers as crowdloanHandlers } from './crowdloan'
-import PromisE from './utils/PromisE'
 
 let maintenanceMode = false
 let requestCount = 0
@@ -180,6 +197,8 @@ const events = {
     // Task 
     'task': handleTask,
     'task-get-by-id': handleTaskGetById,
+    'task-market-apply': handleTaskMarketApply,
+    'task-market-search': handleTaskMarketSearch,
 }
 
 const interceptHandler = (name, handler) => async function (...args) {

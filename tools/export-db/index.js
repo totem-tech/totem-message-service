@@ -1,6 +1,6 @@
 import CouchDBStorage from '../../src/utils/CouchDBStorage'
 import DataStorage from '../../src/utils/DataStorage'
-import { isObj, isStr } from '../../src/utils/utils'
+import { isBool, isObj, isStr } from '../../src/utils/utils'
 
 /**
  * @name    execute 
@@ -11,15 +11,22 @@ import { isObj, isStr } from '../../src/utils/utils'
  * @param   {Number}        skip        number of items to skip
  * @param   {String}        url         CouchDB connection URL
  * @param   {String|Object} selector    CouchDB mango query selector
+ * @param   {Boolean}       fileOverride (optional) whether to override storage file when saving exported data.
+ *                          false => new data will be merged with existing data. unique latest entries will be kept
+ *                          true => existing list will be replaced with new data
+ *                          Default: true
  * 
  * @returns {DataStorage}
  */
-export async function execute(dbName, filename, limit, skip, url, selector) {
+export async function execute(dbName, filename, limit, skip, url, selector, fileOverride) {
     url = url || process.env.CouchDB_URL
     dbName = dbName || process.env.DBName
     filename = filename || process.env.FILENAME
     limit = limit || parseInt(process.env.LIMIT || 99999999)
     skip = skip || parseInt(process.env.SKIP || 0)
+    fileOverride = isBool(fileOverride)
+        ? fileOverride
+        : `${process.env.FILE_OVERRIDE}`.toLowerCase() !== 'false'
     if (!dbName) throw new Error('DBName required')
     if (!url) throw new Error('CouchDB_URL required')
 
@@ -36,7 +43,7 @@ export async function execute(dbName, filename, limit, skip, url, selector) {
     filename = filename.replace(/\:/g, '-')
 
     const storage = new DataStorage(filename)
-    storage.setAll(result)
+    storage.setAll(result, fileOverride)
     console.log(`${result.size} entries saved to ${filename}`)
 
     storage.couchDB = db
