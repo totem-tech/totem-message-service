@@ -181,10 +181,12 @@ export const VALID_TYPES = Object.freeze({
                 status: { type: TYPES.string },
                 rewardId: { type: TYPES.string },
             },
-            validate: validateUserIsSystem
+            // Only the application itself should be able to send this notification
+            validate: validateUserIsSystem,
         },
         signupReward: {
-            validate: validateUserIsSystem
+            // Only the application itself should be able to send this notification
+            validate: validateUserIsSystem,
         },
         messageField: {
             ...commonConfs.str3To160Required,
@@ -233,6 +235,29 @@ export const VALID_TYPES = Object.freeze({
         // invoice: {},
         // // notify task assignee when task has been paid out or disputed
         // invoice_response: {},
+        marketplace_accept: {
+            dataFields: {
+                taskId: { required: true, type: TYPES.hash },
+            },
+            // Only the application itself should be able to send this notification
+            validate: validateUserIsSystem,
+        },
+        marketplace_apply: {
+            dataFields: {
+                applications: { required: true, type: TYPES.integer },
+                taskId: { required: true, type: TYPES.hash },
+            },
+            // Only the application itself should be able to send this notification
+            validate: validateUserIsSystem,
+        },
+        marketplace_reject: {
+            dataFields: {
+                taskId: { required: true, type: TYPES.hash },
+            },
+            messageField: commonConfs.str3To160,
+            // Only the application itself should be able to send this notification
+            validate: validateUserIsSystem,
+        },
     },
     timekeeping: {
         dispute: {

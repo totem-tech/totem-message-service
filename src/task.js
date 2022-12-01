@@ -1,6 +1,7 @@
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
     arrUnique,
+    generateHash,
     isArr,
     isFn,
     isStr,
@@ -14,6 +15,8 @@ import {
 } from './utils/validator'
 import { authorizeData, recordTypes } from './blockchain'
 import { setTexts } from './language'
+import { sendNotification } from './notification'
+import { systemUserSymbol } from './users'
 
 // Tasks database
 const tasks = new CouchDBStorage(null, 'task')
@@ -68,7 +71,7 @@ const validatorConfig = {
         type: TYPES.hex,
     },
     tags: {
-        maxLength: 3,
+        maxLength: 6,
         required: false,
         type: TYPES.array,
     },
@@ -81,21 +84,21 @@ const validatorConfig = {
 }
 const REQUIRED_KEYS = Object.keys(validatorConfig)
 
-const processTasksResult = (tasks = new Map(), userId) => (isArr(tasks)
-    ? tasks
-    : [...tasks.values()]
-)
-    .forEach(task => {
-        if (!task.isMarket) return
+const processTasksResult = (tasks = new Map(), userId) => (
+    isArr(tasks)
+        ? tasks
+        : [...tasks.values()]
+).forEach(task => {
+    if (!task.isMarket) return
 
-        // exclude all other applicants user IDs
-        task.applications = (task.applications || [])
-            .map(x =>
-                x.userId === userId
-                    ? x
-                    : objClean(x, ['workerAddress'])
-            )
-    })
+    // exclude all other applicants user IDs
+    task.applications = (task.applications || [])
+        .map(x =>
+            x.userId === userId
+                ? x
+                : objClean(x, ['workerAddress'])
+        )
+})
 
 // handleTask saves non-blockchain task details to the database.
 // Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
@@ -177,36 +180,106 @@ export async function handleTaskGetById(ids, callback) {
 }
 handleTaskGetById.requireLogin = true
 
-export async function handleTaskMarketApply(taskId, workerAddress, callback) {
+/**
+ * @name    taskMarketApply
+ * @summary apply for an open marketplace task
+ * 
+ * @param   {Object}    application
+ * @param   {Array}     application.links
+ * @param   {String}    application.proposal
+ * @param   {String}    application.taskId
+ * @param   {String}    application.workerAddress
+ * @param   {Function}  callback    Callback function expected arguments:
+ *                                  @err    String: error message if request failed
+ */
+export async function handleTaskMarketApply(application, callback) {
     if (!isFn(callback)) return
+
+    const err = validateObj(
+        application,
+        handleTaskMarketApply.validationConf,
+        true,
+        true,
+    )
+    if (err) return callback(err)
 
     const [_, user] = this
     const { id: userId } = user
+    const {
+        links,
+        taskId,
+        workerAddress,
+    } = application
     const task = await tasks.get(taskId)
     if (!task) return callback(messages.errTask404)
 
-    const err = validate(workerAddress, { type: TYPES.identity })
-    if (err) return callback(err)
-
-    task.applications = task.applications || []
-    const alreadyApplied = task
-        .applications
-        .find(x =>
-            x.workerAddress === workerAddress
-            || x.userId === userId
-        )
+    const {
+        applications = [],
+        createdBy,
+    } = task
+    const alreadyApplied = applications.find(x =>
+        x.workerAddress === workerAddress
+        || x.userId === userId
+    )
     if (alreadyApplied) return callback(messages.errAlreadyApplied)
 
-    task.applications.push({
+    application = {
+        ...application,
+        links: links.map(link =>
+            `${link}`.slice(0, 96)
+        ),
         date: new Date(),
         userId,
-        workerAddress,
-    })
+    }
+    task.applications = [
+        ...applications,
+        objClean(
+            application,
+            Object
+                .keys(application)
+                .sort(),
+        ),
+    ]
     await tasks.set(taskId, task)
-    // application successful
+    // application successful >> send notification to task owner
+    const notificationId = generateHash('task', + taskId + createdBy)
+    sendNotification.call(
+        [systemUserSymbol],
+        userId,
+        [createdBy],
+        'task',
+        'marketplace_apply',
+        undefined,
+        {
+            applications: task.applications.length,
+            taskId,
+        },
+        notificationId,
+    )
     return callback()
 }
 handleTaskMarketApply.requireLogin = true
+handleTaskMarketApply.validationConf = {
+    links: {
+        maxLength: 5,
+        required: false,
+        type: TYPES.array,
+    },
+    proposal: {
+        maxLength: 500,
+        minLength: 50,
+        required: true,
+        type: TYPES.string,
+    },
+    taskId: {
+        required: true,
+        type: TYPES.hash,
+    },
+    workerAddress: {
+        required: true,
+        type: TYPES.identity,
+    },
+}
 
 /**
  * @name    handleTaskSearch
@@ -241,38 +314,40 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
         selector = [
             {
                 isMarket: true,
-                title: { $gte: keywords },
+                tags: {
+                    $in: isArr(tags)
+                        ? tags
+                        : [keywords],
+                },
             },
             {
                 isMarket: true,
-                createdBy: createdBy || keywords,
+                createdBy: { $eq: createdBy || keywords },
+            },
+            {
+                isMarket: true,
+                title: { $gte: keywords },
             },
             {
                 isMarket: true,
                 description: { $gte: description || keywords },
             },
-            {
-                isMarket: true,
-                tags: { $in: tags || [keywords] },
-            },
         ].filter(Boolean)
-
         result = await tasks.searchMulti(selector, limit)
-    } else {
-        const skip = (pageNo - 1) * limit
-        const extraProps = {
-            sort: !keywords
-                ? [{ tsCreated: 'desc' }]
-                : ['title']
-        }
-        result = await tasks.search(
-            selector,
-            limit,
-            skip,
-            true,
-            extraProps,
-        )
     }
+    const skip = (pageNo - 1) * limit
+    const extraProps = {
+        sort: !keywords
+            ? [{ tsCreated: 'desc' }]
+            : undefined
+    }
+    result = result || await tasks.search(
+        selector,
+        limit,
+        skip,
+        true,
+        extraProps,
+    )
 
     // console.log(JSON.stringify(selector, null, 4))
     // console.log(result, '\n\n')
@@ -286,45 +361,28 @@ setTimeout(async () => {
     // create an index for the field `roles`, ignores if already exists
     const indexDefs = [
         {
-            index: { fields: ['createdBy'] },
+            index: { fields: ['isMarket', 'createdBy'] },
             name: 'createdBy-index',
         },
         {
-            index: {
-                fields: [
-                    'description',
-                    'isMarket',
-                    'tags',
-                    'title',
-                ],
-            },
-            name: 'search-index',
-        },
-        {
-            index: { fields: ['isMarket'] },
+            index: { fields: ['isMarket', 'description'] },
             name: 'isMarket-index',
         },
         {
-            index: { fields: ['tsCreated'] },
-            name: 'tsCreated-index',
+            index: { fields: ['isMarket', 'tags'] },
+            name: 'tags-index',
         },
         {
-            index: { fields: ['title'] },
+            index: { fields: ['isMarket', 'title'] },
             name: 'title-index',
+        },
+        {
+            index: { fields: ['isMarket', 'tsCreated'] },
+            name: 'tsCreated-index',
         },
     ]
     indexDefs.forEach(async (def) =>
         await (await tasks.getDB())
             .createIndex(def)
-    )
-
-    // create design document to enable case-insensitive search of twitter handles
-    await tasks.viewCreateMap(
-        'lowercase',
-        'twitterHandle',
-        `function (doc) {
-            if(!(doc.socialHandles || {}).twitter) return
-            emit(doc.socialHandles.twitter.handle.toLowerCase(), null)
-        }`
     )
 })
