@@ -66,9 +66,21 @@ const validatorConfig = {
         required: true,
         type: TYPES.integer,
     },
+    orderType: {
+        required: true,
+        type: TYPES.integer,
+    },
     parentId: {
         required: false,
-        type: TYPES.hex,
+        type: TYPES.hash,
+    },
+    productId: {
+        required: true,
+        type: TYPES.hash,
+    },
+    proposalRequired: {
+        required: true,
+        type: TYPES.boolean,
     },
     tags: {
         maxLength: 6,
@@ -82,7 +94,7 @@ const validatorConfig = {
         type: TYPES.string
     },
 }
-const REQUIRED_KEYS = Object.keys(validatorConfig)
+const VALID_KEYS = Object.keys(validatorConfig)
 
 const processTasksResult = (tasks = new Map(), userId) => (
     isArr(tasks)
@@ -116,6 +128,7 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
         .tags
         .split(',')
         .filter(Boolean)
+    console.log('task', task)
     let err = validate(taskId, { required: true, type: TYPES.hex })
         || validateObj(task, validatorConfig, true, true)
     if (err) return callback(err)
@@ -124,7 +137,7 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     // const user = getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
 
-    task = objClean(task, REQUIRED_KEYS)
+    task = objClean(task, VALID_KEYS)
     // check if data has been authorized using BONSAI
     const tokenData = `${recordTypes.task}${ownerAddress}${JSON.stringify(task)}`
     const authErr = await authorizeData(taskId, tokenData)
@@ -195,9 +208,10 @@ handleTaskGetById.requireLogin = true
 export async function handleTaskMarketApply(application, callback) {
     if (!isFn(callback)) return
 
+    const { validationConf } = handleTaskMarketApply
     const err = validateObj(
         application,
-        handleTaskMarketApply.validationConf,
+        validationConf,
         true,
         true,
     )
@@ -236,7 +250,7 @@ export async function handleTaskMarketApply(application, callback) {
         objClean(
             application,
             Object
-                .keys(application)
+                .keys(validationConf)
                 .sort(),
         ),
     ]
