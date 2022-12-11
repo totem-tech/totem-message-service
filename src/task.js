@@ -1,9 +1,11 @@
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
+    arrSort,
     arrUnique,
     generateHash,
     isArr,
     isFn,
+    isHash,
     isStr,
     isValidNumber,
     objClean,
@@ -61,6 +63,10 @@ const validatorConfig = {
         required: true,
         type: TYPES.boolean,
     },
+    isOpen: {
+        required: false,
+        type: TYPES.boolean,
+    },
     isSell: {
         accept: [0, 1],
         required: true,
@@ -114,7 +120,7 @@ const processTasksResult = (tasks = new Map(), userId) => (
 
 // handleTask saves non-blockchain task details to the database.
 // Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
-// Login is required simply for the purpose of loggin the User ID who saved the data.
+// Login is required simply for the purpose of logging the User ID who saved the data.
 // 
 // Params:
 // @taskId      string: ID of the task
@@ -128,12 +134,12 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
         .tags
         .split(',')
         .filter(Boolean)
-    console.log('task', task)
+
     let err = validate(taskId, { required: true, type: TYPES.hex })
         || validateObj(task, validatorConfig, true, true)
     if (err) return callback(err)
 
-    const [client, user] = this
+    const [_, user] = this
     // const user = getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
 
@@ -208,7 +214,7 @@ handleTaskGetById.requireLogin = true
 export async function handleTaskMarketApply(application, callback) {
     if (!isFn(callback)) return
 
-    const { validationConf } = handleTaskMarketApply
+    const { validationConf, validKeys } = handleTaskMarketApply
     const err = validateObj(
         application,
         validationConf,
@@ -227,33 +233,31 @@ export async function handleTaskMarketApply(application, callback) {
     const task = await tasks.get(taskId)
     if (!task) return callback(messages.errTask404)
 
-    const {
+    let {
         applications = [],
         createdBy,
     } = task
-    const alreadyApplied = applications.find(x =>
+    const existingApplication = applications.find(x =>
         x.workerAddress === workerAddress
         || x.userId === userId
     )
-    if (alreadyApplied) return callback(messages.errAlreadyApplied)
+    if (existingApplication) return callback(messages.errAlreadyApplied)
 
+    const now = new Date()
     application = {
+        tsCreated: now,
         ...application,
         links: links.map(link =>
             `${link}`.slice(0, 96)
         ),
-        date: new Date(),
+        tsUpdated: now,
         userId,
     }
     task.applications = [
         ...applications,
-        objClean(
-            application,
-            Object
-                .keys(validationConf)
-                .sort(),
-        ),
+        objClean(application, validKeys),
     ]
+    task.applicationsCount = task.applications.length
     await tasks.set(taskId, task)
     // application successful >> send notification to task owner
     const notificationId = generateHash('task', + taskId + createdBy)
@@ -282,7 +286,7 @@ handleTaskMarketApply.validationConf = {
     proposal: {
         maxLength: 500,
         minLength: 50,
-        required: true,
+        required: false,
         type: TYPES.string,
     },
     taskId: {
@@ -294,6 +298,12 @@ handleTaskMarketApply.validationConf = {
         type: TYPES.identity,
     },
 }
+handleTaskMarketApply.validKeys = [
+    ...Object.keys(handleTaskMarketApply.validationConf),
+    'tsCreated',
+    'tsUpdated',
+    'userId',
+].sort()
 
 /**
  * @name    handleTaskSearch
@@ -316,6 +326,7 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
         pageNo = 1,
         tags,
     } = filter
+
     pageNo = !isValidNumber(pageNo) || pageNo <= 1
         ? 1
         : pageNo
@@ -324,7 +335,12 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
         isMarket: true,
     }
     let result
-    if (!!keywords) {
+    if (isHash(keywords)) {
+        selector = {
+            _id: keywords,
+            isMarket: true,
+        }
+    } else if (!!keywords) {
         selector = [
             {
                 isMarket: true,
@@ -362,9 +378,6 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
         true,
         extraProps,
     )
-
-    // console.log(JSON.stringify(selector, null, 4))
-    // console.log(result, '\n\n')
 
     processTasksResult(result, userId)
     callback(null, result)
