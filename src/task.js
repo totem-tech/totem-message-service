@@ -26,11 +26,12 @@ const tasks = new CouchDBStorage(null, 'task')
 let messages = {
     errTask404: 'task not found',
     errAlreadyApplied: 'you have already applied for this task',
-    invalidKeys: 'Missing on or more of the required properties',
-    invalidRequest: 'Invalid request',
-    loginRequired: 'Login/registration required',
-    maxLenDesc: 'Description exceeds maximum acceptable length',
-    maxLenTitle: 'Title exceeds maximum acceptable length',
+    errTaskClosed: 'applications are no longer being accepted',
+    invalidKeys: 'missing on or more of the required properties',
+    invalidRequest: 'invalid request',
+    loginRequired: 'login/registration required',
+    maxLenDesc: 'description exceeds maximum acceptable length',
+    maxLenTitle: 'title exceeds maximum acceptable length',
 }
 messages = setTexts(messages)
 // configuration to validate task object using `validateObj` function
@@ -59,12 +60,12 @@ const validatorConfig = {
         required: true,
         type: TYPES.integer,
     },
-    isMarket: {
-        required: true,
+    isClosed: { // no longer accepting applications
+        required: false,
         type: TYPES.boolean,
     },
-    isOpen: {
-        required: false,
+    isMarket: {
+        required: true,
         type: TYPES.boolean,
     },
     isSell: {
@@ -232,6 +233,7 @@ export async function handleTaskMarketApply(application, callback) {
     } = application
     const task = await tasks.get(taskId)
     if (!task) return callback(messages.errTask404)
+    if (task.isClosed) return callback(messages.errTaskClosed)
 
     let {
         applications = [],
@@ -336,14 +338,17 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
     }
     let result
     if (isHash(keywords)) {
-        selector = {
-            _id: keywords,
-            isMarket: true,
-        }
+        const task = await tasks.get(keywords)
+        const result = new Map(
+            task.isMarket
+                ? [task._id, task]
+                : []
+        )
+        return callback(null, result)
     } else if (!!keywords) {
         selector = [
             {
-                isMarket: true,
+                ...selector,
                 tags: {
                     $in: isArr(tags)
                         ? tags
@@ -351,15 +356,15 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
                 },
             },
             {
-                isMarket: true,
+                ...selector,
                 createdBy: { $eq: createdBy || keywords },
             },
             {
-                isMarket: true,
+                ...selector,
                 title: { $gte: keywords },
             },
             {
-                isMarket: true,
+                ...selector,
                 description: { $gte: description || keywords },
             },
         ].filter(Boolean)
