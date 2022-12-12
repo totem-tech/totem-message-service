@@ -1,3 +1,4 @@
+import { BehaviorSubject } from 'rxjs'
 import { connect, query } from './utils/polkadotHelper'
 import types from './utils/totem-polkadot-js-types'
 import { generateHash } from './utils/utils'
@@ -14,6 +15,7 @@ let connectionPromsie
 let nodes = [
     process.env.URL_TOTEM_NODE || 'wss://node.totem.live',
 ]
+export const rxBlockNumber = new BehaviorSubject()
 export const recordTypes = {
     /// 1000
     /// 2000
@@ -61,13 +63,24 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
         return connection
     }
 
-    console.log('Polkadot: connecting to', nodeUrl)
+    console.log('PolkadotJS: connecting to', nodeUrl)
     connectionPromsie = connect(nodeUrl, types, true)
     const { api, keyring, provider } = await connectionPromsie
-    console.log('Polkadot: connected')
+    console.log('PolkadotJS: connected')
     connection.api = api
     connection.keyring = keyring
     connection.provider = provider
     connectionPromsie = null
+
+    // subscribe to current block number
+    if (getConnection.blockUnsub) getConnection.blockUnsub()
+    getConnection.blockUnsub = query(
+        api,
+        'api.rpc.chain.subscribeNewHeads',
+        ({ number } = {}) => rxBlockNumber.next(number),
+    )
+
     return connection
 }
+
+setTimeout(() => getConnection().catch(err => console.log('Failed to connect to blockchain', err)))

@@ -237,22 +237,32 @@ export const VALID_TYPES = Object.freeze({
         // invoice_response: {},
         marketplace_accept: {
             dataFields: {
-                taskId: { required: true, type: TYPES.hash },
+                taskId: commonConfs.idHash,
             },
             // Only the application itself should be able to send this notification
             validate: validateUserIsSystem,
         },
+        marketplace_application_status: {
+            dataFields: {
+                status: {
+                    accept: [0, 1, 2],
+                    required: true,
+                    type: TYPES.integer,
+                },
+                taskId: commonConfs.idHash,
+            }
+        },
         marketplace_apply: {
             dataFields: {
                 applications: { required: true, type: TYPES.integer },
-                taskId: { required: true, type: TYPES.hash },
+                taskId: commonConfs.idHash,
             },
             // Only the application itself should be able to send this notification
             validate: validateUserIsSystem,
         },
         marketplace_reject: {
             dataFields: {
-                taskId: { required: true, type: TYPES.hash },
+                taskId: commonConfs.idHash,
             },
             messageField: commonConfs.str3To160,
             // Only the application itself should be able to send this notification
