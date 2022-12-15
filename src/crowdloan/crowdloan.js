@@ -173,14 +173,14 @@ setTimeout(async () => {
         `function (doc) { emit(doc._id, doc.amountPledged || 0) }`,
         '_sum',
     )
-    broadcastPledgeTotal()
-    rxUserLoggedIn.subscribe(data => {
-        if (!data) return
-        const { clientId } = data
+    // broadcastPledgeTotal()
+    // rxUserLoggedIn.subscribe(data => {
+    //     if (!data) return
+    //     const { clientId } = data
 
-        setTimeout(
-            () => emitToClients(clientId, eventPldegedTotal, [rxPldegedTotal.value]),
-            500,
-        )
-    })
+    //     setTimeout(
+    //         () => emitToClients(clientId, eventPldegedTotal, [rxPldegedTotal.value]),
+    //         500,
+    //     )
+    // })
 })

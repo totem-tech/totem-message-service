@@ -129,7 +129,19 @@ export async function handleCompanySearch(query, searchParentIdentity = false, c
 
     return callback(null, await searchSeq([
         { registrationNumber: query }, //{ $eq: query }
-        { salesTaxCode: query },
+        // { salesTaxCode: query },
         { name: { $gte: query } },
-    ]))
+    ]), 100)
 }
+
+// setTimeout(async () => {
+//     await companies.viewCreateMap(
+//         'search',
+//         'search',
+//         `function (doc) {
+//             doc.name && emit(doc.name.toLowerCase(), null)
+//             doc.countryOfOrigin && emit(doc.countryOfOrigin.toLowerCase(), null)
+//             doc.registrationNumber && emit(doc.registrationNumber, null)
+//         }`
+//     )
+// })

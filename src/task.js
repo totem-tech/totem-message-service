@@ -5,6 +5,7 @@ import {
     arrSort,
     arrUnique,
     generateHash,
+    isAddress,
     isArr,
     isError,
     isFn,
@@ -21,7 +22,7 @@ import {
 import { authorizeData, recordTypes, rxBlockNumber } from './blockchain'
 import { setTexts } from './language'
 import { commonConfs, sendNotification } from './notification'
-import { systemUserSymbol } from './users'
+import { systemUserSymbol, users } from './users'
 
 // Tasks database
 const tasks = new CouchDBStorage(null, 'task')
@@ -47,6 +48,10 @@ const applicationStatus = {
 }
 // configuration to validate task object using `validateObj` function
 const validatorConfig = {
+    fulfiller: {
+        required: false,
+        type: TYPES.identity,
+    },
     amountXTX: {
         required: true,
         type: TYPES.integer,
@@ -94,7 +99,7 @@ const validatorConfig = {
     },
     productId: commonConfs.idHash,
     proposalRequired: {
-        required: true,
+        required: false,
         type: TYPES.boolean,
     },
     tags: {
@@ -177,7 +182,7 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
         updatedBy: user.id,
         tsUpdated,
     }
-    if (task.isMarket) task.applications = []
+    if (task.isMarket) task.applications = existingTask.applications || []
 
     // save to database
     const result = await tasks.set(taskId, task)
@@ -422,6 +427,19 @@ handleTaskMarketApply.validKeys = [
 ].sort()
 
 /**
+ * @name    handleTaskMarketCompleted
+ * @summary retrieve all tasks completed by user
+ * 
+ * @param   {Function} callback 
+ */
+export async function handleTaskMarketCompleted(callback) {
+    if (!isFn(callback)) return
+
+
+}
+handleTaskMarketCompleted.loginRequired = true
+
+/**
  * @name    handleTaskSearch
  * @summary search for marketplace tasks
  * 
@@ -436,59 +454,75 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
     const [_, user] = this
     const { id: userId } = user
     let {
-        createdBy,
-        description,
         keywords = '',
         pageNo = 1,
-        tags,
     } = filter
+
+    if (!isStr(keywords)) keywords = ''
 
     pageNo = !isValidNumber(pageNo) || pageNo <= 1
         ? 1
         : pageNo
     const limit = 100
+    const skip = (pageNo - 1) * limit
     let selector = {
         isMarket: true,
     }
-    let result
+    let result, extraProps
     if (isHash(keywords)) {
+        // fetch by id
         const task = await tasks.get(keywords)
-        const result = new Map(
-            task.isMarket
-                ? [task._id, task]
-                : []
+        const { _id, isMarket } = task || {}
+        result = new Map(
+            _id && isMarket
+                ? [[_id, task]]
+                : undefined
         )
-        return callback(null, result)
+    } else if (keywords.startsWith('@')) {
+        // search by creator user ID
+        const createdBy = keywords
+            .replace('@', '')
+            .trim()
+        selector = {
+            isMarket: true,
+            createdBy,
+        }
+    } else if (keywords.startsWith('tag:')) {
+        const tags = keywords
+            .replace('tags:', '')
+            .split(',')
+        selector = {
+            isMarket: true,
+            tags: {
+                $in: isArr(tags)
+                    ? tags
+                    : [keywords],
+            },
+        }
     } else if (!!keywords) {
-        selector = [
-            {
-                ...selector,
-                tags: {
-                    $in: isArr(tags)
-                        ? tags
-                        : [keywords],
-                },
-            },
-            {
-                ...selector,
-                createdBy: { $eq: createdBy || keywords },
-            },
-            {
-                ...selector,
-                title: { $gte: keywords },
-            },
-            {
-                ...selector,
-                description: { $gte: description || keywords },
-            },
-        ].filter(Boolean)
-        result = await tasks.searchMulti(selector, limit)
+        // search by title, description and tags
+        result = await tasks.view('search', 'search-market', {
+            keys: keywords
+                .split(' ')
+                .filter(Boolean),
+            limit: 100,
+            group: true,
+        }, false)
+        const ids = arrUnique(
+            result
+                .map(x => (x.value || []))
+                .flat()
+            // .flat() 
+        ).slice(skip, limit)
+
+        result = await tasks.getAll(ids)
     }
-    const skip = (pageNo - 1) * limit
-    const extraProps = {
-        sort: !keywords
-            ? [{ tsCreated: 'desc' }]
-            : undefined
+    if (!result) {
+        extraProps = {
+            sort: !keywords
+                ? [{ tsCreated: 'desc' }]
+                : undefined
+        }
     }
     result = result || await tasks.search(
         selector,
@@ -532,3 +566,33 @@ setTimeout(async () => {
             .createIndex(def)
     )
 })
+setTimeout(async () => {
+    const mapFunc = `function (doc) {
+        if (!doc.isMarket) return
+        doc
+            .title
+            .toLowerCase()
+            .split(' ')
+            .forEach(word => emit(word, doc._id))
+        
+        doc.description && doc
+            .description
+            .toLowerCase()
+            .split(' ')
+            .forEach(word => emit(word, doc._id))
+        
+        Array.isArray(doc.tags)
+            && doc.tags.length > 0
+            && doc.tags.forEach(tag => emit(tag, doc._id))
+    }`
+
+    // required to get gruped IDS
+    const reduceFunc = '(_, values) => values'
+    await tasks.viewCreateMap(
+        'search',
+        'search-market',
+        mapFunc,
+        reduceFunc,
+    )
+})
+

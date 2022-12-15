@@ -83,4 +83,8 @@ export const getConnection = async (nodeUrl = nodes[0]) => {
     return connection
 }
 
-setTimeout(() => getConnection().catch(err => console.log('Failed to connect to blockchain', err)))
+setTimeout(() =>
+    getConnection().catch(err =>
+        console.log('Failed to connect to blockchain', err)
+    )
+)
