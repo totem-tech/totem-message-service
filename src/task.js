@@ -426,18 +426,18 @@ handleTaskMarketApply.validKeys = [
     'userId',
 ].sort()
 
-/**
- * @name    handleTaskMarketCompleted
- * @summary retrieve all tasks completed by user
- * 
- * @param   {Function} callback 
- */
-export async function handleTaskMarketCompleted(callback) {
-    if (!isFn(callback)) return
+// /**
+//  * @name    handleTaskMarketCompleted
+//  * @summary retrieve all tasks completed by user
+//  * 
+//  * @param   {Function} callback 
+//  */
+// export async function handleTaskMarketCompleted(callback) {
+//     if (!isFn(callback)) return
 
 
-}
-handleTaskMarketCompleted.loginRequired = true
+// }
+// handleTaskMarketCompleted.loginRequired = true
 
 /**
  * @name    handleTaskSearch
@@ -489,7 +489,7 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
         }
     } else if (keywords.startsWith('tag:')) {
         const tags = keywords
-            .replace('tags:', '')
+            .replace('tag:', '')
             .split(',')
         selector = {
             isMarket: true,
