@@ -1,11 +1,8 @@
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
-    arrSort,
     arrUnique,
     generateHash,
-    isAddress,
     isArr,
-    isError,
     isFn,
     isHash,
     isStr,
@@ -63,8 +60,8 @@ const validatorConfig = {
         type: TYPES.integer,
     },
     description: {
-        min: 0,
-        maxLength: 5000,
+        min: 50,
+        maxLength: 2000,
         required: false,
         type: TYPES.string,
     },
@@ -105,7 +102,7 @@ const validatorConfig = {
         type: TYPES.array,
     },
     title: {
-        maxLength: 160,
+        maxLength: 80,
         minLength: 3,
         required: true,
         type: TYPES.string
@@ -270,7 +267,7 @@ export async function handleTaskMarketApply(application, callback) {
         tsCreated: now,
         ...application,
         links: links.map(link =>
-            `${link}`.slice(0, 96)
+            `${link}`.slice(0, 100)
         ),
         status: (existingApplication || {}).status || 0,
         tsUpdated: now,
@@ -314,7 +311,7 @@ handleTaskMarketApply.validationConf = {
         type: TYPES.string,
     },
     proposal: {
-        maxLength: 500,
+        maxLength: 2000,
         minLength: 50,
         required: false,
         type: TYPES.string,
