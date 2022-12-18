@@ -203,6 +203,14 @@ export const VALID_TYPES = Object.freeze({
         assignment: {
             dataFields: {
                 fulfillerAddress: commonConfs.identity,
+                // @purpose an optional indicator to idenitify the purpose of the task assignement
+                purpose: {
+                    accept: [
+                        1, // marketplace place task assignment
+                    ],
+                    required: false,
+                    type: TYPES.integer,
+                },
                 taskId: commonConfs.idHash,
             },
         },
@@ -231,42 +239,32 @@ export const VALID_TYPES = Object.freeze({
                 taskTitle: commonConfs.str3To160Required,
             },
         },
-        // // notify task owner when a task has been completed and invoice created
-        // invoice: {},
-        // // notify task assignee when task has been paid out or disputed
-        // invoice_response: {},
-        marketplace_accept: {
-            dataFields: {
-                taskId: commonConfs.idHash,
-            },
-            // Only the application itself should be able to send this notification
-            validate: validateUserIsSystem,
-        },
-        marketplace_application_status: {
-            dataFields: {
-                status: {
-                    accept: [0, 1, 2],
-                    required: true,
-                    type: TYPES.integer,
-                },
-                taskId: commonConfs.idHash,
-            }
-        },
+        // marketplace task owner receives notification when a new application is received
         marketplace_apply: {
             dataFields: {
+                // number of applications so far
                 applications: { required: true, type: TYPES.integer },
                 taskId: commonConfs.idHash,
             },
             // Only the application itself should be able to send this notification
             validate: validateUserIsSystem,
         },
-        marketplace_reject: {
+        // marketplace applicant receives notification whenever the status of the application changes
+        marketplace_apply_response: {
             dataFields: {
+                // application status code
+                status: {
+                    accept: [
+                        0, // created/reset (not implemented)
+                        1, // accepted
+                        2, // rejected
+                    ],
+                    required: true,
+                    type: TYPES.integer,
+                },
+                // task ID
                 taskId: commonConfs.idHash,
-            },
-            messageField: commonConfs.str3To160,
-            // Only the application itself should be able to send this notification
-            validate: validateUserIsSystem,
+            }
         },
     },
     timekeeping: {

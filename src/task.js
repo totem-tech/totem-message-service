@@ -1,6 +1,4 @@
 import CouchDBStorage from './utils/CouchDBStorage'
-import { subjectAsPromise } from './utils/reactHelper'
-import { blockToDate, dateToBlock } from './utils/time'
 import {
     arrSort,
     arrUnique,
@@ -19,16 +17,15 @@ import {
     validate,
     validateObj,
 } from './utils/validator'
-import { authorizeData, recordTypes, rxBlockNumber } from './blockchain'
+import { authorizeData, recordTypes } from './blockchain'
 import { setTexts } from './language'
 import { commonConfs, sendNotification } from './notification'
-import { systemUserSymbol, users } from './users'
+import { systemUserSymbol } from './users'
 
 // Tasks database
 const tasks = new CouchDBStorage(null, 'task')
 // error messages
 let messages = {
-    errAcceptDeadline: 'worker must be given at least 12 hours prior to deadline',
     errAccessDenied: 'access denied',
     errAlreadyApplied: 'you have already applied for this task',
     errApplicantIsOwner: 'you cannot apply to the task you created',
@@ -220,107 +217,6 @@ export async function handleTaskGetById(ids, callback) {
 handleTaskGetById.requireLogin = true
 
 /**
- * @name    handleTaskMarketApplication
- * @summary task owner/publisher accept/rejects application(s)
- * 
- * @param   {Object}    data 
- * @param   {Boolean}   data.rejectOthers   (optional) if true all applications excluding accepted ones will be rejected
- * @param   {Boolean}   data.status         set accepted/rejected status for a specific applicant
- * @param   {String}    data.taskId
- * @param   {String}    data.workerAddress
- * @param   {Function}  callback            Args: [error String, updateCount Number]
- */
-export async function handleTaskMarketApplication(data, callback) {
-    if (!isFn(callback)) return
-
-    const [_, { _id: userId }] = this
-    const {
-        rejectOthers,
-        status,
-        taskId,
-        workerAddress,
-    } = data
-    const err = validateObj(data, handleTaskMarketApplication.validationConf)
-    if (err) return callback(err)
-
-    const task = await tasks.get(taskId)
-    if (!task) return callback(messages.errTask404)
-
-    const {
-        applications = [],
-        createdBy,
-        deadline,
-    } = task
-    if (userId !== createdBy) return callback(messages.errAccessDenied)
-
-    const application = applications.find(x => x.workerAddress === workerAddress)
-    if (!application) return callback(messages.invalidRequest)
-
-    // check if deadline is at least 12 hours from now.
-    // assignee must be given sufficient time to accept the task before the deadline.
-    const doAccept = status === applicationStatus.accepted
-    if (doAccept) {
-        // resolve only when a block number has been received
-        // ToDo: deal with block number not getting updated due to disconnection from node
-        const [promise] = subjectAsPromise(rxBlockNumber, n => n > 0, 10000)
-        const currentBlock = await promise.catch(err => err)
-        if (isError(currentBlock)) return callback(`${currentBlock}`)
-
-        // convert deadline (block number) to Date and then subtract by 12 hours
-        const deadlineDate = blockToDate(deadline, currentBlock, false)
-        const hours12 = 60 * 60 * 12
-        deadlineDate.setSeconds(-hours12)
-
-        // convert Date back to block number and compare with current block number
-        const preDeadlineBlock = dateToBlock(deadlineDate, currentBlock)
-        if (preDeadlineBlock >= currentBlock) return callback(messages.errAcceptDeadline)
-    }
-    let updateCount = 0
-    for (const application of applications) {
-        let {
-            status: aStatus,
-            workerAddress: aWorkerAddress,
-        } = application
-
-        // status cannot be changed if already accepted
-        const alreadyAccepted = aStatus === applicationStatus.accepted
-        if (alreadyAccepted) continue
-
-        // update status here
-        aStatus = workerAddress === aWorkerAddress
-            ? status
-            : rejectOthers
-                ? applicationStatus.rejected
-                : aStatus
-        // status unchanged
-        if (aStatus === application.status) continue
-
-        application.status = aStatus
-        updateCount++
-        // notify rejected user???
-        sendNotification(
-            createdBy,
-            [application.userId],
-        )
-    }
-
-    updateCount && await tasks.set(taskId, task)
-
-    callback(null, updateCount)
-}
-handleTaskMarketApplication.requireLogin = true
-handleTaskMarketApplication.validationConf = {
-    rejectOthers: { required: false, type: TYPES.boolean },
-    status: {
-        accept: Object.values(applicationStatus),
-        required: true,
-        type: TYPES.integer,
-    },
-    taskId: commonConfs.idHash,
-    workerAddress: commonConfs.identity,
-}
-
-/**
  * @name    taskMarketApply
  * @summary apply for an open marketplace task
  * 
@@ -386,7 +282,8 @@ export async function handleTaskMarketApply(application, callback) {
     ]
     task.applicationsCount = task.applications.length
     await tasks.set(taskId, task)
-    // application successful >> send notification to task owner
+    // application successful >> send notification to task owner.
+    // predetermined ID limits the number of application notifications to 1.
     const notificationId = generateHash('task', + taskId + createdBy)
     sendNotification.call(
         [systemUserSymbol],
@@ -410,6 +307,12 @@ handleTaskMarketApply.validationConf = {
         required: false,
         type: TYPES.array,
     },
+    name: {
+        maxLength: 32,
+        minLength: 3,
+        required: true,
+        type: TYPES.string,
+    },
     proposal: {
         maxLength: 500,
         minLength: 50,
@@ -425,6 +328,98 @@ handleTaskMarketApply.validKeys = [
     'tsUpdated',
     'userId',
 ].sort()
+
+/**
+ * @name    handleTaskMarketApplication
+ * @summary task owner/publisher accept/rejects application(s)
+ * 
+ * @param   {Object}    data 
+ * @param   {Boolean}   data.rejectOthers   (optional) if true all applications excluding accepted ones will be rejected
+ * @param   {Boolean}   data.status         set accepted/rejected status for a specific applicant
+ * @param   {String}    data.taskId
+ * @param   {String}    data.workerAddress
+ * @param   {Function}  callback            Args: [error String, updateCount Number]
+ */
+export async function handleTaskMarketApplyResponse(data, callback) {
+    if (!isFn(callback)) return
+
+    const [_, { _id: userId }] = this
+    const {
+        rejectOthers,
+        status,
+        taskId,
+        workerAddress,
+    } = data
+    const err = validateObj(data, handleTaskMarketApplyResponse.validationConf)
+    if (err) return callback(err)
+
+    const task = await tasks.get(taskId)
+    if (!task) return callback(messages.errTask404)
+
+    const {
+        applications = [],
+        createdBy,
+    } = task
+    if (userId !== createdBy) return callback(messages.errAccessDenied)
+
+    const application = applications.find(x =>
+        x.workerAddress === workerAddress
+    )
+    if (!application) return callback(messages.invalidRequest)
+
+    let updateCount = 0
+    for (const application of applications) {
+        let {
+            status: aStatus,
+            workerAddress: aWorkerAddress,
+        } = application
+
+        // status cannot be changed if already accepted
+        const alreadyAccepted = aStatus === applicationStatus.accepted
+        if (alreadyAccepted) continue
+
+        // update status here
+        aStatus = workerAddress === aWorkerAddress
+            ? status
+            : rejectOthers
+                ? applicationStatus.rejected
+                : aStatus
+        // status unchanged
+        if (aStatus === application.status) continue
+
+        application.status = aStatus
+        updateCount++
+        const accepted = aStatus === applicationStatus.accepted
+        // No need to notify if accepted. Task creation will send a notification
+        if (accepted) continue
+
+        // notify rejected user???
+        sendNotification(
+            createdBy,
+            [application.userId],
+            'task',
+            'marketplace_apply_response',
+            null,
+            { status, taskId },
+            generateHash(taskId, workerAddress)
+        )
+    }
+
+    updateCount && await tasks.set(taskId, task)
+
+    callback(null, updateCount)
+}
+handleTaskMarketApplyResponse.requireLogin = true
+handleTaskMarketApplyResponse.validationConf = {
+    rejectOthers: { required: false, type: TYPES.boolean },
+    status: {
+        accept: Object.values(applicationStatus),
+        required: true,
+        type: TYPES.integer,
+    },
+    taskId: commonConfs.idHash,
+    workerAddress: commonConfs.identity,
+}
 
 // /**
 //  * @name    handleTaskMarketCompleted

@@ -44,8 +44,8 @@ import rewardsHandlers from './rewards'
 import {
     handleTask,
     handleTaskGetById,
-    handleTaskMarketApplication,
     handleTaskMarketApply,
+    handleTaskMarketApplyResponse,
     handleTaskMarketSearch,
 } from './task'
 import {
@@ -199,7 +199,7 @@ const events = {
     'task': handleTask,
     'task-get-by-id': handleTaskGetById,
     'task-market-apply': handleTaskMarketApply,
-    'task-market-application': handleTaskMarketApplication,
+    'task-market-apply-response': handleTaskMarketApplyResponse,
     'task-market-search': handleTaskMarketSearch,
 }
 
