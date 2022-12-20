@@ -119,8 +119,7 @@ const texts = setTexts({
 async function handleMaintenanceMode(active = false, callback) {
     if (!isFn(callback)) return
 
-    const client = this
-    const user = await getUserByClientId(client.id)
+    const [_, user] = this
     const { roles = [] } = user || {}
     const isAdmin = roles.includes(ROLE_ADMIN)
     if (isAdmin && isBool(active)) {
@@ -205,6 +204,7 @@ const events = {
 
 const interceptHandler = (name, handler) => async function (...args) {
     if (!isFn(handler)) return
+
     const requestId = uuid.v1()
     const client = this
     const userId = client.___userId
@@ -230,9 +230,10 @@ const interceptHandler = (name, handler) => async function (...args) {
         // user must be logged
         if (requireLogin && !userId) return hasCallback && callback(texts.loginRequired)
         // include the user object if login is required for this event
-        const thisArg = !requireLogin
-            ? client
-            : [client, await getUserByClientId(client.id)]
+        const thisArg = [
+            client,
+            await getUserByClientId(client.id),
+        ]
         await handler.apply(thisArg, args)
     } catch (err) {
         hasCallback && callback(`${texts.runtimeError}: ${requestId}`)

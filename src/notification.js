@@ -515,6 +515,7 @@ export async function sendNotification(senderId, recipients, type, childType, me
 // @callback    function : params: (@err string) 
 export async function handleNotification(recipients, type, childType, message, data, callback) {
     if (!isFn(callback)) return
+
     const [_, user] = this
     const senderId = user.id
     const args = [senderId, recipients, type, childType, message, data]

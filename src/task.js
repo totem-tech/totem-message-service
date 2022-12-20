@@ -143,6 +143,8 @@ const processTasksResult = (tasks = new Map(), userId) => (
 //                  @err    string: error message, if unsuccessful
 export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!isFn(callback)) return
+
+    const [_, user] = this
     // validate object properties including taskId
     if (isStr(task.tags)) task.tags = task
         .tags
@@ -153,7 +155,6 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
         || validateObj(task, validatorConfig, true, true)
     if (err) return callback(err)
 
-    const [_, user] = this
     // const user = getUserByClientId(client.id)
     if (!user) return callback(messages.loginRequired)
 
@@ -196,6 +197,7 @@ handleTask.requireLogin = true
  */
 export async function handleTaskGetById(ids, callback) {
     if (!isFn(callback)) return
+
     const [_, user] = this
     const { id: userId } = user || {}
     ids = arrUnique(
@@ -203,6 +205,8 @@ export async function handleTaskGetById(ids, callback) {
             ? ids
             : [ids]
     ).filter(Boolean)
+    if (!ids.length) return callback(null, new Map())
+
     const tasksMap = await tasks.getAll(
         ids,
         true,
@@ -211,7 +215,6 @@ export async function handleTaskGetById(ids, callback) {
     processTasksResult(tasksMap, userId)
     callback(null, tasksMap)
 }
-handleTaskGetById.requireLogin = true
 
 /**
  * @name    taskMarketApply
@@ -228,6 +231,7 @@ handleTaskGetById.requireLogin = true
 export async function handleTaskMarketApply(application, callback) {
     if (!isFn(callback)) return
 
+    const [_, user] = this
     const { validationConf, validKeys } = handleTaskMarketApply
     const err = validateObj(
         application,
@@ -237,7 +241,6 @@ export async function handleTaskMarketApply(application, callback) {
     )
     if (err) return callback(err)
 
-    const [_, user] = this
     const { id: userId } = user
     const {
         links,
@@ -443,8 +446,9 @@ handleTaskMarketApplyResponse.validationConf = {
  */
 export async function handleTaskMarketSearch(filter = {}, callback) {
     if (!isFn(callback)) return
+
     const [_, user] = this
-    const { id: userId } = user
+    const { id: userId } = user || {}
     let {
         keywords = '',
         pageNo = 1,
@@ -527,7 +531,6 @@ export async function handleTaskMarketSearch(filter = {}, callback) {
     processTasksResult(result, userId)
     callback(null, result)
 }
-handleTaskMarketSearch.requireLogin = true
 
 setTimeout(async () => {
     // create an index for the field `roles`, ignores if already exists

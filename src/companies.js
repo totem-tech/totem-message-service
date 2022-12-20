@@ -50,8 +50,10 @@ const messages = setTexts({
 // @callback    function: callback function
 export async function handleCompany(hash, company, callback) {
     if (!isFn(callback)) return
+
     const [_, user] = this
     if (!user) return callback(messages.loginRequired)
+
     const isValidHash = isHash(hash)
     if (!isValidHash) return callback(messages.invalidHash)
 

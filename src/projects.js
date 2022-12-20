@@ -34,6 +34,7 @@ const messages = setTexts({
 //                  If truthy and a project already exists, will return an error.
 export async function handleProject(hash, project, create, callback) {
     if (!isFn(callback)) return
+
     const [client, user] = this
     const existingProject = await projects.get(hash)
     if (create && !!existingProject) return callback(messages.exists)
@@ -87,6 +88,7 @@ handleProject.requireLogin = true
 export const handleProjectsByHashes = async (hashArr, callback) => {
     if (!isFn(callback)) return
     if (!isArr(hashArr) || hashArr.length === 0) return callback(messages.arrayRequired)
+
     let result = await projects.getAll(hashArr)
     const hashesNotFound = hashArr.filter(hash => !result.get(hash))
     callback(null, result, hashesNotFound)

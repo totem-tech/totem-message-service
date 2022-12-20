@@ -218,9 +218,8 @@ export const isUserOnline = userId => {
 
 // cleanup on user client disconnect
 export async function handleDisconnect() {
-    const client = this
+    const [client, user] = this
     clients.delete(client.id)
-    const user = onlineUsers.get(client.___userId)
     if (!user) return // nothing to do
 
     const clientIds = userClientIds.get(user.id) || []
@@ -287,10 +286,11 @@ handleIsUserOnline.requireLogin = true
  */
 export async function handleLogin(userId, secret, callback) {
     if (!isFn(callback)) return
+
     // prevent login with a reserved id
     if (RESERVED_IDS.includes(userId)) return callback(messages.reservedId)
 
-    const client = this
+    const [client] = this
     const user = await users.find({ _id: userId, secret })
     const {
         handshake: {
@@ -334,9 +334,10 @@ export async function handleLogin(userId, secret, callback) {
  */
 export async function handleRegister(userId, secret, address, referredBy, callback) {
     if (!isFn(callback)) return
-    const client = this
+
+    const [client, user] = this
     // prevent already registered user's attempt to register again!
-    if (!!client.___userId) return callback(messages.alreadyRegistered)
+    if (!!user) return callback(messages.alreadyRegistered)
 
     if (isStr(referredBy) && referredBy.includes('@')) {
         const [handle, platform] = referredBy.split('@')
