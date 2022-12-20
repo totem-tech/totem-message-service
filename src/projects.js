@@ -1,5 +1,6 @@
 import CouchDBStorage from './utils/CouchDBStorage'
 import { isArr, isFn, isObj, objClean } from './utils/utils'
+import { TYPES, validateObj } from './utils/validator'
 import { authorizeData } from './blockchain'
 import { setTexts } from './language'
 
@@ -15,9 +16,7 @@ const messages = setTexts({
     arrayRequired: 'Array required',
     bonsaiAuthFailed: 'BONSAI authentication failed',
     exists: 'Activity already exists. Please use a different combination of owner address, name and description.',
-    invalidDescMaxLen: `Description must not exceed ${descMaxLen} characters`,
     loginRequired: 'You must be logged in to perform this action',
-    projectInvalidKeys: `Activity must contain all of the following properties: ${requiredKeys.join()} and an unique hash`,
     projectNotFound: 'Activity not found',
 })
 
@@ -32,36 +31,44 @@ const messages = setTexts({
 // @token       string: BONSAI token to authorize that data is valid and approved by the project owner's identity only
 // @create      bool: whether to create or update the project.
 //                  If truthy and a project already exists, will return an error.
-export async function handleProject(hash, project, create, callback) {
+export async function handleProject(id, project, create, callback) {
     if (!isFn(callback)) return
 
-    const [client, user] = this
-    const existingProject = await projects.get(hash)
+    const [_, user] = this
+    const existingProject = await projects.get(id)
     if (create && !!existingProject) return callback(messages.exists)
 
     // return existing project
     if (!isObj(project)) return callback(
-        !!existingProject ? null : messages.projectNotFound,
+        !!existingProject
+            ? null
+            : messages.projectNotFound,
         existingProject
     )
 
-    // // makes sure only the project owner can execute the update operation
-    // const { userId } = existingProject || {}
-    // if (!create && isDefined(userId) && user.id !== userId) return callback(messages.accessDenied)
+    // validate data
+    const { validationConf, validKeys } = handleProject
+    let err = validateObj(
+        { id, ...project },
+        validationConf,
+        true,
+        true,
+    )
+    if (err) return callback(err)
 
-    // check if project contains all the required properties
-    const invalid = !hash || !project || requiredKeys.reduce((invalid, key) => invalid || !project[key], false)
-    if (invalid) return callback(messages.projectInvalidKeys)
-    if (project.description.length > descMaxLen) return callback(messages.invalidDescMaxLen)
     // exclude any unwanted data and only update the properties that's supplied
     project = objClean({ ...existingProject, ...project }, validKeys)
 
     // Authenticate using BONSAI
-    const authErr = await authorizeData(hash, project)
-    if (authErr) return callback(authErr)
+    err = await authorizeData(id, project)
+    if (err) return callback(err)
 
-    project.tsCreated = (existingProject || {}).createdAt || new Date().toISOString()
-    project.tsUpdated = new Date().toISOString()
+    const now = new Date().toISOString()
+    const {
+        createdAt = now
+    } = existingProject || {}
+    project.tsCreated = createdAt
+    project.tsUpdated = now
 
     // store user information
     if (create) {
@@ -72,11 +79,35 @@ export async function handleProject(hash, project, create, callback) {
     }
 
     // Add/update project
-    await projects.set(hash, project)
+    await projects.set(id, project)
     callback(null, project)
-    console.log(`Activity ${create ? 'created' : 'updated'}: ${hash} `)
+    console.log(`Activity ${create ? 'created' : 'updated'}: ${id} `)
 }
 handleProject.requireLogin = true
+handleProject.validationConf = {
+    description: {
+        required: true,
+        maxLength: 160,
+        minLength: 3,
+        type: TYPES.string,
+    },
+    id: {
+        required: true,
+        type: TYPES.hash,
+    },
+    name: {
+        maxLength: 64,
+        minLength: 3,
+        required: true,
+        type: TYPES.string,
+    },
+    ownerAddress: {
+        required: true,
+        type: TYPES.identity,
+    },
+
+}
+handleProject.validKeys = Object.keys(handleProject.validationConf)
 
 // user projects by list of project hashes
 // Params
