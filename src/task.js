@@ -563,23 +563,32 @@ setTimeout(async () => {
 })
 setTimeout(async () => {
     const mapFunc = `function (doc) {
-        if (!doc.isMarket) return
-        doc
-            .title
-            .toLowerCase()
-            .split(' ')
-            .forEach(word => emit(word, doc._id))
-        
-        doc.description && doc
-            .description
-            .toLowerCase()
-            .split(' ')
-            .forEach(word => emit(word, doc._id))
-        
-        Array.isArray(doc.tags)
-            && doc.tags.length > 0
-            && doc.tags.forEach(tag => emit(tag, doc._id))
-    }`
+    if (!doc.isMarket || doc.parentId) return
+
+    const numRegex = /^[0-9]+$/
+    doc.title
+        .toLowerCase()
+        .match(/[a-z0-9\ ]/g)
+        .join('')
+        .split(' ')
+        .filter(x => x && x.length > 2 && !numRegex.test(x))
+        .forEach(word => emit(word, doc._id))
+    
+    // doc.description && doc
+    //     .description
+    //     .toLowerCase()
+    //     .match(/[a-z0-9\ ]/g)
+    //     .join('')
+    //     .split(' ')
+    //     .filter(x => x && x.length > 1 && !numRegex.test(x))
+    //     .forEach(word => emit(word, doc._id))
+    
+    Array.isArray(doc.tags)
+        && doc.tags.length > 0
+        && doc.tags.forEach(tag =>
+            emit(tag, doc._id)
+        )
+}`
 
     // required to get gruped IDS
     const reduceFunc = '(_, values) => values'
