@@ -371,6 +371,7 @@ export async function handleTaskMarketApplyResponse(data, callback) {
     for (const application of applications) {
         let {
             status: aStatus,
+            userId: applicantId,
             workerAddress: aWorkerAddress,
         } = application
 
@@ -393,8 +394,9 @@ export async function handleTaskMarketApplyResponse(data, callback) {
         // No need to notify if accepted. Task creation will send a notification
         if (accepted) continue
 
-        // notify rejected user???
-        sendNotification(
+        // notify rejected user
+        const isSelf = userId === applicantId
+        !isSelf && sendNotification(
             createdBy,
             [application.userId],
             'task',
