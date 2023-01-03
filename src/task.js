@@ -5,9 +5,11 @@ import {
     isArr,
     isFn,
     isHash,
+    isMap,
     isStr,
     isValidNumber,
     objClean,
+    toArray,
 } from './utils/utils'
 import {
     TYPES,
@@ -17,7 +19,7 @@ import {
 import { authorizeData, recordTypes } from './blockchain'
 import { setTexts } from './language'
 import { commonConfs, sendNotification } from './notification'
-import { systemUserSymbol } from './users'
+import { broadcast, systemUserSymbol } from './users'
 
 // Tasks database
 const tasks = new CouchDBStorage(null, 'task')
@@ -124,23 +126,26 @@ const processTasksResult = (tasks = new Map(), userId) => (
 
     const isOwner = userId === createdBy
     // exclude all other applicants user IDs
-    task.applications = (applications || [])
-        .map(x =>
-            isOwner || x.userId === userId
-                ? x
-                : objClean(x, ['workerAddress'])
-        )
+    task.applications = (applications || []).map(x =>
+        isOwner || x.userId === userId
+            ? x
+            : objClean(x, ['workerAddress'])
+    )
 })
 
-// handleTask saves non-blockchain task details to the database.
-// Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
-// Login is required simply for the purpose of logging the User ID who saved the data.
-// 
-// Params:
-// @taskId      string: ID of the task
-// @task        object: see `validatorConfig` for a list of properties and their respected accepted data types etc.
-// @callback    function: callback args:
-//                  @err    string: error message, if unsuccessful
+/**
+ * @name    handleTask
+ * @summary saves off-chain task details to the database.
+ * Requires pre-authentication using BONSAI with the blockchain identity that owns the task.
+ * Login is required simply for the purpose of logging the User ID who saved the data.
+ * 
+ * @description 'task-market-created' event will be broadcasted whenever a new marketplace task is created.
+ * @param   {String}    taskId          task ID
+ * @param   {Object}    task            see `validatorConfig` for accepted properties.
+ * @param   {String}    ownerAddress    task owner identity
+ * @param   {Function}  callback        callback args:
+ *                                      @err    string: error message, if unsuccessful
+ */
 export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!isFn(callback)) return
 
@@ -180,8 +185,13 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (task.isMarket) task.applications = existingTask.applications || []
 
     // save to database
-    const result = await tasks.set(taskId, task)
-    callback(null, result)
+    await tasks.set(taskId, task)
+    callback(null)
+
+    if (!!existingTask._id || !task.isMarket) return
+
+    // broadcast new marketplace task creation
+    broadcast([], 'task-market-created', [taskId])
 }
 handleTask.requireLogin = true
 
@@ -212,8 +222,50 @@ export async function handleTaskGetById(ids, callback) {
         true,
         ids.length,
     )
+    // const tasksArr = isMap(tasksMap) && toArray(tasksMap) || []
+    // for (const i in tasksArr) {
+    //     const task = tasksArr[i]
+    //     const { createdBy, isMarket } = task
+    //     if (!isMarket || createdBy !== userId) continue
+
+    //     const childrenMap = await handleTaskGetByParentId.call(
+    //         this,
+    //         task._id,
+    //         () => { },
+    //     )
+    //     processTasksResult(childrenMap || new Map(), userId)
+    //     task.children = childrenMap
+    // }
     processTasksResult(tasksMap, userId)
     callback(null, tasksMap)
+}
+
+/**
+ * @name    handleTaskGetByParentId
+ * @summary search for tasks by parent ID
+ * 
+ * @param   {String}    parentId 
+ * @param   {Function}  callback args =>
+ *                               @err    string: error message, if any
+ *                               @result array: 2D array of task objects.
+ *                                      Intended to be used as a Map, eg: `new Map(result)`
+ * 
+ * @returns {Map} result
+ */
+export async function handleTaskGetByParentId(parentId, callback) {
+    if (!isFn(callback)) return
+
+    const [_, user] = this
+    const { id: userId } = user || {}
+
+    const tasksMap = await tasks.search(
+        { parentId },
+        1000,
+    )
+    processTasksResult(tasksMap, userId)
+    callback(null, tasksMap)
+
+    return tasksMap
 }
 
 /**
@@ -346,6 +398,7 @@ export async function handleTaskMarketApplyResponse(data, callback) {
     const [_, { _id: userId }] = this
     const {
         rejectOthers,
+        silent = false,
         status,
         taskId,
         workerAddress,
@@ -395,8 +448,9 @@ export async function handleTaskMarketApplyResponse(data, callback) {
         if (accepted) continue
 
         // notify rejected user
-        const isSelf = userId === applicantId
-        !isSelf && sendNotification(
+        const doNotify = userId !== applicantId
+            && (accepted || !silent)
+        doNotify && sendNotification(
             createdBy,
             [application.userId],
             'task',
@@ -557,13 +611,17 @@ setTimeout(async () => {
             index: { fields: ['isMarket', 'tsCreated'] },
             name: 'tsCreated-index',
         },
+        {
+            index: { fields: ['parentId'] },
+            name: 'parentId-index',
+        },
     ]
     indexDefs.forEach(async (def) =>
         await (await tasks.getDB())
             .createIndex(def)
     )
-})
-setTimeout(async () => {
+
+    // create map function for search
     const mapFunc = `function (doc) {
     if (!doc.isMarket || doc.parentId) return
 
