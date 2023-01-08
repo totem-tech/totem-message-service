@@ -5,12 +5,6 @@ import { authorizeData } from './blockchain'
 import { setTexts } from './language'
 
 const projects = new CouchDBStorage(null, 'projects')
-// Must-have properties
-const requiredKeys = ['name', 'ownerAddress', 'description']
-// All the acceptable properties
-const validKeys = [...requiredKeys]
-// Internally managed keys : ['tsCreated']
-const descMaxLen = 160
 const messages = setTexts({
     accessDenied: 'Access denied',
     arrayRequired: 'Array required',
@@ -47,7 +41,7 @@ export async function handleProject(id, project, create, callback) {
     )
 
     // validate data
-    const { validationConf, validKeys } = handleProject
+    const { validationConf, bonsaiKeys } = handleProject
     let err = validateObj(
         { id, ...project },
         validationConf,
@@ -57,7 +51,7 @@ export async function handleProject(id, project, create, callback) {
     if (err) return callback(err)
 
     // exclude any unwanted data and only update the properties that's supplied
-    project = objClean({ ...existingProject, ...project }, validKeys)
+    project = objClean({ ...existingProject, ...project }, bonsaiKeys)
 
     // Authenticate using BONSAI
     err = await authorizeData(id, project)
@@ -107,7 +101,9 @@ handleProject.validationConf = {
     },
 
 }
-handleProject.validKeys = Object.keys(handleProject.validationConf)
+handleProject.bonsaiKeys = Object
+    .keys(handleProject.validationConf)
+    .filter(x => x !== 'id')
 
 // user projects by list of project hashes
 // Params
