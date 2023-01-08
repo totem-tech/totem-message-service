@@ -135,6 +135,7 @@ const eventMaintenanceMode = 'maintenance-mode'
 const maintenanceModeEvents = [
     eventMaintenanceMode,
     'login', // without login admin user won't be able to login and therefore, can't turn off maintenance mode.
+    'rewards-get-kapex-payouts', // allow crowdloan rewards data request even when in maintenance mode
 ]
 const events = {
     // admin endpoints
