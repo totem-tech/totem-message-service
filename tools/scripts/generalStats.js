@@ -1,23 +1,30 @@
 import DataStorage from '../../src/utils/DataStorage'
 import { isValidNumber } from '../../src/utils/utils'
 
-const filename = process.env.FILENAME
-// const keysCount = (process.env.KEYS_COUNT || '')
-//     .split(',')
-//     .filter(Boolean)
-const keysCountUnique = (process.env.KEYS_COUNT || 'address,recipient,userId')
-    .split(',')
-    .filter(Boolean)
-const keysCountOccurance = (process.env.KEYS_COUNT_OCCURANCE || 'status,type')
-    .split(',')
-    .filter(Boolean)
-const keysSum = (process.env.KYES_SUM || '')
-    .split(',')
-    .filter(Boolean)
-const CouchDB_URL = process.env.CouchDB_URL
-const DBName = process.env.DBName
-
-const statusStats = async (storage) => {
+const generalStats = async (storage, config = {}) => {
+    const {
+        filename = process.env.FILENAME,
+        // const keysCount = (process.env.KEYS_COUNT || '')
+        //     .split(',')
+        //     .filter(Boolean)
+        keysCountUnique = (process.env.KEYS_COUNT || 'address,recipient,userId')
+            .split(',')
+            .filter(Boolean),
+        keysCountOccurance = (process.env.KEYS_COUNT_OCCURANCE || 'status,type,error')
+            .split(',')
+            .filter(Boolean),
+        keysSum = (process.env.KEYS_SUM || '')
+            .split(',')
+            .filter(Boolean),
+        CouchDB_URL = process.env.CouchDB_URL,
+        DBName = process.env.DBName,
+    } = config
+    console.log('generalStats : config => ', {
+        filename,
+        keysCountUnique,
+        keysCountOccurance,
+        keysSum,
+    })
     if (!storage) {
         storage = CouchDB_URL && DBName
             ? await require('./exportdb').default
@@ -73,7 +80,7 @@ const statusStats = async (storage) => {
 
             keysSum.forEach(key => {
                 const iValue = value[key]
-                if (!isValidNumber(iValue)) return console.log({ iValue })
+                if (!isValidNumber(iValue)) return
 
                 const iKey = `${key}__sum`
                 stats[iKey] = (stats[iKey] || 0) + iValue
@@ -86,4 +93,4 @@ const statusStats = async (storage) => {
 
     return storage
 }
-export default statusStats
+export default generalStats
