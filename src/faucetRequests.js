@@ -7,7 +7,7 @@ import {
     signingKeyPair,
     newSignature,
     keyInfoFromKeyData,
-} from './utils/naclHelper'
+} from './utils/naclHelper-to-be-deprecated'
 import { isFn, isStr, randomInt } from './utils/utils'
 import { setTexts } from './language'
 import PromisE from './utils/PromisE'

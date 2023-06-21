@@ -5,7 +5,7 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.(js|jsx)$/,
+        test: /\.(js)$/,
         exclude: /node_modules/,
         use: ['babel-loader']
       },
@@ -18,7 +18,7 @@ module.exports = {
         loader: 'url-loader?limit=100000'
       },
       {
-        test: /\.(md)$/,
+        test: /\.(md|.jsx)$/,
         loader: 'ignore-loader',
       },
     ]

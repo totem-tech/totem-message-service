@@ -39,11 +39,11 @@ export async function execute(dbName, filename, limit, skip, url, selector, file
         ? await db.getAll([], true, limit, skip)
         : await db.search(selector, limit, skip, true)
     const ts = new Date().toISOString()
-    filename = filename || `${dbName}-${skip || 1}-${skip + result.size}-${ts}.json`
+    filename = filename || `${dbName}-${ts}-${skip || 1}-${skip + result.size}.json`
     filename = filename.replace(/\:/g, '-')
 
     const storage = new DataStorage(filename)
-    storage.setAll(result, fileOverride)
+    await storage.setAll(result, fileOverride, true)
     console.log(`${result.size} entries saved to ${filename}`)
 
     storage.couchDB = db

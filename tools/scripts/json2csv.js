@@ -1,13 +1,16 @@
 import fs from 'fs'
 import { Parser, transforms } from 'json2csv'
 import DataStorage from '../../src/utils/DataStorage'
-import { isArr2D, isFn } from '../../src/utils/utils'
+import { isArr2D, isFn, objClean } from '../../src/utils/utils'
 
 async function execute(storage) {
     const pathSource = process.env.FILENAME
     const pathOptions = process.env.FILEPATH_CSV_OPTIONS
     const pathOutput = process.env.FILEPATH_CSV_OUTPUT
     const excludeID = (process.env.EXCLUDE_ID || '').toUpperCase() === 'TRUE'
+    const keys = (process.env.KEYS || '')
+        .split(',').filter(Boolean)
+
     if (!storage && !pathSource) throw new Error('Missing env: FILENAME')
     if (!pathOutput) throw new Error('Missing env: FILEPATH_OUTPUT')
 
@@ -25,6 +28,7 @@ async function execute(storage) {
                 { ...doc, _id }
         )
     }
+
     const options = !!pathOptions
         ? JSON.parse(fs.readFileSync(pathOptions))
         : {
@@ -44,6 +48,9 @@ async function execute(storage) {
 
     const parser = new Parser(options || {})
 
+    if (keys.length > 0) {
+        data = data.map(x => objClean(x, keys))
+    }
     fs.writeFileSync(pathOutput, parser.parse(data))
 }
 

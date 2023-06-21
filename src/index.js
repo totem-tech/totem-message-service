@@ -4,6 +4,7 @@
 import express from 'express'
 import fs from 'fs'
 import https from 'https'
+import http from 'http'
 import socketIO from 'socket.io'
 import uuid from 'uuid'
 import { isFn, isArr, isBool } from './utils/utils'
@@ -62,7 +63,6 @@ import {
 
 let maintenanceMode = false
 let requestCount = 0
-const expressApp = express()
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
@@ -71,6 +71,8 @@ const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
+const DEBUG = process.env.DEBUG === 'TRUE'
+const HTTPS_ONLY = process.env.HTTPS_ONLY === 'TRUE'
 const socketClients = (process.env.SOCKET_CLIENTS || '')
     .split(',')
     .map(x => x.trim())
@@ -92,9 +94,10 @@ const allowRequest = socketClients.length === 0
             unapprovedOrigins = unapprovedOrigins.slice(-100)
             console.log('Websocket request rejected from unapproved origin:', origin)
         }
+        DEBUG && console.log({ origin, allow })
         callback(null, allow)
     }
-const server = https.createServer({ cert, key }, expressApp)
+const server = https.createServer({ cert, key }, express())
 const socket = socketIO(server, { allowRequest })
 // Error messages
 const texts = setTexts({
@@ -124,6 +127,8 @@ async function handleMaintenanceMode(active = false, callback) {
     const { roles = [] } = user || {}
     const isAdmin = roles.includes(ROLE_ADMIN)
     if (isAdmin && isBool(active)) {
+        (maintenanceMode || active)
+            && console.log('handleMaintenanceMode', { isAdmin, active })
         maintenanceMode = active
         // broadcast to all clients
         setTimeout(() => broadcast([], eventMaintenanceMode, [maintenanceMode]))
@@ -208,6 +213,7 @@ const events = {
 const interceptHandler = (name, handler) => async function (...args) {
     if (!isFn(handler)) return
 
+    // console.log({ name, handler })
     const requestId = uuid.v1()
     const client = this
     const userId = client.___userId
@@ -312,6 +318,23 @@ server.listen(PORT, () =>
     console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`)
 )
 
+if (!HTTPS_ONLY && socketClients.find(x => x.startsWith('http://'))) {
+    const serverHttp = https.createServer(express())
+    const socketHttp = socketIO(serverHttp, { allowRequest })
+    // Setup websocket event handlers
+    socketHttp.on('connection', client =>
+        Object.keys(events)
+            .forEach(name =>
+                client.on(name, events[name])
+            )
+    )
+    const PORT_HTTP = process.env.PORT_HTTP || 4001
+    // Start listening
+    serverHttp.listen(PORT_HTTP, () =>
+        console.log(`Totem Messaging Service started. Websocket listening on port ${PORT_HTTP} (http)`)
+    )
+}
+
 // attempt to establish a connection to database and exit application if fails
 try {
     console.log('Connecting to CouchDB')
@@ -345,7 +368,7 @@ async function importToDB(fileNames) {
     if (filesAr.length === 0) return
 
     console.log('Migrating JSON files:', filesAr)
-    for (let i = 0; i < filesAr.length; i++) {
+    for (let i = 0;i < filesAr.length;i++) {
         const file = filesAr[i]
         const dbName = (file.split('.json')[0])
         if (!dbName) continue
@@ -398,7 +421,7 @@ async function importToDB(fileNames) {
         // insert data into database
         const limit = 999
         const numBatches = data.size / limit
-        for (let i = 0; i < numBatches; i++) {
+        for (let i = 0;i < numBatches;i++) {
             const start = i * limit
             const end = start + limit
             if (numBatches > 1) console.log(`\n${file}: Processing ${start + 1} to ${end} out of ${data.size} entries`)

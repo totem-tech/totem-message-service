@@ -29,8 +29,8 @@ const generalStats = async (storage, config = {}) => {
         storage = CouchDB_URL && DBName
             ? await require('./exportdb').default
             : new DataStorage(filename)
+        if (!storage.name) throw new Error('FILENAME required')
     }
-    if (!storage.name) throw new Error('FILENAME required')
 
     const stats = {
         total: storage.getAll().size,
