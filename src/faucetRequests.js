@@ -1,5 +1,5 @@
-import ioClient from 'socket.io-client'
 import { BehaviorSubject } from 'rxjs'
+import ioClient from 'socket.io-client'
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
     encrypt,
@@ -7,18 +7,49 @@ import {
     signingKeyPair,
     newSignature,
     keyInfoFromKeyData,
-} from './utils/naclHelper-to-be-deprecated'
-import { isFn, isStr, randomInt } from './utils/utils'
-import { setTexts } from './language'
+} from './utils/naclHelper'
 import PromisE from './utils/PromisE'
+import {
+    deferred,
+    isBool,
+    isFn,
+    isObj,
+    isStr,
+    randomInt
+} from './utils/utils'
+import { setTexts } from './language'
+import {
+    ROLE_ADMIN,
+    broadcast,
+    emitToClients,
+    rxUserLoggedIn
+} from './users'
+
+// Error messages
+const texts = setTexts({
+    faucetDeprecated: 'Faucet requests have been deprecated and are no longer available. Here are more ways you can earn coins in addition to your signup rewards: refer a friend (copy link from Getting Started module) and post about Totem on social media (coming soon).',
+    faucetDisabled: 'faucet reqeusts are not being accepted!',
+    faucetLimitReached: 'You have reached maximum number of requests allowed within 24 hours. Please try again later.',
+    faucetServerDown: 'Faucet client is not connected',
+    faucetTransferInProgress: `
+    You already have a faucet request in-progress. 
+    Please wait until it is finished or wait at least 15 minutes from previous previous request time.
+    `,
+    invalidSignature: 'Signature pre-verification failed',
+    loginOrRegister: 'Login/registration required',
+    tryAgain: 'please try again later',
+})
 
 const faucetRequests = new CouchDBStorage(null, 'faucet_requests')
+const config = {
+    faucetEnabled: process.env.FUACET_ENABLED === 'TRUE'
+}
 // faucet server connected
 export const rxFSConnected = new BehaviorSubject(false)
-// Maximum number of requests within @TIME_LIMIT
-const REQUEST_LIMIT = 1
-const TIME_LIMIT = 365000 * 24 * 60 * 60 * 1000 // allow only one more request
-// Duration to disallow user from creating a new faucet request if there is already one in progress (neither success nor error).
+// Maximum number of requests within certain duration
+const REQUEST_LIMIT = 5
+// The duration within which user can make maximum number of requests specified in @REQUEST_LIMIT
+const TIME_LIMIT = 24 * 60 * 60 * 1000
 // After timeout, assume something went wrong and allow user to create a new request
 const TIMEOUT_DURATION = 15 * 60 * 1000 // 15 minutes in milliseconds. if changed make sure toupdate `errMsgs.faucetTransferInProgress`
 // Environment variables
@@ -84,25 +115,13 @@ export const waitTillFSConnected = (timeout = timeoutMS, tag) => new Promise((re
     }, timeout)
 })
 
-// Error messages
-const texts = setTexts({
-    faucetDeprecated: 'Faucet requests have been deprecated and are no longer available. Here are more ways you can earn coins in addition to your signup rewards: refer a friend (copy link from Getting Started module) and post about Totem on social media (coming soon).',
-    loginOrRegister: 'Login/registration required',
-    faucetServerDown: 'Faucet client is not connected',
-    faucetTransferInProgress: `
-        You already have a faucet request in-progress. 
-        Please wait until it is finished or wait at least 15 minutes from previous previous request time.
-    `,
-    invalidSignature: 'Signature pre-verification failed',
-})
-
 // Reads environment variables and generate keys if needed
 const setVariables = () => {
     // environment variables
     EXTERNAL_PUBLIC_KEY = process.env.external_publicKey
     EXTERNAL_SERVER_NAME = process.env.external_serverName
     const serverName = process.env.serverName
-    const printData = process.env.printSensitiveData === "YES"
+    const printData = process.env.printSensitiveData === 'YES'
     if (!serverName) return 'Missing environment variable: "serverName"'
     if (!EXTERNAL_PUBLIC_KEY) return 'Missing environment variable: "external_serverName"'
     if (!EXTERNAL_SERVER_NAME) return 'Missing environment variable: "external_serverName"'
@@ -138,13 +157,39 @@ const setVariables = () => {
 const envErr = setVariables()
 if (envErr) throw new Error(envErr)
 
+const broadCastStatus = (enabled = config.faucetEnabled) => broadcast([], 'faucet-status', [enabled])
+
+/**
+ * @name    handleFaucetStatus
+ * @summary event handler to enable/disable of faucet and check status
+ * 
+ * @param   {Boolean}   enabled     (optional)
+ * 
+ * @param   {Function}  callback    Args: [error, faucetEnabled]
+ */
+export async function handleFaucetStatus(enabled, callback) {
+    if (!isFn(callback)) return
+
+    const [_, user = {}] = this
+    const { roles = [] } = user
+    // user must be an admin to be able to change/check status
+    if (!roles.includes(ROLE_ADMIN)) return
+
+    config.faucetEnabled = isBool(enabled)
+        ? enabled
+        : config.faucetEnabled
+    broadCastStatus()
+    callback(null, config.faucetEnabled)
+}
+handleFaucetStatus.requireLogin = true
+
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
 
-    return callback(texts.faucetDeprecated)
+    if (!config.faucetEnabled) return callback(texts.faucetDisabled)
 
     console.log('faucetClient.connected', faucetClient.connected)
-    if (!faucetClient.connected) throw texts.faucetServerDown
+    if (!faucetClient.connected) throw new Error(texts.faucetServerDown)
     const err = setVariables()
     if (err) throw err
 
@@ -152,49 +197,69 @@ export async function handleFaucetRequest(address, callback) {
     if (!user) return callback(texts.loginOrRegister)
 
     const { _id, tsCreated } = user
-    const deadline = new Date('2021-06-10T23:59:59')
+    // 24 hour before now
+    // const deadline = new Date('2021-06-10T23:59:59')
     // Only allow users who signed up before specific date to make one last faucet request
-    const isExistingUser = !tsCreated || new Date(tsCreated) < deadline
-    if (!isExistingUser) return callback(texts.faucetDeprecated)
+    // const isExistingUser = !tsCreated || new Date(tsCreated) < deadline
+    // if (!isExistingUser) return callback(texts.faucetDeprecated)
     let { requests } = (await faucetRequests.get(_id)) || {}
     requests = requests || []
     const last = requests[requests.length - 1]
     if (last && last.inProgress) {
-        const lastTs = isStr(last.timestamp) ? Date.parse(last.timestamp) : last.timestamp
+        const lastTs = isStr(last.timestamp)
+            ? Date.parse(last.timestamp)
+            : last.timestamp
         // Disallow user from creating a new faucet request if there is already one in progress (neither success nor error) and hasn't timed out
         if (Math.abs(new Date() - lastTs) < TIMEOUT_DURATION) return callback(texts.faucetTransferInProgress)
     }
 
-    const numReqs = requests.length
-    if (new Date(last.timestamp) > deadline) {
-        // allow only one faucet request after the deadline
-        return callback(texts.faucetDeprecated)
+    const dateFrom = new Date(new Date() - TIME_LIMIT)
+    // requests within given timeframe
+    const [successCount, total] = requests.reduce(([success, total], request) => {
+        if (new Date(request.timestamp) >= dateFrom) {
+            total++
+            if (request.funded) success++
+        }
+        return [success, total]
+    }, [0, 0])
+    if (successCount > REQUEST_LIMIT || total > REQUEST_LIMIT * 2) {
+        // reached maximum allowed limit
+        return callback(texts.faucetLimitReached)
     }
     const request = {
         address,
+        funded: false,
+        inProgress: true,
         timestamp: new Date().toISOString(),
-        funded: false
     }
     requests.push(request)
 
-    if (numReqs >= REQUEST_LIMIT) {
+    const limitNumItems = REQUEST_LIMIT * 3
+    if (requests.length >= limitNumItems) {
         // remove older requests ???
-        requests = requests.slice(numReqs - REQUEST_LIMIT)
+        requests = requests.slice(-REQUEST_LIMIT)
     }
 
-    const index = requests.length - 1
-    requests[index].inProgress = true
     // save inprogress status to database
     await faucetRequests.set(_id, { requests }, true)
-    const [faucetServerErr, result] = await emitToFaucetServer('faucet', request)
-    const [blockHash] = result || []
+    const index = requests.length - 1
+    let [faucetServerErr, result] = await emitToFaucetServer('faucet', request)
+    const {
+        amount,
+        txId,
+        status
+    } = result || {}
     requests[index].funded = !faucetServerErr
-    requests[index].blockHash = blockHash
+    requests[index].blockHash = txId
     requests[index].inProgress = false
 
-    !!faucetServerErr && console.log(`Faucet request failed. `, faucetServerErr)
+    if (!!faucetServerErr) {
+        const msg = faucetServerErr
+        faucetServerErr = `Faucet request failed. Message from faucet server: ${isObj(msg) ? msg.message : msg}`
+        console.log(msg)
+    }
     // get back to the user
-    callback(faucetServerErr, blockHash)
+    callback(faucetServerErr, txId, amount, status)
 
     // update completed status to database
     await faucetRequests.set(_id, { requests }, true)
@@ -217,7 +282,7 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
     const dataStr = isStr(data) && data || JSON.stringify(data)
     const lenStr = JSON.stringify(dataStr.length).padStart(lenNumChars)
     // Generate new signature
-    const signature = newSignature(dataStr, SIGN_PUBLIC_KEY, SIGN_SECRET_KEY)
+    const signature = newSignature(dataStr, SIGN_SECRET_KEY)//SIGN_PUBLIC_KEY, 
     const message = lenStr + EXTERNAL_SERVER_NAME + dataStr + signature
     const { sealed: encryptedMsg, nonce } = encrypt(
         message,
@@ -252,3 +317,13 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
         throw err
     }
 }
+
+// Emit faucet status to user after login
+rxUserLoggedIn
+    .subscribe(({ clientId }) =>
+        emitToClients(
+            [clientId],
+            'faucet-status',
+            [config.faucetEnabled]
+        )
+    )

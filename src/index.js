@@ -21,7 +21,7 @@ import {
     updateCache
 } from './currencies'
 // import { handlers as crowdsaleHanders } from './crowdsale/index'
-import { handleFaucetRequest } from './faucetRequests'
+import { handleFaucetRequest, handleFaucetStatus } from './faucetRequests'
 import { handleGlAccounts } from './glAccounts'
 import {
     handleLanguageErrorMessages,
@@ -59,6 +59,7 @@ import {
     getUserByClientId,
     ROLE_ADMIN,
     broadcast,
+    onlineUsers,
 } from './users'
 
 let maintenanceMode = false
@@ -124,11 +125,10 @@ async function handleMaintenanceMode(active = false, callback) {
     if (!isFn(callback)) return
 
     const [_, user] = this
-    const { roles = [] } = user || {}
+    const { _id, roles = [] } = user || {}
     const isAdmin = roles.includes(ROLE_ADMIN)
     if (isAdmin && isBool(active)) {
-        (maintenanceMode || active)
-            && console.log('handleMaintenanceMode', { isAdmin, active })
+        if (maintenanceMode || active) console.log(`[MaintenanceMode] ${active ? '' : 'de'}activated by @${_id}`)
         maintenanceMode = active
         // broadcast to all clients
         setTimeout(() => broadcast([], eventMaintenanceMode, [maintenanceMode]))
@@ -173,6 +173,7 @@ const events = {
 
     // Faucet request
     'faucet-request': handleFaucetRequest,
+    'faucet-status': handleFaucetStatus,
 
     // GL Accounts
     'gl-accounts': handleGlAccounts,
@@ -241,7 +242,7 @@ const interceptHandler = (name, handler) => async function (...args) {
         // include the user object if login is required for this event
         const thisArg = [
             client,
-            await getUserByClientId(client.id),
+            await onlineUsers.get(userId) //getUserByClientId(client.id),
         ]
         await handler.apply(thisArg, args)
     } catch (err) {
@@ -302,15 +303,15 @@ const interceptHandler = (name, handler) => async function (...args) {
     }
 }
 // replace handlers with intercepted handler
-Object.keys(events)
-    .forEach(name =>
-        events[name] = interceptHandler(name, events[name])
-    )
+// Object.keys(events)
+//     .forEach(name =>
+//         events[name] = interceptHandler(name, events[name])
+//     )
 // Setup websocket event handlers
 socket.on('connection', client =>
     Object.keys(events)
         .forEach(name =>
-            client.on(name, events[name])
+            client.on(name, interceptHandler(name, events[name]))
         )
 )
 // Start listening

@@ -19,6 +19,7 @@ const defaultFields = [
 export const users = new CouchDBStorage(null, 'users', defaultFields)
 export const rxUserRegistered = new Subject() // value: {clientId, referredBy, userId}
 export const rxUserLoggedIn = new Subject() // value: {clientId, clientIds, userId}
+export const rxWSClientConnected = new Subject() // value: client {id,....}
 export const clients = new Map()
 export const onlineUsers = new Map()
 export const userClientIds = new Map()
@@ -268,7 +269,7 @@ export const handleIsUserOnline = async (userId, callback) => {
 
     const userIds = arrUnique(userId).filter(id => isStr(id))
     const result = {}
-    for (let i = 0; i < userIds.length; i++) {
+    for (let i = 0;i < userIds.length;i++) {
         result[userIds[i]] = isUserOnline(userIds[i])
     }
     callback(null, result)
