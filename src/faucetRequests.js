@@ -21,9 +21,15 @@ import { setTexts } from './language'
 import {
     ROLE_ADMIN,
     broadcast,
+    clients,
     emitToClients,
-    rxUserLoggedIn
+    rxUserLoggedIn,
+    rxUserRegistered,
+    systemUserSymbol,
+    users
 } from './users'
+import { handleMessage } from './messages'
+import { handleNotification, sendNotification } from './notification'
 
 // Error messages
 const texts = setTexts({
@@ -188,13 +194,13 @@ export async function handleFaucetRequest(address, callback) {
 
     if (!config.faucetEnabled) return callback(texts.faucetDisabled)
 
-    console.log('faucetClient.connected', faucetClient.connected)
     if (!faucetClient.connected) throw new Error(texts.faucetServerDown)
     const err = setVariables()
     if (err) throw err
 
     const [_, user] = this
     if (!user) return callback(texts.loginOrRegister)
+    console.log('faucet request:', { userId: user.id, faucerServerConnected: faucetClient.connected })
 
     const { _id, tsCreated } = user
     // 24 hour before now
@@ -256,7 +262,6 @@ export async function handleFaucetRequest(address, callback) {
     if (!!faucetServerErr) {
         const msg = faucetServerErr
         faucetServerErr = `Faucet request failed. Message from faucet server: ${isObj(msg) ? msg.message : msg}`
-        console.log(msg)
     }
     // get back to the user
     callback(faucetServerErr, txId, amount, status)
@@ -320,10 +325,31 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
 
 // Emit faucet status to user after login
 rxUserLoggedIn
-    .subscribe(({ clientId }) =>
+    .subscribe(async ({ clientId }) => {
         emitToClients(
             [clientId],
             'faucet-status',
             [config.faucetEnabled]
         )
-    )
+    })
+rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
+    if (!config.faucetEnabled) return
+
+    const client = clients.get(clientId)
+    const user = await users.get(userId)
+    const notifyUser = (err, txId, amount, status) => {
+        !err
+            && status === 'sucess'
+            && amount
+            && sendNotification(
+                'rewards',
+                [userId],
+                'rewards',
+                'signupReward',
+                '',
+                { txId, amount, status }
+            )
+    }
+    await handleFaucetRequest.call([client, user], address, notifyUser)
+        .catch(err => console.log('Post-signup faucet request failed. ', err))
+})

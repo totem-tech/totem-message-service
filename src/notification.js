@@ -469,7 +469,14 @@ export async function sendNotification(senderId, recipients, type, childType, me
     if (users404.length > 0) return `${errMessages.invalidUserId}: ${users404.map(id => `@${id}`)}`
 
     // if notification type has a handler function execute it
-    err = isFn(config.validate) && await config.validate.call(that, id, senderId, recipients, data, message)
+    err = isFn(config.validate) && await config.validate.call(
+        that,
+        id,
+        senderId,
+        recipients,
+        data,
+        message
+    )
     if (err) return err
 
     const tsCreated = new Date().toISOString()
@@ -502,6 +509,8 @@ export async function sendNotification(senderId, recipients, type, childType, me
         'notification',
         eventArgs,
     )
+
+    return id
 }
 
 // handleNotify deals with notification requests

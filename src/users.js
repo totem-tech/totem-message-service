@@ -17,8 +17,8 @@ const defaultFields = [
     // rewards and secret is intentionally left out.
 ]
 export const users = new CouchDBStorage(null, 'users', defaultFields)
-export const rxUserRegistered = new Subject() // value: {clientId, referredBy, userId}
-export const rxUserLoggedIn = new Subject() // value: {clientId, clientIds, userId}
+export const rxUserRegistered = new Subject() // value: {address, clientId, referredBy, userId}
+export const rxUserLoggedIn = new Subject() // value: {address, clientId, clientIds, userId}
 export const rxWSClientConnected = new Subject() // value: client {id,....}
 export const clients = new Map()
 export const onlineUsers = new Map()
@@ -418,11 +418,13 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     userClientIds.set(userId, [client.id])
 
     rxUserRegistered.next({
+        address,
         clientId: client.id,
         userId,
         referredBy,
     })
     rxUserLoggedIn.next({
+        address,
         clientId: client.id,
         clientIds: [client.id],
         userId,
