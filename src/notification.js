@@ -407,6 +407,21 @@ export async function handleNotificationSetStatus(id, read, deleted, callback) {
 }
 handleNotificationSetStatus.requireLogin = true
 
+/**
+ * @name    sendNotification
+ * @summary send notification to user(s)
+ * 
+ * @param   {String}      senderId    sender user ID
+ * @param   {String[]}    recipients  recipient User ID(s)
+ * @param   {String}      type        parent notification type
+ * @param   {String}      childType   child notification type
+ * @param   {Object}      message     message to be displayed (see `VALID_TYPES`). can be encrypted later on
+ * @param   {Ojbect}      data        information specific to the type of notification
+ * @param   {String}      id          (optional) notification ID.
+ *                                  Default: new random hex.
+ * 
+ * @returns {Error}     validation error message. Use try-catch for runtime errors.
+ */
 export async function sendNotification(senderId, recipients, type, childType, message, data, id) {
     // if `this` is not defined the notification is being sent by the application itself.
     const that = this || [systemUserSymbol]
@@ -511,15 +526,19 @@ export async function sendNotification(senderId, recipients, type, childType, me
     )
 }
 
-// handleNotify deals with notification requests
-//
-// Params:
-// @toUserIds   array    : receiver User ID(s)
-// @type        string   : parent notification type
-// @childType   string   : child notification type
-// @message     string   : message to be displayed (unless custom message required). can be encrypted later on
-// @data        object   : information specific to the type of notification
-// @callback    function : params: (@err string) 
+/**
+ * @name    sendNotification
+ * @summary notification WS event handler
+ * 
+ * @param   {String[]}    recipients  recipient User ID(s)
+ * @param   {String}      type        parent notification type
+ * @param   {String}      childType   child notification type
+ * @param   {Object}      message     message to be displayed (see `VALID_TYPES`). can be encrypted later on
+ * @param   {Ojbect}      data        information specific to the type of notification
+ * @param   {String}      callback    args: [error (string)]
+ * 
+ * @returns {Error}     validation error message. Use try-catch for runtime errors.
+ */
 export async function handleNotification(recipients, type, childType, message, data, callback) {
     if (!isFn(callback)) return
 
