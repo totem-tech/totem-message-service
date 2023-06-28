@@ -509,8 +509,6 @@ export async function sendNotification(senderId, recipients, type, childType, me
         'notification',
         eventArgs,
     )
-
-    return id
 }
 
 // handleNotify deals with notification requests

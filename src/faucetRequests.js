@@ -348,7 +348,7 @@ rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
                 'signupReward',
                 '',
                 { txId, amount, status }
-            )
+            ).catch(() => { })//ignore error
     }
     await handleFaucetRequest.call([client, user], address, notifyUser)
         .catch(err => console.log('Post-signup faucet request failed. ', err))
