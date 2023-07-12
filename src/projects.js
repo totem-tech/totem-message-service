@@ -3,6 +3,7 @@ import { isArr, isFn, isObj, objClean } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { authorizeData } from './blockchain'
 import { setTexts } from './language'
+import { emitToUsers } from './users'
 
 const projects = new CouchDBStorage(null, 'projects')
 const messages = setTexts({
@@ -51,7 +52,10 @@ export async function handleProject(id, project, create, callback) {
     if (err) return callback(err)
 
     // exclude any unwanted data and only update the properties that's supplied
-    project = objClean({ ...existingProject, ...project }, bonsaiKeys)
+    project = objClean({
+        ...existingProject,
+        ...project,
+    }, bonsaiKeys)
 
     // Authenticate using BONSAI
     err = await authorizeData(id, project)
@@ -76,6 +80,13 @@ export async function handleProject(id, project, create, callback) {
     await projects.set(id, project)
     callback(null, project)
     console.log(`Activity ${create ? 'created' : 'updated'}: ${id} `)
+
+    // broadcast to all the clients of the user so that frontend can update local cache accordingly
+    emitToUsers(
+        [user.id],
+        'activity',
+        [id, project]
+    )
 }
 handleProject.requireLogin = true
 handleProject.validationConf = {

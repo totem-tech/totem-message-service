@@ -26,15 +26,16 @@ import { TYPES, validateObj } from './utils/validator'
 const notifications = new CouchDBStorage(null, 'notifications')
 // maximum number of recent unreceived notifications user can receive
 const UNRECEIVED_LIMIT = 200
-const errMessages = setTexts({
+const errMessages = {
     accessDenied: 'access denied',
     ethAddress: 'valid Ethereum address required',
     introducingUserIdConflict: 'introducing user cannot not be a recipient',
     invalidId: 'invalid notification ID',
     invalidParams: 'invalid or missing required parameters',
-    invalidUserId: 'invalid User ID supplied',
+    invalidUserId: 'invalid User ID',
     phoneRegex: 'invalid phone number!',
-})
+}
+setTexts(errMessages)
 export const commonConfs = {
     ethAddress: {
         chainType: 'ethereum',
@@ -169,9 +170,10 @@ export const VALID_TYPES = Object.freeze({
                 vatNumber: { ...commonConfs.str3To64Required, required: false },
             },
             // validate introducer id, if supplied
-            validate: async (_, _1, _2, { introducerId: id }) => !id || await idExists(id)
-                ? null
-                : errMessages.invalidUserId
+            validate: async (_, _1, _2, { introducerId: id }) =>
+                !id || await idExists(id)
+                    ? null
+                    : errMessages.invalidUserId
         }
     },
     rewards: {
@@ -481,7 +483,8 @@ export async function sendNotification(senderId, recipients, type, childType, me
     // throw error if any of the user ids are invalid
     const usersFound = await users.getAll(recipients, true)
     const users404 = recipients.filter(id => !usersFound.get(id))
-    if (users404.length > 0) return `${errMessages.invalidUserId}: ${users404.map(id => `@${id}`)}`
+    if (users404.length > 0) return errMessages.invalidUserId
+    //`${errMessages.invalidUserId}:${users404.map(id => `\n@${id}`)}`
 
     // if notification type has a handler function execute it
     err = isFn(config.validate) && await config.validate.call(
