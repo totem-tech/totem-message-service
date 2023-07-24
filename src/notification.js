@@ -208,7 +208,8 @@ export const VALID_TYPES = Object.freeze({
                 // @purpose an optional indicator to idenitify the purpose of the task assignement
                 purpose: {
                     accept: [
-                        1, // marketplace place task assignment
+                        0, // regular task
+                        1, // marketplace task
                     ],
                     required: false,
                     type: TYPES.integer,
@@ -445,6 +446,7 @@ export async function sendNotification(senderId, recipients, type, childType, me
         true,
         true,
     )
+
     if (err) return err
 
     const typeConfig = VALID_TYPES[type]
@@ -470,6 +472,7 @@ export async function sendNotification(senderId, recipients, type, childType, me
             data[key] = objClean(data[key], Object.keys(keyConfig.config))
         })
     }
+
 
     // validate message
     err = isObj(config.messageField) && validateObj(
