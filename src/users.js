@@ -155,15 +155,16 @@ export const broadcastCRUD = (type, id, action, data) => {
         type,
     })
 }
+broadcastCRUD.actions = {
+    create: 'create',
+    delete: 'delete',
+    read: 'read',
+    update: 'update',
+}
 broadcastCRUD.conf = Object.freeze({
     action: {
         // only these values are valid
-        accept: [
-            'create',
-            'delete',
-            'read',
-            'update',
-        ],
+        accept: Object.values(broadcastCRUD.actions),
         required: true,
         type: TYPES.string,
     },

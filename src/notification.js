@@ -286,8 +286,8 @@ export const VALID_TYPES = Object.freeze({
             dataFields: {
                 accepted: { required: true, type: TYPES.boolean },
                 projectHash: commonConfs.idHash,
-                ownerAddress: { required: true, type: TYPES.identity },
-                workerAddress: { required: true, type: TYPES.identity },
+                ownerAddress: commonConfs.identity,
+                workerAddress: commonConfs.identity,
             },
             messageField: commonConfs.str3To160Required,
         },
