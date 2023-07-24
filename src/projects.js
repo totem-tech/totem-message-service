@@ -3,7 +3,8 @@ import { isArr, isFn, isObj, objClean } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { authorizeData } from './blockchain'
 import { setTexts } from './language'
-import { emitToUsers } from './users'
+import { broadcast, broadcastCRUD, emitToUsers } from './users'
+import PromisE from './utils/PromisE'
 
 const projects = new CouchDBStorage(null, 'projects')
 const messages = setTexts({
@@ -58,7 +59,11 @@ export async function handleProject(id, project, create, callback) {
     }, bonsaiKeys)
 
     // Authenticate using BONSAI
-    err = await authorizeData(id, project)
+    err = await PromisE.timeout(
+        authorizeData(id, project),
+        10000, //timeout after 10 seconds
+    )// return error to the client instead of throwing it.
+        .catch(err => `${err}`.replace('Error: ', ''))
     if (err) return callback(err)
 
     const now = new Date().toISOString()
@@ -81,11 +86,14 @@ export async function handleProject(id, project, create, callback) {
     callback(null, project)
     console.log(`Activity ${create ? 'created' : 'updated'}: ${id} `)
 
-    // broadcast to all the clients of the user so that frontend can update local cache accordingly
-    emitToUsers(
-        [user.id],
-        'activity',
-        [id, project]
+    // broadcast the ID of the activity so that frontend can update accordingly
+    broadcastCRUD(
+        'project',
+        id,
+        create
+            ? 'create'
+            : 'update',
+        project,
     )
 }
 handleProject.requireLogin = true
