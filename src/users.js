@@ -128,6 +128,56 @@ export const broadcast = (ignoreClientIds, eventName, params) => {
     emitToClients(clientIds, eventName, params)
 }
 
+/**
+ * @name    broadcastCRUD
+ * @summary broadcast to all clients about changes in data
+ * 
+ * @param   {String} id 
+ * @param   {String} type 
+ * @param   {String} action // create,read,update,delete
+ * @param   {Object} data (optional) typically entry. Can vary based on specific type
+ */
+export const broadcastCRUD = (type, id, action, data) => {
+    const err = validateObj(
+        {
+            action,
+            data,
+            id,
+            type,
+        },
+        broadcastCRUD.conf
+    )
+    if (err) return err
+    broadcast([], 'CRUD', {
+        data,
+        id,
+        type,
+        type,
+    })
+}
+broadcastCRUD.conf = Object.freeze({
+    action: {
+        // only these values are valid
+        accept: [
+            'create',
+            'delete',
+            'read',
+            'update',
+        ],
+        required: true,
+        type: TYPES.string,
+    },
+    data: { type: TYPES.object },
+    id: {
+        required: true,
+        type: TYPES.string,
+    },
+    type: {
+        required: true,
+        type: TYPES.string,
+    },
+})
+
 // Emit to specific clients by ids
 //
 // Params: 

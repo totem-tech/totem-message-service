@@ -19,7 +19,7 @@ import {
 import { authorizeData, recordTypes } from './blockchain'
 import { setTexts } from './language'
 import { commonConfs, sendNotification } from './notification'
-import { broadcast, systemUserSymbol } from './users'
+import { broadcast, broadcastCRUD, systemUserSymbol } from './users'
 
 // Tasks database
 const tasks = new CouchDBStorage(null, 'task')
@@ -170,28 +170,37 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (authErr) return callback(authErr)
 
     const tsUpdated = new Date()
-    const existingTask = (await tasks.get(taskId)) || {
-        createdBy: user.id,
-        tsCreated: tsUpdated,
-    }
+    const existingTask = await tasks.get(taskId)
     task = {
         // if an entry already exists merge with new information
-        ...existingTask,
+        ...task.isMarket && { applications: [] },
+        ...existingTask || {
+            createdBy: user.id,
+            tsCreated: tsUpdated,
+        },
         // get rid of any unwanted properties
         ...task,
         updatedBy: user.id,
         tsUpdated,
     }
-    if (task.isMarket) task.applications = existingTask.applications || []
+    // if (task.isMarket) task.applications = existingTask.applications || []
 
     // save to database
     await tasks.set(taskId, task)
     callback(null)
 
-    if (!!existingTask._id || !task.isMarket) return
-
     // broadcast new marketplace task creation
-    broadcast([], 'task-market-created', [taskId])
+    if (!existingTask && task.isMarket) broadcast([], 'task-market-created', [taskId])
+
+    // broadcast task details for frontend to update
+    broadcastCRUD(
+        'task',
+        id,
+        !existingTask
+            ? broadcastCRUD.actions.create
+            : broadcastCRUD.actions.update,
+        task
+    )
 }
 handleTask.requireLogin = true
 
