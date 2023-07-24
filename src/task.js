@@ -195,7 +195,7 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     // broadcast task details for frontend to update
     broadcastCRUD(
         'task',
-        id,
+        taskId,
         !existingTask
             ? broadcastCRUD.actions.create
             : broadcastCRUD.actions.update,
