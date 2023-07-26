@@ -343,7 +343,7 @@ socket.on('connection', client => {
                 ...eventsHandlers[eventName],
             }
         )
-    emitToClients([client.id], 'events-meta', [meta])
+    emitToClients([client], 'events-meta', [meta])
 })
 // Start listening
 server.listen(

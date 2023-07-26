@@ -194,7 +194,9 @@ broadcastCRUD.conf = Object.freeze({
 // Client/receiver will consume the event as follows: 
 //      socket.on(eventName, param[0], param[1], param[2],...)
 export const emitToClients = (clientIds = [], eventName = '', params = []) => eventName && arrUnique(clientIds).forEach(clientId => {
-    const client = clients.get(clientId)
+    const client = isObj(clientId)
+        ? clientId
+        : clients.get(clientId)
     client && client.emit.apply(client, [eventName].concat(params))
 })
 
