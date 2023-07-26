@@ -383,6 +383,7 @@ handleTaskMarketApply.validationConf = {
     taskId: commonConfs.idHash,
     workerAddress: commonConfs.identity,
 }
+// valid properties for application
 handleTaskMarketApply.validKeys = [
     ...Object.keys(handleTaskMarketApply.validationConf),
     'tsCreated',

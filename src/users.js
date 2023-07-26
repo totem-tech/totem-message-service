@@ -4,6 +4,21 @@ import { arrUnique, isArr, isFn, isObj, isStr } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { setTexts } from './language'
 
+// Error messages
+const messages = {
+    alreadyRegistered: `
+        You have already registered!
+        Please contact support for instructions if you wish to get a new user ID.`,
+    idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
+    idExists: 'User ID already taken',
+    invalidUserID: 'Invalid User ID',
+    loginFailed: 'Credentials do not match',
+    loginOrRegister: 'Login/registration required',
+    msgLengthExceeds: 'Maximum characters allowed',
+    strOrObjRequired: 'Valid string or object required',
+    reservedIdLogin: 'Cannot login with a reserved User ID',
+}
+setTexts(messages)
 let signupCount = 0
 const defaultFields = [
     '_id',
@@ -25,22 +40,11 @@ export const onlineUsers = new Map()
 export const userClientIds = new Map()
 export const systemUserSymbol = Symbol('I am the system meawser!')
 const onlineSupportUsers = new Map()
-const userIdRegex = /^[a-z][a-z0-9]+$/
+// `RegExp` instances are not transferrable through Websocket events.
+// Using array make it possible to be sent to frontent/clients through Websocket.
+// The utils/validator is configured to automatically create RegExp instance if array is provided.
+const userIdRegex = ['^[a-z][a-z0-9]+$'] // /^[a-z][a-z0-9]+$/
 const log = (...args) => console.log(new Date().toISOString(), '[users]', ...args)
-// Error messages
-const messages = setTexts({
-    alreadyRegistered: `
-        You have already registered!
-        Please contact support for instructions if you wish to get a new user ID.`,
-    idInvalid: 'Only alpha-numeric characters allowed and must start with an alphabet',
-    idExists: 'User ID already taken',
-    invalidUserID: 'Invalid User ID',
-    loginFailed: 'Credentials do not match',
-    loginOrRegister: 'Login/registration required',
-    msgLengthExceeds: 'Maximum characters allowed',
-    strOrObjRequired: 'Valid string or object required',
-    reservedIdLogin: 'Cannot login with a reserved User ID',
-})
 export const ROLE_ADMIN = 'admin'
 export const ROLE_SUPPORT = 'support'
 export const USER_CAPTCHA = 'captcha'
@@ -413,8 +417,6 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     const err = validateObj(newUser, conf, true, true)
     if (err) return callback(err)
 
-    // get rid of any leading and trailing spaces
-    userId = userId.trim()
     // check if user ID already exists
     if (await idExists([userId])) return callback(messages.idExists)
 
@@ -422,32 +424,36 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         // direct referral by user ID
         const { _id } = await users.get(referredBy) || {}
         // removes referrer ID if referrer user not found
-        referredBy = _id
-    } else if (isObj(referredBy) && !!referredBy.handle) {
-        // Check if referrer user is valid and referrer's social handle has been verified
-        let referrer
-        let { handle, platform } = referredBy
-        handle = `${handle}`.toLowerCase()
+        referredBy = RESERVED_IDS.includes(_id)
+            ? undefined
+            : _id
+    } else if (isObj(referredBy)) {
+        // referrer validation not required as referral program is closed now
 
-        if (platform === 'twitter') {
-            // lowercase twitter handle search using custom view
-            referrer = (await users.view('lowercase', 'twitterHandle', { key: handle }))[0]
-        } else {
-            // referral through other platforms
-            referrer = await users.find({
-                [`socialHandles.${platform}.handle`]: handle,
-                [`socialHandles.${platform}.verified`]: true
-            })
-        }
+        // Check if referrer user is valid and referrer's social handle has been verified
+        // let referrer
+        // let { handle, platform } = referredBy
+        // handle = `${handle}`.toLowerCase()
+
+        // if (platform === 'twitter') {
+        //     // lowercase twitter handle search using custom view
+        //     referrer = (await users.view('lowercase', 'twitterHandle', { key: handle }))[0]
+        // } else {
+        //     // referral through other platforms
+        //     referrer = await users.find({
+        //         [`socialHandles.${platform}.handle`]: handle,
+        //         [`socialHandles.${platform}.verified`]: true
+        //     })
+        // }
 
         // ignore if referrer and referred user's address is the same
-        referredBy = !referrer || referrer.address === address
-            ? undefined
-            : {
-                handle,
-                platform,
-                userId: referrer._id,
-            }
+        // referredBy = !referrer || referrer.address === address
+        //     ? undefined
+        //     : {
+        //         handle,
+        //         platform,
+        //         userId: referrer._id,
+        //     }
     } else {
         referredBy = undefined
     }
@@ -482,46 +488,53 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     })
     callback(null)
 }
-handleRegister.validationConfig = {
-    id: {
-        customMessages: {
-            regex: messages.idInvalid,
-            reject: messages.idExists,
-        },
-        maxLength: 16,
-        minLegth: 3,
-        regex: userIdRegex,
-        reject: RESERVED_IDS,
-        required: true,
-        type: TYPES.string,
+const userIdConf = {
+    customMessages: {
+        regex: messages.idInvalid,
     },
+    maxLength: 16,
+    minLegth: 3,
+    regex: userIdRegex,
+    required: true,
+    type: TYPES.string,
+}
+handleRegister.validationConfig = {
+    id: userIdConf,
     referredBy: {
-        maxLength: 16,
-        minLegth: 3,
-        regex: userIdRegex,
-        reject: RESERVED_IDS,
+        _description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
+        ...userIdConf,
         required: false,
-        type: TYPES.string,
-        customMessages: {
-            object: messages.strOrObjRequired,
-        },
-        // alternatively accept an object with following properties: handle and platform 
         or: {
-            required: true,
-            type: TYPES.object,
             config: {
                 handle: {
+                    maxLength: 64,
                     minLegth: 3,
                     required: true,
                     type: TYPES.string,
                 },
                 platform: {
+                    accept: [
+                        'discord',
+                        'facebook',
+                        'instagram',
+                        'telegram',
+                        'twitter',
+                        'x', // Twitter's new name
+                        'whatsapp',
+                    ],
+                    maxLength: 32,
                     minLegth: 3,
                     required: true,
                     type: TYPES.string,
                 },
-            }
-        }
+                userId: {
+                    ...userIdConf,
+                    required: false,
+                },
+            },
+            required: true,
+            type: TYPES.object,
+        },
     },
     secret: {
         minLegth: 10,

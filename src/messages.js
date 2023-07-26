@@ -14,13 +14,14 @@ const DISCORD_WEBHOOK_URL_SUPPORT = process.env.DISCORD_WEBHOOK_URL_SUPPORT
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
 const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 // Error messages
-const texts = setTexts({
+const texts = {
+    errorNotAGroup: 'Cannot set name for one to one conversation',
     invalidRequest: 'Invalid request',
     invalidRecipientIds: 'One or more recipient ID is invalid',
     groupName: 'Group Name',
-    groupNameNotAllowed: 'Cannot set name for one to one conversation',
     recipients: 'recipients',
-})
+}
+setTexts(texts)
 
 /**
  * @name    handleMessage
@@ -165,31 +166,32 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     callback(null, arrSort(result, 'tsCreated'))
 }
 handleMessageGetRecent.requireLogin = true
-handleMessageGetRecent.validationConf = {
-    message: {
-        maxLength: 160,
-        required: true,
-        type: TYPES.string,
-    },
-    receiverIds: {
-        customMessages: {
-            reject: texts.invalidRecipientIds,
-        },
-        label: texts.recipients,
-        minLength: 1,
-        reject: RESERVED_IDS
-            .filter(id =>
-                ![
-                    ROLE_SUPPORT,
-                    TROLLBOX,
-                    TROLLBOX_ALT,
-                ].includes(id)
-            ),
-        required: true,
-        type: TYPES.array,
-        unique: true,
-    },
-}
+// unused
+// handleMessageGetRecent.validationConf = {
+//     message: {
+//         maxLength: 160,
+//         required: true,
+//         type: TYPES.string,
+//     },
+//     receiverIds: {
+//         customMessages: {
+//             reject: texts.invalidRecipientIds,
+//         },
+//         label: texts.recipients,
+//         minLength: 1,
+//         reject: RESERVED_IDS
+//             .filter(id =>
+//                 ![
+//                     ROLE_SUPPORT,
+//                     TROLLBOX,
+//                     TROLLBOX_ALT,
+//                 ].includes(id)
+//             ),
+//         required: true,
+//         type: TYPES.array,
+//         unique: true,
+//     },
+// }
 /**
  * @name    handleMessageGroupName
  * @summary handle event to set a name for group conversation. Anyone within the group can set name.
@@ -201,7 +203,11 @@ handleMessageGetRecent.validationConf = {
 export async function handleMessageGroupName(receiverIds, name, callback) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
+
     const senderId = user.id
+    const isReserved = !!receiverIds.find(id => RESERVED_IDS.includes(id))
+    if (isReserved) return callback(texts.invalidRecipientIds)
+
     const err = validateObj(
         { receiverIds, name },
         handleMessageGroupName.validationConf,
@@ -243,12 +249,12 @@ handleMessageGroupName.validationConf = {
     },
     receiverIds: {
         customMessages: {
-            minLength: texts.groupNameNotAllowed,
-            reject: texts.invalidRecipientIds,
+            minLength: texts.errorNotAGroup,
+            // reject: texts.invalidRecipientIds,
         },
         label: texts.recipients,
         minLength: 2,
-        reject: RESERVED_IDS,
+        // reject: RESERVED_IDS, // prevent sending list of reserved ids to frontend
         required: true,
         type: TYPES.array,
         unique: true,

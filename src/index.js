@@ -60,6 +60,7 @@ import {
     ROLE_ADMIN,
     broadcast,
     onlineUsers,
+    emitToClients,
 } from './users'
 
 let maintenanceMode = false
@@ -135,6 +136,20 @@ async function handleMaintenanceMode(active = false, callback) {
     }
     return callback(null, maintenanceMode)
 }
+const handleEventsMeta = callback => {
+    const result = {}
+    Object
+        .keys(eventsHandlers)
+        .forEach(eventName =>
+            result[eventName] = {
+                requireLogin: false,
+                testprint: (num) => console[num > 100 ? 'warn' : 'log'](num),
+                ...eventsHandlers[eventName],
+            }
+        )
+    callback(null, result)
+}
+// setTimeout(() => handleEventsMeta((...args) => console.log('events meta: ', ...args)))
 const eventMaintenanceMode = 'maintenance-mode'
 // events allowed during maintenance mode.
 const maintenanceModeEvents = [
@@ -142,9 +157,10 @@ const maintenanceModeEvents = [
     'login', // without login admin user won't be able to login and therefore, can't turn off maintenance mode.
     'rewards-get-kapex-payouts', // allow crowdloan rewards data request even when in maintenance mode
 ]
-const events = {
-    // admin endpoints
+const eventsHandlers = {
+    // system & status endpoints
     [eventMaintenanceMode]: handleMaintenanceMode,
+    'events-meta': handleEventsMeta,
 
     // User & connection
     'disconnect': handleDisconnect,
@@ -302,21 +318,37 @@ const interceptHandler = (name, handler) => async function (...args) {
         maintenanceMode && console.info('Request Count', requestCount)
     }
 }
-// replace handlers with intercepted handler
-// Object.keys(events)
-//     .forEach(name =>
-//         events[name] = interceptHandler(name, events[name])
-//     )
 // Setup websocket event handlers
-socket.on('connection', client =>
-    Object.keys(events)
+socket.on('connection', client => {
+    // add interceptable event handlers
+    Object.keys(eventsHandlers)
         .forEach(name =>
-            client.on(name, interceptHandler(name, events[name]))
+            client.on(
+                name,
+                interceptHandler(
+                    name,
+                    eventsHandlers[name]
+                )
+            )
         )
-)
+
+    // send event handlers' meta data to client
+    const meta = {}
+    Object
+        .keys(eventsHandlers)
+        .forEach(eventName =>
+            meta[eventName] = {
+                params: [],// ToDo: add list of parameters with validation types to event handler functions
+                requireLogin: false,
+                ...eventsHandlers[eventName],
+            }
+        )
+    emitToClients([client.id], 'events-meta', [meta])
+})
 // Start listening
-server.listen(PORT, () =>
-    console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`)
+server.listen(
+    PORT,
+    () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`)
 )
 
 if (!HTTPS_ONLY && socketClients.find(x => x.startsWith('http://'))) {
@@ -324,15 +356,16 @@ if (!HTTPS_ONLY && socketClients.find(x => x.startsWith('http://'))) {
     const socketHttp = socketIO(serverHttp, { allowRequest })
     // Setup websocket event handlers
     socketHttp.on('connection', client =>
-        Object.keys(events)
+        Object.keys(eventsHandlers)
             .forEach(name =>
-                client.on(name, events[name])
+                client.on(name, eventsHandlers[name])
             )
     )
     const PORT_HTTP = process.env.PORT_HTTP || 4001
     // Start listening
-    serverHttp.listen(PORT_HTTP, () =>
-        console.log(`Totem Messaging Service started. Websocket listening on port ${PORT_HTTP} (http)`)
+    serverHttp.listen(
+        PORT_HTTP,
+        () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT_HTTP} (http)`)
     )
 }
 
