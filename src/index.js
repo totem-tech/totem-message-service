@@ -62,8 +62,13 @@ import {
     onlineUsers,
     emitToClients,
 } from './users'
+import { TYPES, validateObj } from './utils/validator'
+import {
+    eventMaintenanceMode,
+    handleMaintenanceMode,
+    rxMaintenanceMode
+} from './system'
 
-let maintenanceMode = false
 let requestCount = 0
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
@@ -73,7 +78,7 @@ const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
-const DEBUG = process.env.DEBUG === 'TRUE'
+const isDebug = process.env.DEBUG === 'TRUE'
 const HTTPS_ONLY = process.env.HTTPS_ONLY === 'TRUE'
 const socketClients = (process.env.SOCKET_CLIENTS || '')
     .split(',')
@@ -84,7 +89,7 @@ const socketClients = (process.env.SOCKET_CLIENTS || '')
         return `https://${x}`
     })
 let unapprovedOrigins = []
-console.log({ socketClients })
+console.log('SOCKET_CLIENTS', socketClients)
 const allowRequest = socketClients.length === 0
     ? undefined
     : (request, callback) => {
@@ -96,7 +101,7 @@ const allowRequest = socketClients.length === 0
             unapprovedOrigins = unapprovedOrigins.slice(-100)
             console.log('Websocket request rejected from unapproved origin:', origin)
         }
-        DEBUG && console.log({ origin, allow })
+        isDebug && console.log({ origin, allow })
         callback(null, allow)
     }
 const server = https.createServer({ cert, key }, express())
@@ -112,51 +117,27 @@ const texts = setTexts({
         Don't forget to mention the following Request ID
     `,
 })
-/**
- * @name    handleMaintenanceMode
- * @summary de-/activate maintenance mode.
- * 
- * @description When active, all other websocket events will be responded with an error message.
- * Only user's with role `admin` are allowed to access this endpoint.
- * 
- * @param   {Boolean}   active 
- * @param   {Function}  callback 
- */
-async function handleMaintenanceMode(active = false, callback) {
-    if (!isFn(callback)) return
 
-    const [_, user] = this
-    const { _id, roles = [] } = user || {}
-    const isAdmin = roles.includes(ROLE_ADMIN)
-    if (isAdmin && isBool(active)) {
-        if (maintenanceMode || active) console.log(`[MaintenanceMode] ${active ? '' : 'de'}activated by @${_id}`)
-        maintenanceMode = active
-        // broadcast to all clients
-        setTimeout(() => broadcast([], eventMaintenanceMode, [maintenanceMode]))
-    }
-    return callback(null, maintenanceMode)
-}
 const handleEventsMeta = callback => {
-    const result = {}
+    const meta = {}
     Object
-        .keys(eventsHandlers)
+        .keys(eventsHandlers || {})
         .forEach(eventName =>
-            result[eventName] = {
+            meta[eventName] = {
                 requireLogin: false,
-                testprint: (num) => console[num > 100 ? 'warn' : 'log'](num),
                 ...eventsHandlers[eventName],
             }
         )
-    callback(null, result)
+    delete meta.disconnect
+    callback(null, meta)
 }
-// setTimeout(() => handleEventsMeta((...args) => console.log('events meta: ', ...args)))
-const eventMaintenanceMode = 'maintenance-mode'
-// events allowed during maintenance mode.
-const maintenanceModeEvents = [
-    eventMaintenanceMode,
-    'login', // without login admin user won't be able to login and therefore, can't turn off maintenance mode.
-    'rewards-get-kapex-payouts', // allow crowdloan rewards data request even when in maintenance mode
-]
+handleEventsMeta.params = [{
+    required: true,
+    name: 'callback',
+    type: TYPES.callback,
+}]
+// allow request even during maintenance mode
+handleEventsMeta.maintenanceMode = true
 const eventsHandlers = {
     // system & status endpoints
     [eventMaintenanceMode]: handleMaintenanceMode,
@@ -226,15 +207,22 @@ const eventsHandlers = {
     'task-market-apply-response': handleTaskMarketApplyResponse,
     'task-market-search': handleTaskMarketSearch,
 }
-
+console.log('Events allowed during maintenance mode:',
+    Object
+        .keys(eventsHandlers)
+        .filter(key => eventsHandlers[key].maintenanceMode)
+)
 const interceptHandler = (name, handler) => async function (...args) {
     if (!isFn(handler)) return
 
-    // console.log({ name, handler })
     const requestId = uuid.v1()
     const client = this
     const userId = client.___userId
-    const { requireLogin } = handler
+    const {
+        maintenanceMode,
+        params = [],
+        requireLogin
+    } = handler
     if (name === 'message') {
         // pass on extra information along with the client
         client._data = {
@@ -245,16 +233,38 @@ const interceptHandler = (name, handler) => async function (...args) {
     }
     // last argument is expected to be the function
     const callback = args.slice(-1)[0]
-    const hasCallback = isFn(callback)
+    const gotCb = isFn(callback)
+    const requireCalblack = !!params.find(x =>
+        x.type === TYPES.function
+        && x.required
+    )
+    // a callback is required but not provided
+    if (requireCalblack && !gotCb) return
 
-    const deny = maintenanceMode && !maintenanceModeEvents.includes(name)
-    if (deny) return hasCallback && callback(texts.maintenanceMode)
+    const maintenanceModeActive = rxMaintenanceMode.value
+    const deny = maintenanceModeActive && !maintenanceMode
+    if (deny) return gotCb && callback(texts.maintenanceMode)
 
     try {
         requestCount++
-        maintenanceMode && console.info('Request Count', requestCount)
+        maintenanceModeActive && console.info('Request Count', requestCount)
         // user must be logged
-        if (requireLogin && !userId) return hasCallback && callback(texts.loginRequired)
+        if (requireLogin && !userId) return gotCb && callback(texts.loginRequired)
+
+        // validate event handler params
+        const err = isArr(params)
+            && params.length > 0
+            && validateObj(
+                [...args],
+                params,
+                true,
+                true
+            )
+        if (err) {
+            console.log('-------', name, { args, params, err })
+            return gotCb && callback(err)
+        }
+
         // include the user object if login is required for this event
         const thisArg = [
             client,
@@ -262,7 +272,7 @@ const interceptHandler = (name, handler) => async function (...args) {
         ]
         await handler.apply(thisArg, args)
     } catch (err) {
-        hasCallback && callback(`${texts.runtimeError}: ${requestId}`)
+        gotCb && callback(`${texts.runtimeError}: ${requestId}`)
 
         // Print error meta data
         console.log([
@@ -315,7 +325,7 @@ const interceptHandler = (name, handler) => async function (...args) {
         }
     } finally {
         requestCount--
-        maintenanceMode && console.info('Request Count', requestCount)
+        maintenanceModeActive && console.info('Request Count', requestCount)
     }
 }
 // Setup websocket event handlers
@@ -333,17 +343,7 @@ socket.on('connection', client => {
         )
 
     // send event handlers' meta data to client
-    const meta = {}
-    Object
-        .keys(eventsHandlers)
-        .forEach(eventName =>
-            meta[eventName] = {
-                params: [],// ToDo: add list of parameters with validation types to event handler functions
-                requireLogin: false,
-                ...eventsHandlers[eventName],
-            }
-        )
-    emitToClients([client], 'events-meta', [meta])
+    handleEventsMeta((_, meta) => emitToClients([client], 'events-meta', [meta]))
 })
 // Start listening
 server.listen(

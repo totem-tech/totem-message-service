@@ -40,3 +40,5 @@ export async function handleGetKapexPayouts(addresses, callback) {
 
     return payouts
 }
+// allow request even during maintenance mode
+handleGetKapexPayouts.maintenanceMode = true

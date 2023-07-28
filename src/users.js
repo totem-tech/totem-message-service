@@ -44,6 +44,23 @@ const onlineSupportUsers = new Map()
 // Using array make it possible to be sent to frontent/clients through Websocket.
 // The utils/validator is configured to automatically create RegExp instance if array is provided.
 const userIdRegex = ['^[a-z][a-z0-9]+$'] // /^[a-z][a-z0-9]+$/
+const userIdConf = {
+    customMessages: {
+        regex: messages.idInvalid,
+    },
+    maxLength: 16,
+    minLegth: 3,
+    name: 'userId',
+    regex: userIdRegex,
+    required: true,
+    type: TYPES.string,
+}
+const secretConf = {
+    name: 'secret',
+    minLegth: 10,
+    maxLength: 64,
+    type: TYPES.string,
+}
 const log = (...args) => console.log(new Date().toISOString(), '[users]', ...args)
 export const ROLE_ADMIN = 'admin'
 export const ROLE_SUPPORT = 'support'
@@ -254,13 +271,15 @@ export const getUserByClientId = async (clientId) => {
  */
 export const idExists = async (userIds = []) => {
     if (!userIds || userIds.length === 0) return false
+
     userIds = isArr(userIds)
         ? userIds
         : [userIds]
-    userIds = userIds.filter(id =>
-        !RESERVED_IDS.includes(id)
+    userIds = arrUnique(
+        userIds.filter(id =>
+            !RESERVED_IDS.includes(id)
+        )
     )
-
     const usersFound = await users.getAll(userIds, false)
     return userIds.length === usersFound.length
 }
@@ -304,12 +323,37 @@ export async function handleDisconnect() {
  * @name    handleIdExists
  * @summary check if user ID(s) exists
  * 
- * @param   {String|Array}  userIds 
+ * @param   {String|Array}  userId 
  * @param   {Function}      callback 
  * 
  * @returns {Boolean}       true if all supplied IDs exists, otherwise, false.
  */
-export const handleIdExists = async (userIds, callback) => isFn(callback) && callback(null, await idExists(userIds))
+export const handleIdExists = async (userId, callback) => {
+    isFn(callback) && callback(null, await idExists(userId))
+}
+handleIdExists.description = 'Check if user ID(s) exists.'
+handleIdExists.params = [
+    {
+        _description: 'Single user ID',
+        name: 'userId',
+        required: true,
+        type: TYPES.string,
+        or: {
+            _description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
+            required: true,
+            type: TYPES.array,
+        },
+    },
+    {
+        name: 'callback',
+        params: [
+            { name: 'error', type: TYPES.string },
+            { name: 'exists', type: TYPES.boolean },
+        ],
+        required: true,
+        type: TYPES.function,
+    },
+]
 
 /**
  * @name    handleIsUserOnline
@@ -331,7 +375,37 @@ export const handleIsUserOnline = async (userId, callback) => {
     }
     callback(null, result)
 }
+handleIsUserOnline.description = 'Check if one or more users are online.'
 handleIsUserOnline.requireLogin = true
+handleIsUserOnline.params = [
+    {
+        _description: 'Single user ID',
+        name: 'userId',
+        required: true,
+        type: TYPES.string,
+        or: {
+            _description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
+            required: true,
+            type: TYPES.array,
+        },
+    },
+    {
+        name: 'callback',
+        params: [
+            { name: 'error', type: TYPES.string },
+            {
+                name: 'online',
+                type: TYPES.boolean,
+                or: {
+                    _description: 'Alternative result when array of user IDs provided. Key: userId, value: boolean',
+                    type: TYPES.object,
+                }
+            },
+        ],
+        required: true,
+        type: TYPES.function,
+    },
+]
 
 
 /**
@@ -376,6 +450,29 @@ export async function handleLogin(userId, secret, callback) {
     console.log('Users online:', userClientIds.size)
     callback(null, { address, roles })
 }
+handleLogin.description = 'User login'
+// allow request even during maintenance mode
+handleLogin.maintenanceMode = true
+handleLogin.params = [
+    userIdConf,
+    secretConf,
+    {
+        name: 'callback',
+        params: [
+            { name: 'error', type: TYPES.string },
+            {
+                properties: [
+                    { name: 'address', type: TYPES.string },
+                    { name: 'roles', type: TYPES.array },
+                ],
+                name: 'data',
+                type: TYPES.object,
+            }
+        ],
+        required: true,
+        type: TYPES.function,
+    },
+]
 
 /**
  * @name    handleRegister
@@ -490,16 +587,62 @@ export async function handleRegister(userId, secret, address, referredBy, callba
     })
     callback(null)
 }
-const userIdConf = {
-    customMessages: {
-        regex: messages.idInvalid,
+handleRegister.description = 'New user registration.'
+handleRegister.params = [
+    userIdConf,
+    secretConf,
+    {
+        name: 'address',
+        type: TYPES.string,
     },
-    maxLength: 16,
-    minLegth: 3,
-    regex: userIdRegex,
-    required: true,
-    type: TYPES.string,
-}
+    {
+        _description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
+        ...userIdConf,
+        name: 'referredBy',
+        required: false,
+        or: {
+            properties: {
+                handle: {
+                    maxLength: 64,
+                    minLegth: 3,
+                    required: true,
+                    type: TYPES.string,
+                },
+                platform: {
+                    accept: [
+                        'discord',
+                        'facebook',
+                        'instagram',
+                        'telegram',
+                        'twitter',
+                        'x', // Twitter's new name
+                        'whatsapp',
+                    ],
+                    maxLength: 32,
+                    minLegth: 3,
+                    required: true,
+                    type: TYPES.string,
+                },
+                userId: {
+                    ...userIdConf,
+                    required: false,
+                },
+            },
+            required: false,
+            type: TYPES.object,
+        },
+    },
+    {
+        name: 'callback',
+        params: [
+            { name: 'error', type: TYPES.string },
+        ],
+        required: true,
+        type: TYPES.function,
+    },
+]
+
+
 handleRegister.validationConfig = {
     id: userIdConf,
     referredBy: {

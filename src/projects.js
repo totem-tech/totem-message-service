@@ -96,7 +96,57 @@ export async function handleProject(id, project, create, callback) {
         project,
     )
 }
+const activityConf = {
+    name: 'activity',
+    properties: {
+        description: {
+            required: true,
+            maxLength: 160,
+            minLength: 3,
+            type: TYPES.string,
+        },
+        id: {
+            required: true,
+            type: TYPES.hash,
+        },
+        name: {
+            maxLength: 64,
+            minLength: 3,
+            required: true,
+            type: TYPES.string,
+        },
+        ownerAddress: {
+            required: true,
+            type: TYPES.identity,
+        },
+    },
+    type: TYPES.object,
+}
+handleProject.params = [
+    {
+        label: 'id',
+        required: true,
+        type: TYPES.hash,
+    },
+    {
+        ...activityConf,
+        defaultValue: null,
+        required: false,
+    },
+    {
+        defaultValue: false,
+        label: 'create',
+        required: false,
+        type: TYPES.boolean,
+    },
+    {
+        label: 'callback',
+        required: false,
+        type: TYPES.function,
+    },
+]
 handleProject.requireLogin = true
+handleProject.result = activityConf
 handleProject.validationConf = {
     description: {
         required: true,
