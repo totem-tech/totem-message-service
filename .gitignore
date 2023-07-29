@@ -19,7 +19,7 @@ tools/importCompanies.sh
 start-*.sh
 
 # bundled JS file
-docs/bundle.js
+dist
 
 # certificate keys etc
 *totem.live.*
