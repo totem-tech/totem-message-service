@@ -11,6 +11,7 @@ import {
 import { addressToStr } from './utils/convert'
 import { isCountryCode } from './countries'
 import { setTexts } from './language'
+import { TYPES } from './utils/validator'
 
 const companies = new CouchDBStorage(null, 'companies') // disable caching
 // Must-have properties
@@ -92,48 +93,98 @@ handleCompany.requireLogin = true
 /**
  * @name    handleCompanySearch
  * @summary search companies. Maximum results 100 (see `RESULT_LIMIT`)
+ * 
  * @param   {*} query 
  * @param   {*} searchParentIdentity 
  * @param   {*} callback 
  */
-// Find companies by key-value pair(s)
-//
-// Params:
-// @query       string/object: query string or object with specific keys and respective values
-//                  1. if string and is a valid SS58 encoded address a company is associted with it, will return a Map of single item.
-//                  2. if string and not an address, will search by all searchable company properties
-//                  3. if object, will only search for specific keys supplied. Key(s) must exist in the `validKeys` array.
 export async function handleCompanySearch(query, searchParentIdentity = false, callback) {
     if (!isFn(callback)) return
     if (isHash(query)) {
         // valid hash supplied
         const company = await companies.get(query)
-        const err = !company ? messages.notFound : null
-        return callback(err, !err && new Map([[query, company]]))
+        const err = !company
+            ? messages.notFound
+            : null
+        return callback(
+            err,
+            !err && new Map([[query, company]]) || undefined
+        )
     }
 
     const searchSeq = async (selectors = [], any) => {
         let result = new Map()
-        for (let i = 0; i < selectors.length; i++) {
+        for (let i = 0;i < selectors.length;i++) {
             if (result.size > 0 && !any) return result
+
             const selector = selectors[i]
-            result = mapJoin(result, await companies.search(selector, RESULT_LIMIT))
+            result = mapJoin(
+                result,
+                await companies.search(
+                    selector,
+                    RESULT_LIMIT
+                )
+            )
         }
         return result
     }
 
     // search by identity or parentIdentity
-    if (isAddress(query)) return callback(null, await searchSeq([
-        { identity: query },
-        // if no result found matching identity, search for parentIdentity
-        searchParentIdentity && { parentIdentity: query },
-    ].filter(Boolean), true))
+    if (isAddress(query)) return callback(
+        null,
+        await searchSeq(
+            [
+                { identity: query },
+                // if no result found matching identity, search for parentIdentity
+                searchParentIdentity && { parentIdentity: query },
+            ].filter(Boolean),
+            true
+        )
+    )
 
-    return callback(null, await searchSeq([
-        { registrationNumber: query }, //{ $eq: query }
-        // { salesTaxCode: query },
-        { name: { $gte: query } },
-    ]), 100)
+    return callback(
+        null,
+        await searchSeq([
+            { registrationNumber: query }, //{ $eq: query }
+            // { salesTaxCode: query },
+            { name: { $gte: query } },
+        ])
+    )
+}
+handleCompanySearch.description = 'Search for companies by id, name, registration number, identity or parent identity'
+handleCompanySearch.eventName = 'company-search'
+handleCompanySearch.params = [
+    {
+        description: `Search by company name or registration number. Result limit: ${RESULT_LIMIT}.`,
+        name: 'query',
+        required: true,
+        type: TYPES.string,
+        or: {
+            description: 'Alternatively, search by (SS58 encoded Substrate) identity',
+            type: TYPES.identity,
+            or: {
+                description: 'Alternatively, fetch by specific company ID.',
+                type: TYPES.hash,
+            },
+        },
+    },
+    {
+        description: 'Indicates whether to search for parent identity as well as company identity. Only applicable when querying by identity.',
+        defaultValue: false,
+        name: 'searchParentIdentity',
+        required: false,
+        type: TYPES.boolean,
+    },
+    {
+        name: 'callback',
+        required: true,
+        type: TYPES.function,
+    }
+]
+handleCompanySearch.requireLogin = false
+handleCompanySearch.result = {
+    name: 'companies',
+    type: 'map'
 }
 
 // setTimeout(async () => {

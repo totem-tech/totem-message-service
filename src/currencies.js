@@ -4,33 +4,17 @@ import { setTexts } from './language'
 import { TYPES, validate, validateObj } from './utils/validator'
 import PromisE from './utils/PromisE'
 
-const currencies = new CouchDBStorage(null, 'currencies')
-const dailyHistoryDB = new CouchDBStorage(null, 'currencies_price_history_daily')
-let currenciesHash // hash of sorted array of supported currencies
-let currenciesPromise
-const autoRefreshDelay = 60 * 60 * 1000
-const messages = setTexts({
+const messages = {
     invalidRequest: 'Missing one or more of the required fields',
     notFound: 'Unsupported currency'
-})
-
-/**
- * @name    autoUpdateHash
- * @summary auto update hash of currencies list
- */
-export const updateCache = async (auto = false) => {
-    console.log(new Date(), 'Updating currencies cache')
-    try {
-        currenciesPromise = PromisE(getAll(null, false))
-        currenciesHash = generateHash(
-            arrSort(await currenciesPromise, 'ticker'),
-            'blake2',
-        )
-        auto && setTimeout(() => updateCache(true), autoRefreshDelay)
-    } catch (err) {
-        console.error(new Date(), 'Failed to update currencies cache', err)
-    }
 }
+setTexts(messages)
+let autoUpdate = true
+const autoUpdateDelay = 60 * 60 * 1000
+const currencies = new CouchDBStorage(null, 'currencies')
+let currenciesHash // hash of sorted array of supported currencies
+let currenciesPromise
+const dailyHistoryDB = new CouchDBStorage(null, 'currencies_price_history_daily')
 
 /**
  * @name    handleCurrencyConvert
@@ -115,6 +99,8 @@ export const handleCurrencyConvert = async (from, to, amount, callback) => {
     const [err, convertedAmount, rounded] = await convertTo(from, to, amount)
     callback(err, convertedAmount, rounded)
 }
+handleCurrencyConvert.description = 'Currency conversion'
+handleCurrencyConvert.eventName = ''
 
 /**
  * @name    handleCurrencyList
@@ -132,6 +118,28 @@ export const handleCurrencyList = async (hash, callback) => {
     if (currenciesPromise.rejected) await updateCache()
     callback(null, await currenciesPromise)
 }
+handleCurrencyList.description = 'Fetch/update list of currencies'
+handleCurrencyList.eventName = 'currency-list'
+handleCurrencyList.maintenanceMode = true // allow during maintenance mode
+handleCurrencyList.params = [
+    {
+        description: 'Hash of the array of currencies sorted by `ticker`. Hash algorithm: "blake2", bit length: 256.',
+        name: 'hash',
+        required: false,
+        type: TYPES.hash,
+    },
+    {
+        name: 'callback',
+        required: true,
+        type: TYPES.function,
+    },
+]
+handleCurrencyList.requireLogin = false
+handleCurrencyList.result = {
+    name: 'currencies',
+    type: TYPES.array,
+}
+
 
 /**
  * @name    handleCurrencyPricesByDate
@@ -172,6 +180,45 @@ export const handleCurrencyPricesByDate = async (date, currencyIds, callback) =>
 
     callback(null, result)
 }
+handleCurrencyPricesByDate.description = 'Fetch list of prices for available currencies for a specific date.'
+handleCurrencyPricesByDate.eventName = 'currency-prices-by-date'
+handleCurrencyPricesByDate.params = [
+    {
+        maxLength: 10,
+        minLength: 10,
+        name: 'date',
+        required: true,
+        type: TYPES.date,
+    },
+    {
+        name: 'currencyIds',
+        required: false,
+        type: TYPES.array,
+        unique: true,
+    },
+    {
+        name: 'callback',
+        required: true,
+        type: TYPES.function,
+    },
+
+]
+handleCurrencyPricesByDate.result = {
+    item: {
+        description: 'Array item definition',
+        _id: { type: TYPES.string },
+        currencyId: { type: TYPES.string },
+        date: { type: TYPES.date },
+        marketCapUSD: { type: TYPES.number },
+        ratioOfExchange: { type: TYPES.number },
+        source: {
+            description: 'Where or how the data has been retrieved.',
+            type: TYPES.string,
+        },
+    },
+    name: 'prices',
+    type: TYPES.array,
+}
 handleCurrencyPricesByDate.validatorConf = {
     currencyIds: {
         required: false,
@@ -186,8 +233,7 @@ handleCurrencyPricesByDate.validatorConf = {
     },
 }
 
-// initialize
-setTimeout(async () => {
+export const setup = async () => {
     const db = await currencies.getDB()
     const dbH = await dailyHistoryDB.getDB()
     const indexes = [
@@ -218,8 +264,41 @@ setTimeout(async () => {
             name: 'date-currencyId-index',
         },
     ]
+
     // create indexes. Ignore if already exists
     await PromisE.all(indexes.map(index => db.createIndex(index)))
     await PromisE.all(indexes2.map(index => dbH.createIndex(index)))
-    updateCache(true)
-})
+    await updateCache()
+
+    const startAutoUpdate = async () => {
+        do {
+            await PromisE.delay(autoUpdateDelay)
+            await updateCache()
+        } while (autoUpdate)
+    }
+    autoUpdate && startAutoUpdate()
+}
+
+/**
+ * @name    autoUpdateHash
+ * @summary auto update hash of currencies list
+ */
+export const updateCache = async () => {
+    try {
+        console.log(new Date(), 'Updating currencies cache')
+        currenciesPromise = PromisE(getAll(null, false))
+        currenciesHash = generateHash(
+            arrSort(await currenciesPromise, 'ticker'),
+            'blake2',
+            256,
+        )
+    } catch (err) {
+        console.error(new Date(), 'Failed to update currencies cache', err)
+    }
+}
+
+export default {
+    'currency-convert': handleCurrencyConvert,
+    'currency-list': handleCurrencyList,
+    [handleCurrencyPricesByDate.eventName]: handleCurrencyPricesByDate,
+}

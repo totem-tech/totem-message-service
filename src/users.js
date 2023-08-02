@@ -59,6 +59,7 @@ const secretConf = {
     name: 'secret',
     minLegth: 10,
     maxLength: 64,
+    required: true,
     type: TYPES.string,
 }
 const log = (...args) => console.log(new Date().toISOString(), '[users]', ...args)
@@ -149,57 +150,6 @@ export const broadcast = (ignoreClientIds, eventName, params) => {
     emitToClients(clientIds, eventName, params)
 }
 
-/**
- * @name    broadcastCRUD
- * @summary broadcast to all clients about changes in data
- * 
- * @param   {String} id 
- * @param   {String} type 
- * @param   {String} action // create,read,update,delete
- * @param   {Object} data (optional) typically entry. Can vary based on specific type
- */
-export const broadcastCRUD = (type, id, action, data) => {
-    const err = validateObj(
-        {
-            action,
-            data,
-            id,
-            type,
-        },
-        broadcastCRUD.conf
-    )
-    if (err) return err
-    broadcast([], 'CRUD', {
-        data,
-        id,
-        type,
-        type,
-    })
-}
-broadcastCRUD.actions = {
-    create: 'create',
-    delete: 'delete',
-    read: 'read',
-    update: 'update',
-}
-broadcastCRUD.conf = Object.freeze({
-    action: {
-        // only these values are valid
-        accept: Object.values(broadcastCRUD.actions),
-        required: true,
-        type: TYPES.string,
-    },
-    data: { type: TYPES.object },
-    id: {
-        required: true,
-        type: TYPES.string,
-    },
-    type: {
-        required: true,
-        type: TYPES.string,
-    },
-})
-
 // Emit to specific clients by ids
 //
 // Params: 
@@ -210,12 +160,18 @@ broadcastCRUD.conf = Object.freeze({
 // Example: 
 // Client/receiver will consume the event as follows: 
 //      socket.on(eventName, param[0], param[1], param[2],...)
-export const emitToClients = (clientIds = [], eventName = '', params = []) => eventName && arrUnique(clientIds).forEach(clientId => {
-    const client = isObj(clientId)
-        ? clientId
-        : clients.get(clientId)
-    client && client.emit.apply(client, [eventName].concat(params))
-})
+export const emitToClients = (
+    clientIds = [],
+    eventName = '',
+    params = []
+) => eventName
+    && arrUnique(clientIds)
+        .forEach(clientId => {
+            const client = isObj(clientId)
+                ? clientId
+                : clients.get(clientId)
+            client && client.emit.apply(client, [eventName].concat(params))
+        })
 
 // Emit to users (everywhere the user is logged in)
 //
@@ -334,12 +290,12 @@ export const handleIdExists = async (userId, callback) => {
 handleIdExists.description = 'Check if user ID(s) exists.'
 handleIdExists.params = [
     {
-        _description: 'Single user ID',
+        description: 'Single user ID',
         name: 'userId',
         required: true,
         type: TYPES.string,
         or: {
-            _description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
+            description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
             required: true,
             type: TYPES.array,
         },
@@ -379,12 +335,12 @@ handleIsUserOnline.description = 'Check if one or more users are online.'
 handleIsUserOnline.requireLogin = true
 handleIsUserOnline.params = [
     {
-        _description: 'Single user ID',
+        description: 'Single user ID',
         name: 'userId',
         required: true,
         type: TYPES.string,
         or: {
-            _description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
+            description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
             required: true,
             type: TYPES.array,
         },
@@ -397,7 +353,7 @@ handleIsUserOnline.params = [
                 name: 'online',
                 type: TYPES.boolean,
                 or: {
-                    _description: 'Alternative result when array of user IDs provided. Key: userId, value: boolean',
+                    description: 'Alternative result when array of user IDs provided. Key: userId, value: boolean',
                     type: TYPES.object,
                 }
             },
@@ -507,14 +463,15 @@ export async function handleRegister(userId, secret, address, referredBy, callba
         socialHandles: {},
         tsCreated,
     }
-    const conf = { ...handleRegister.validationConfig }
-    // make sure users don't use themselves as referrer
-    conf.referredBy = {
-        ...conf.referredBy,
-        reject: userId,
-    }
-    const err = validateObj(newUser, conf, true, true)
-    if (err) return callback(err)
+    // const conf = { ...handleRegister.validationConfig }
+    // // make sure users don't use themselves as referrer
+    // conf.referredBy = {
+    //     ...conf.referredBy,
+    //     reject: userId,
+    // }
+    // const err = validateObj(newUser, conf, true, true)
+    // if (err) return callback(err)
+    if (referredBy === userId) referredBy = undefined
 
     // check if user ID already exists
     if (await idExists([userId])) return callback(messages.idExists)
@@ -593,10 +550,11 @@ handleRegister.params = [
     secretConf,
     {
         name: 'address',
+        required: true,
         type: TYPES.string,
     },
     {
-        _description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
+        description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
         ...userIdConf,
         name: 'referredBy',
         required: false,
@@ -641,12 +599,10 @@ handleRegister.params = [
         type: TYPES.function,
     },
 ]
-
-
 handleRegister.validationConfig = {
     id: userIdConf,
     referredBy: {
-        _description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
+        description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
         ...userIdConf,
         required: false,
         or: {

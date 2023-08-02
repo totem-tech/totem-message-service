@@ -5,11 +5,9 @@ import {
     isArr,
     isFn,
     isHash,
-    isMap,
     isStr,
     isValidNumber,
     objClean,
-    toArray,
 } from './utils/utils'
 import {
     TYPES,
@@ -19,7 +17,8 @@ import {
 import { authorizeData, recordTypes } from './blockchain'
 import { setTexts } from './language'
 import { commonConfs, sendNotification } from './notification'
-import { broadcast, broadcastCRUD, systemUserSymbol } from './users'
+import { broadcastCRUD } from './system'
+import { broadcast, systemUserSymbol } from './users'
 
 // Tasks database
 const tasks = new CouchDBStorage(null, 'task')
@@ -193,14 +192,14 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     if (!existingTask && task.isMarket) broadcast([], 'task-market-created', [taskId])
 
     // broadcast task details for frontend to update
-    broadcastCRUD(
-        'task',
-        taskId,
-        !existingTask
+    broadcastCRUD({
+        action: !existingTask
             ? broadcastCRUD.actions.create
             : broadcastCRUD.actions.update,
-        task
-    )
+        data: task,
+        id: taskId,
+        type: 'task',
+    })
 }
 handleTask.requireLogin = true
 

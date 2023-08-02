@@ -1,20 +1,51 @@
 import CouchDBStorage from './utils/CouchDBStorage'
-import { isArr, isFn, isObj, objClean } from './utils/utils'
-import { TYPES, validateObj } from './utils/validator'
+import PromisE from './utils/PromisE'
+import {
+    isFn,
+    isObj,
+    objClean,
+} from './utils/utils'
+import { TYPES } from './utils/validator'
 import { authorizeData } from './blockchain'
 import { setTexts } from './language'
-import { broadcast, broadcastCRUD, emitToUsers } from './users'
-import PromisE from './utils/PromisE'
+import { broadcastCRUD } from './system'
 
-const projects = new CouchDBStorage(null, 'projects')
-const messages = setTexts({
+const messages = {
     accessDenied: 'Access denied',
     arrayRequired: 'Array required',
     bonsaiAuthFailed: 'BONSAI authentication failed',
     exists: 'Activity already exists. Please use a different combination of owner address, name and description.',
     loginRequired: 'You must be logged in to perform this action',
     projectNotFound: 'Activity not found',
-})
+}
+setTexts(messages)
+const activityConf = {
+    name: 'activity',
+    properties: {
+        description: {
+            required: true,
+            maxLength: 160,
+            minLength: 3,
+            type: TYPES.string,
+        },
+        id: {
+            required: true,
+            type: TYPES.hash,
+        },
+        name: {
+            maxLength: 64,
+            minLength: 3,
+            required: true,
+            type: TYPES.string,
+        },
+        ownerAddress: {
+            required: true,
+            type: TYPES.identity,
+        },
+    },
+    type: TYPES.object,
+}
+const projects = new CouchDBStorage(null, 'projects')
 
 // Create/get/update project. 
 // To get a project only `@hash` and `@callback` are required.
@@ -44,13 +75,13 @@ export async function handleProject(id, project, create, callback) {
 
     // validate data
     const { validationConf, bonsaiKeys } = handleProject
-    let err = validateObj(
-        { id, ...project },
-        validationConf,
-        true,
-        true,
-    )
-    if (err) return callback(err)
+    // let err = validateObj(
+    //     { id, ...project },
+    //     validationConf,
+    //     true,
+    //     true,
+    // )
+    // if (err) return callback(err)
 
     // exclude any unwanted data and only update the properties that's supplied
     project = objClean({
@@ -87,105 +118,104 @@ export async function handleProject(id, project, create, callback) {
     console.log(`Activity ${create ? 'created' : 'updated'}: ${id} `)
 
     // broadcast the ID of the activity so that frontend can update accordingly
-    broadcastCRUD(
-        'project',
+    broadcastCRUD({
+        action: create
+            ? broadcastCRUD.actions.create
+            : broadcastCRUD.actions.update,
+        data: project,
         id,
-        create
-            ? 'create'
-            : 'update',
-        project,
-    )
+        type: 'project',
+    })
 }
-const activityConf = {
-    name: 'activity',
-    properties: {
-        description: {
-            required: true,
-            maxLength: 160,
-            minLength: 3,
-            type: TYPES.string,
-        },
-        id: {
-            required: true,
-            type: TYPES.hash,
-        },
-        name: {
-            maxLength: 64,
-            minLength: 3,
-            required: true,
-            type: TYPES.string,
-        },
-        ownerAddress: {
-            required: true,
-            type: TYPES.identity,
-        },
-    },
-    type: TYPES.object,
-}
+handleProject.bonsaiKeys = Object
+    .keys(activityConf.properties)
+    .filter(x => x !== 'id')
+handleProject.description = 'Create, update and fetch activity'
+handleProject.eventName = 'project'
 handleProject.params = [
     {
-        label: 'id',
+        name: 'id',
         required: true,
         type: TYPES.hash,
     },
     {
+        description: 'If not an activity will return Activity by ID',
         ...activityConf,
         defaultValue: null,
         required: false,
     },
     {
         defaultValue: false,
-        label: 'create',
+        name: 'create',
         required: false,
         type: TYPES.boolean,
     },
     {
-        label: 'callback',
-        required: false,
+        name: 'callback',
+        required: true,
         type: TYPES.function,
     },
 ]
 handleProject.requireLogin = true
 handleProject.result = activityConf
-handleProject.validationConf = {
-    description: {
-        required: true,
-        maxLength: 160,
-        minLength: 3,
-        type: TYPES.string,
-    },
-    id: {
-        required: true,
-        type: TYPES.hash,
-    },
-    name: {
-        maxLength: 64,
-        minLength: 3,
-        required: true,
-        type: TYPES.string,
-    },
-    ownerAddress: {
-        required: true,
-        type: TYPES.identity,
-    },
+// handleProject.validationConf = {
+//     description: {
+//         required: true,
+//         maxLength: 160,
+//         minLength: 3,
+//         type: TYPES.string,
+//     },
+//     id: {
+//         required: true,
+//         type: TYPES.hash,
+//     },
+//     name: {
+//         maxLength: 64,
+//         minLength: 3,
+//         required: true,
+//         type: TYPES.string,
+//     },
+//     ownerAddress: {
+//         required: true,
+//         type: TYPES.identity,
+//     },
 
+// }
+
+/**
+ * @name    handleProjectsByHashes
+ * @summary Fetch Activties by IDs
+ * 
+ * @param   {String}    ids 
+ * @param   {Function}  callback
+ */
+export const handleProjectsByHashes = async (ids, callback) => {
+    // if (!isFn(callback)) return
+    // if (!isArr(hashArr) || hashArr.length === 0) return callback(messages.arrayRequired)
+    const result = await projects.getAll(ids)
+    callback(null, Array.from(result))
 }
-handleProject.bonsaiKeys = Object
-    .keys(handleProject.validationConf)
-    .filter(x => x !== 'id')
+handleProjectsByHashes.description = 'Fetch Activties by IDs'
+handleProjectsByHashes.eventName = 'projects-by-hashes'
+handleProjectsByHashes.params = [
+    {
+        minLength: 1,
+        name: 'activityIds',
+        required: true,
+        type: TYPES.array,
+    },
+    {
+        name: 'callback',
+        required: true,
+        type: TYPES.function,
+    },
+]
+handleProjectsByHashes.result = {
+    name: 'activities',
+    type: 'map',
+}
 
-// user projects by list of project hashes
-// Params
-// @hashArr	array
-// @callback	function: 
-//						Params:
-//						@err	string, 
-//						@result map, 
-export const handleProjectsByHashes = async (hashArr, callback) => {
-    if (!isFn(callback)) return
-    if (!isArr(hashArr) || hashArr.length === 0) return callback(messages.arrayRequired)
-
-    let result = await projects.getAll(hashArr)
-    const hashesNotFound = hashArr.filter(hash => !result.get(hash))
-    callback(null, result, hashesNotFound)
+export const eventHandlers = {
+    [handleProject.eventName]: handleProject,
+    [handleProjectsByHashes.eventName]: handleProjectsByHashes,
 }

@@ -334,12 +334,12 @@ export const handleIdExists = async (userId, callback) => {
 handleIdExists.description = 'Check if user ID(s) exists.'
 handleIdExists.params = [
     {
-        _description: 'Single user ID',
+        description: 'Single user ID',
         name: 'userId',
         required: true,
         type: TYPES.string,
         or: {
-            _description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
+            description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
             required: true,
             type: TYPES.array,
         },
@@ -379,12 +379,12 @@ handleIsUserOnline.description = 'Check if one or more users are online.'
 handleIsUserOnline.requireLogin = true
 handleIsUserOnline.params = [
     {
-        _description: 'Single user ID',
+        description: 'Single user ID',
         name: 'userId',
         required: true,
         type: TYPES.string,
         or: {
-            _description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
+            description: 'Alternatively, provide an array of user IDs to check if all of them exists.',
             required: true,
             type: TYPES.array,
         },
@@ -397,7 +397,7 @@ handleIsUserOnline.params = [
                 name: 'online',
                 type: TYPES.boolean,
                 or: {
-                    _description: 'Alternative result when array of user IDs provided. Key: userId, value: boolean',
+                    description: 'Alternative result when array of user IDs provided. Key: userId, value: boolean',
                     type: TYPES.object,
                 }
             },
@@ -598,7 +598,7 @@ handleRegister.params = [
         type: TYPES.string,
     },
     {
-        _description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
+        description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
         ...userIdConf,
         name: 'referredBy',
         required: false,
@@ -648,7 +648,7 @@ handleRegister.params = [
 handleRegister.validationConfig = {
     id: userIdConf,
     referredBy: {
-        _description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
+        description: 'accepts either a string (user ID) or alternatively an object (see `or` property for details).',
         ...userIdConf,
         required: false,
         or: {

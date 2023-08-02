@@ -5,6 +5,7 @@ import { arrSort, arrUnique, isFn, isStr, objClean } from './utils/utils'
 import { setTexts } from './language'
 import { broadcast, emitToUsers, getSupportUsers, RESERVED_IDS, ROLE_SUPPORT } from './users'
 import { TYPES, validateObj } from './utils/validator'
+import { clientListenables } from './system'
 
 const chatMessages = new CouchDBStorage(null, 'messages')
 const TROLLBOX = 'trollbox' // for trollbox
@@ -37,19 +38,28 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
-    const event = 'message'
+    const event = handleMessage.eventName
     const timestamp = new Date().toISOString()
     const senderId = user.id
     // convert single to array
     receiverIds = isStr(receiverIds)
         ? [receiverIds]
         : receiverIds
-    const err = validateObj({ message, receiverIds }, handleMessage.validationConf, true, true)
-    if (err) return callback(err)
 
     // include sender to make sure senders other devices receive the message as well
-    receiverIds = arrUnique([...receiverIds, senderId]).sort()
-    const args = [message, senderId, receiverIds, encrypted, timestamp]
+    const excludeIds = RESERVED_IDS.filter(id =>
+        ![
+            ROLE_SUPPORT,
+            TROLLBOX,
+            TROLLBOX_ALT,
+        ].includes(id)
+    )
+    receiverIds = arrUnique([...receiverIds, senderId])
+        .sort()
+        .filter(id => !excludeIds.includes(id))
+    if (!receiverIds.length) return callback(texts.invalidRecipientIds)
+
+    const args = [message, senderId, receiverIds, encrypted, timestamp, 'id-placeholder']
     const isTrollbox = receiverIds.includes(TROLLBOX) || receiverIds.includes(TROLLBOX_ALT)
     const isSupportMsg = receiverIds.includes(ROLE_SUPPORT)
     const userIsSupport = [...(user.roles || []), user.id].includes(ROLE_SUPPORT)
@@ -59,6 +69,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         args[2] = [TROLLBOX]
         args[5] = 'trollbox-' + uuid.v1()
         broadcast([], event, args)
+        // broadcast message without saving to the database
         return callback(null, timestamp)
     } else if (isSupportMsg) {
         // makes sure support message isn't sent to trollbox even if user includes it
@@ -108,8 +119,94 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         }
     }, err => err && console.log('Discord Webhook: failed to send support message. ', err))
 }
+handleMessage.eventName = 'message'
+handleMessage.params = [
+    {
+        description: 'Recipient user ID(s)',
+        label: texts.recipients,
+        minLength: 1,
+        maxLength: 100,
+        name: 'receiverIds',
+        requied: true,
+        type: TYPES.array,
+        unique: true,
+        or: {
+            name: 'receiverId',
+            required: true,
+            type: TYPES.string,
+        },
+    },
+    {
+        description: 'Text message',
+        minLength: 1,
+        maxLength: 160,
+        name: 'message',
+        required: true,
+        type: TYPES.string,
+    },
+    {
+        defaultValue: false,
+        name: 'encrypted',
+        requied: false,
+        type: TYPES.boolean,
+    },
+    {
+        name: 'callback',
+        required: true,
+        type: TYPES.function,
+    },
+]
 handleMessage.requireLogin = true
 
+// add client listenable event for 'message'
+clientListenables[handleMessage.eventName] = {
+    description: 'Listen to new messages sent to the logged in user.',
+    params: [
+        {
+            description: 'The message',
+            name: 'message',
+            type: TYPES.string,
+        },
+        {
+            description: 'Sender user IDs',
+            name: 'senderId',
+            type: TYPES.string,
+        },
+        {
+            description: 'Recipient user IDs',
+            name: 'receiverIds',
+            type: TYPES.array,
+        },
+        {
+            name: 'encrypted',
+            type: TYPES.boolean,
+        },
+        {
+            name: 'timestamp',
+            type: TYPES.date,
+        },
+        {
+            name: 'id',
+            requied: false,
+            type: TYPES.string,
+        },
+        {
+            description: 'Special messages (eg: group message name change).',
+            name: 'action',
+            properties: {
+                data: {
+                    type: TYPES.object,
+                },
+                type: {
+                    required: true,
+                    type: TYPES.string,
+                }
+            },
+            requied: false,
+            type: TYPES.object,
+        },
+    ],
+}
 
 /**
  * @name    handleMessageGetRecent
@@ -166,32 +263,6 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
     callback(null, arrSort(result, 'tsCreated'))
 }
 handleMessageGetRecent.requireLogin = true
-// unused
-// handleMessageGetRecent.validationConf = {
-//     message: {
-//         maxLength: 160,
-//         required: true,
-//         type: TYPES.string,
-//     },
-//     receiverIds: {
-//         customMessages: {
-//             reject: texts.invalidRecipientIds,
-//         },
-//         label: texts.recipients,
-//         minLength: 1,
-//         reject: RESERVED_IDS
-//             .filter(id =>
-//                 ![
-//                     ROLE_SUPPORT,
-//                     TROLLBOX,
-//                     TROLLBOX_ALT,
-//                 ].includes(id)
-//             ),
-//         required: true,
-//         type: TYPES.array,
-//         unique: true,
-//     },
-// }
 /**
  * @name    handleMessageGroupName
  * @summary handle event to set a name for group conversation. Anyone within the group can set name.
@@ -233,7 +304,15 @@ export async function handleMessageGroupName(receiverIds, name, callback) {
         tsCreated: timestamp,
     })
     const event = 'message'
-    const args = [message, senderId, receiverIds, encrypted, timestamp, id, action]
+    const args = [
+        message,
+        senderId,
+        receiverIds,
+        encrypted,
+        timestamp,
+        id,
+        action
+    ]
 
     emitToUsers(receiverIds, event, args)
     callback()
