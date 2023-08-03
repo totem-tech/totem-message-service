@@ -369,7 +369,7 @@ const init = async () => {
         return fail && Promise.reject(err)
     }
     // attempt to establish a connection to database and exit application if fails
-    console.log('Setting up connection to CouchDB', couchDBUrl)
+    console.log('Setting up connection to CouchDB')
     await getConnection(couchDBUrl).catch(
         catchNReport('Failed to instantiate connection to CouchDB.', true)
     )
