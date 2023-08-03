@@ -1,4 +1,8 @@
 {
+    "ignore": [
+        "node_modules",
+        "src/utils/reactjs"
+    ],
     "presets": ["@babel/preset-env"],
     "plugins": [
         ["@babel/plugin-transform-runtime"]
