@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "npm run start",
     "prod": "npm run server",
-    "server": "nodemon --watch src/ --ignore src/data --ignore src/utils --verbose --exec babel-node ./src/index.js",
-    "start": "nodemon --watch src/ --ignore src/data --verbose --exec babel-node ./src/index.js",
+    "server": "nodemon --watch src/ --ignore src/data --ignore src/utils --verbose --exec babel-node --ignore src/utils/reactjs  ./src/index.js",
+    "start": "nodemon --watch src/ --ignore src/data --verbose --exec babel-node --ignore src/utils/reactjs  ./src/index.js",
     "tools-company": "babel-node ./tools/company/importCompanies.js",
     "tools-encrypt": "babel-node ./tools/encrypt/index.js",
     "tools-export": "babel-node ./tools/export-db/index.js",
