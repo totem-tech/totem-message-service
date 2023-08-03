@@ -238,8 +238,8 @@ export async function handleMessageGetRecent(lastMessageTS, callback) {
         )
     }
     let result = [
-        ...await getRecentMessages(user.id),
-        ...userIsSupport && await getRecentMessages(ROLE_SUPPORT),
+        ...await getRecentMessages(user.id) || [],
+        ...userIsSupport && await getRecentMessages(ROLE_SUPPORT) || [],
     ]
         .filter(Boolean)
         .flat()

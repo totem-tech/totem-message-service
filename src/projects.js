@@ -28,10 +28,10 @@ const activityConf = {
             minLength: 3,
             type: TYPES.string,
         },
-        id: {
-            required: true,
-            type: TYPES.hash,
-        },
+        // id: {
+        //     required: true,
+        //     type: TYPES.hash,
+        // },
         name: {
             maxLength: 64,
             minLength: 3,
@@ -74,14 +74,7 @@ export async function handleProject(id, project, create, callback) {
     )
 
     // validate data
-    const { validationConf, bonsaiKeys } = handleProject
-    // let err = validateObj(
-    //     { id, ...project },
-    //     validationConf,
-    //     true,
-    //     true,
-    // )
-    // if (err) return callback(err)
+    const { bonsaiKeys } = handleProject
 
     // exclude any unwanted data and only update the properties that's supplied
     project = objClean({
@@ -90,7 +83,7 @@ export async function handleProject(id, project, create, callback) {
     }, bonsaiKeys)
 
     // Authenticate using BONSAI
-    err = await PromisE.timeout(
+    const err = await PromisE.timeout(
         authorizeData(id, project),
         10000, //timeout after 10 seconds
     )// return error to the client instead of throwing it.
@@ -115,7 +108,6 @@ export async function handleProject(id, project, create, callback) {
     // Add/update project
     await projects.set(id, project)
     callback(null, project)
-    console.log(`Activity ${create ? 'created' : 'updated'}: ${id} `)
 
     // broadcast the ID of the activity so that frontend can update accordingly
     broadcastCRUD({
@@ -127,9 +119,7 @@ export async function handleProject(id, project, create, callback) {
         type: 'project',
     })
 }
-handleProject.bonsaiKeys = Object
-    .keys(activityConf.properties)
-    .filter(x => x !== 'id')
+handleProject.bonsaiKeys = Object.keys(activityConf.properties)
 handleProject.description = 'Create, update and fetch activity'
 handleProject.eventName = 'project'
 handleProject.params = [

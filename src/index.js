@@ -98,7 +98,7 @@ const expressApp = express()
 const server = https.createServer({ cert, key }, expressApp)
 const socket = socketIO(server, { allowRequest })
 // Error messages
-const texts = setTexts({
+const texts = {
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
     loginRequired: 'You must be logged in to make this request. Please login or create an account.',
     runtimeError: `
@@ -107,7 +107,8 @@ const texts = setTexts({
         Someone from the Totem team will get back to you as soon as possible.
         Don't forget to mention the following Request ID
     `,
-})
+}
+setTexts(texts)
 
 const eventsHandlers = {
     // system & status endpoints
@@ -283,7 +284,7 @@ const interceptHandler = (eventName, handler) => async function (...args) {
             const content = '>>> ' + [
                 `**RequestID:** ${requestId}`,
                 `**Event:** *${eventName}*`,
-                '**Error:** ' + `${err}`.replace('Error:', ''),
+                '**Error:** ' + `${err.stack || err}`.replace('Error:', ''),
                 userId ? `**UserID:** ${userId}` : '',
             ].join('\n')
 
