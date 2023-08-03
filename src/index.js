@@ -7,10 +7,16 @@ import https from 'https'
 import http from 'http'
 import socketIO from 'socket.io'
 import uuid from 'uuid'
-import { isFn, isArr, isStr, isError } from './utils/utils'
 import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
 import DataStorage from './utils/DataStorage'
 import PromisE from './utils/PromisE'
+import {
+    isArr,
+    isError,
+    isFn,
+    isMap,
+} from './utils/utils'
+import { TYPES, validateObj } from './utils/validator'
 import { getConnection as connectToBlockchain } from './blockchain'
 import { handleCompany, handleCompanySearch } from './companies'
 import { setup as setupCountries, handleCountries } from './countries'
@@ -34,6 +40,12 @@ import {
 import { eventHandlers as projectEventHanders } from './projects'
 import rewardsHandlers from './rewards'
 import {
+    getClientEventsMeta,
+    handleEventsMeta,
+    handleMaintenanceMode,
+    rxMaintenanceMode
+} from './system'
+import {
     handleTask,
     handleTaskGetById,
     handleTaskGetByParentId,
@@ -50,14 +62,6 @@ import {
     onlineUsers,
     emitToClients,
 } from './users'
-import { TYPES, validateObj } from './utils/validator'
-import {
-    getClientEventsMeta,
-    handleEventsMeta,
-    handleMaintenanceMode,
-    rxMaintenanceMode
-} from './system'
-import { isMap } from 'util/types'
 
 let requestCount = 0
 const cert = fs.readFileSync(process.env.CertPath)

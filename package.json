@@ -4,9 +4,10 @@
   "description": "Totem Internal Message Server",
   "main": "index.js",
   "scripts": {
+    "server": "nodemon --watch src/ --ignore src/data --ignore src/utils --verbose --exec babel-node ./src/index.js",
     "start": "nodemon --watch src/ --ignore src/data --verbose --exec babel-node ./src/index.js",
     "dev": "npm start",
-    "prod": "npm start",
+    "prod": "npm server",
     "tools-company": "babel-node ./tools/company/importCompanies.js",
     "tools-encrypt": "babel-node ./tools/encrypt/index.js",
     "tools-export": "babel-node ./tools/export-db/index.js",
