@@ -1,8 +1,21 @@
 import uuid from 'uuid'
 import CouchDBStorage from './utils/CouchDBStorage'
-import { arrSort, generateHash, isArr, isFn, isObj, objClean, objReadOnly } from './utils/utils'
+import {
+    generateHash,
+    isArr,
+    isFn,
+    isObj,
+    objClean,
+    objReadOnly
+} from './utils/utils'
 import { setTexts } from './language'
-import { emitToUsers, idExists, RESERVED_IDS, systemUserSymbol, users } from './users'
+import {
+    emitToUsers,
+    idExists,
+    RESERVED_IDS,
+    systemUserSymbol,
+    users
+} from './users'
 import { TYPES, validateObj } from './utils/validator'
 
 // Pending notification recipient user IDs

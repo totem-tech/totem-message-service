@@ -5,7 +5,10 @@ import {
     broadcast,
 } from './users'
 import { TYPES, validateObj } from './utils/validator'
+import DataStorage from './utils/DataStorage'
 
+const settings = new DataStorage('settings', false)
+const maintenanceKey = 'maintenance-mode'
 let clientEmittables // to be set later by invoking getClientEmittables() from index.js
 export const clientListenables = {
     // 'events-meta': {
@@ -71,8 +74,9 @@ export const clientListenables = {
     //     ],
     // },
 }
-export const rxMaintenanceMode = new BehaviorSubject(process.env.MAINTENANCE_MODE === 'YES')
-if (rxMaintenanceMode.value) console.log('[MaintenanceMode] activated on startup (env: MAINTENANCE_MODE')
+export const rxMaintenanceMode = new BehaviorSubject(settings.get(maintenanceKey) || false)
+if (rxMaintenanceMode.value) console.log('[MaintenanceMode] activated on startup')
+rxMaintenanceMode.subscribe(active => settings.set(maintenanceKey, active))
 
 /**
  * @name    broadcastCRUD
