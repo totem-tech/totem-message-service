@@ -30,6 +30,7 @@ import {
 } from './users'
 import { handleMessage } from './messages'
 import { handleNotification, sendNotification } from './notification'
+import { settings } from './system'
 
 // Error messages
 const texts = setTexts({
@@ -47,9 +48,8 @@ const texts = setTexts({
 })
 
 const faucetRequests = new CouchDBStorage(null, 'faucet_requests')
-const config = {
-    faucetEnabled: process.env.FUACET_ENABLED === 'TRUE'
-}
+const faucetKey = 'faucet-enabled'
+
 // faucet server connected
 export const rxFSConnected = new BehaviorSubject(false)
 // Maximum number of requests within certain duration
@@ -163,7 +163,7 @@ const setVariables = () => {
 const envErr = setVariables()
 if (envErr) throw new Error(envErr)
 
-const broadCastStatus = (enabled = config.faucetEnabled) => broadcast([], 'faucet-status', [enabled])
+const broadCastStatus = (enabled = settings.get(faucetKey) || false) => broadcast([], 'faucet-status', [enabled])
 
 /**
  * @name    handleFaucetStatus
@@ -181,18 +181,18 @@ export async function handleFaucetStatus(enabled, callback) {
     // user must be an admin to be able to change/check status
     if (!roles.includes(ROLE_ADMIN)) return
 
-    config.faucetEnabled = isBool(enabled)
-        ? enabled
-        : config.faucetEnabled
+    const faucetEnabled = isBool(enabled)
+        ? settings.set(faucetKey, enabled).get(faucetKey)
+        : settings.get(faucetKey)
     broadCastStatus()
-    callback(null, config.faucetEnabled)
+    callback(null, faucetEnabled)
 }
 handleFaucetStatus.requireLogin = true
 
 export async function handleFaucetRequest(address, callback) {
     if (!isFn(callback)) return
 
-    if (!config.faucetEnabled) return callback(texts.faucetDisabled)
+    if (!settings.get(faucetKey)) return callback(texts.faucetDisabled)
 
     if (!faucetClient.connected) throw new Error(texts.faucetServerDown)
     const err = setVariables()
@@ -329,11 +329,11 @@ rxUserLoggedIn
         emitToClients(
             [clientId],
             'faucet-status',
-            [config.faucetEnabled]
+            [settings.get(faucetKey)]
         )
     })
 rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
-    if (!config.faucetEnabled) return
+    if (!settings.get(faucetKey)) return
 
     const client = clients.get(clientId)
     const user = await users.get(userId)

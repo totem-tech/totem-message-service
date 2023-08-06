@@ -7,7 +7,7 @@ import {
 import { TYPES, validateObj } from './utils/validator'
 import DataStorage from './utils/DataStorage'
 
-const settings = new DataStorage('settings', false)
+export const settings = new DataStorage('settings.json', false)
 const maintenanceKey = 'maintenance-mode'
 let clientEmittables // to be set later by invoking getClientEmittables() from index.js
 export const clientListenables = {
