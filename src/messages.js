@@ -34,11 +34,16 @@ setTexts(texts)
  * @param   {Function}  callback    Arguments =>
  *                                  @error  string: will include a message if invalid/failed request
  */
-export async function handleMessage(receiverIds = [], message = '', encrypted = false, callback) {
+export async function handleMessage(
+    receiverIds = [],
+    message = '',
+    encrypted = false,
+    callback
+) {
     const [_, user] = this
     if (!isFn(callback) || !user) return
 
-    const event = handleMessage.eventName
+    const { eventName } = handleMessage
     const timestamp = new Date().toISOString()
     const senderId = user.id
     // convert single to array
@@ -68,7 +73,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         // handle trollbox messages
         args[2] = [TROLLBOX]
         args[5] = 'trollbox-' + uuid.v1()
-        broadcast([], event, args)
+        broadcast(eventName, args)
         // broadcast message without saving to the database
         return callback(null, timestamp)
     } else if (isSupportMsg) {
@@ -103,7 +108,7 @@ export async function handleMessage(receiverIds = [], message = '', encrypted = 
         const supportUsers = await getSupportUsers()
         userIds = arrUnique([...userIds, ...supportUsers.map(u => u.id)])
     }
-    emitToUsers(userIds, event, args)
+    emitToUsers(userIds, eventName, args)
     callback(null, timestamp, id)
     if (!DISCORD_WEBHOOK_URL_SUPPORT || !isSupportMsg || userIsSupport) return
 

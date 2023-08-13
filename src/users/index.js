@@ -1,14 +1,14 @@
+import handleIdExists from './handleIdExists'
+import handleIsUserOnline from './handleIsUserOnline'
+import handleLogin from './handleLogin'
+import handleRegister from './handleRegister'
 export * from './users'
-import {
-    handleIdExists,
-    handleLogin,
-    handleRegister,
-    handleIsUserOnline,
-} from './users'
+import { handleDisconnect } from './users'
 
 export const eventHandlers = {
+    'disconnect': handleDisconnect,
     'id-exists': handleIdExists,
-    'register': handleLogin,
-    'login': handleRegister,
     'is-user-online': handleIsUserOnline,
+    'login': handleLogin,
+    'register': handleRegister,
 }

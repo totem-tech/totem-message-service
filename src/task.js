@@ -189,7 +189,7 @@ export async function handleTask(taskId, task = {}, ownerAddress, callback) {
     callback(null)
 
     // broadcast new marketplace task creation
-    if (!existingTask && task.isMarket) broadcast([], 'task-market-created', [taskId])
+    if (!existingTask && task.isMarket) broadcast('task-market-created', [taskId])
 
     // broadcast task details for frontend to update
     broadcastCRUD({
@@ -494,8 +494,8 @@ handleTaskMarketApplyResponse.validationConf = {
 //  */
 // export async function handleTaskMarketCompleted(callback) {
 //     if (!isFn(callback)) return
-
-
+//
+//
 // }
 // handleTaskMarketCompleted.loginRequired = true
 

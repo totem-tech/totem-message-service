@@ -1,4 +1,4 @@
-import { users } from "../users"
+import { dbUsers } from "../users"
 import { isFn } from "../utils/utils"
 import { dbRewards } from "./rewards"
 

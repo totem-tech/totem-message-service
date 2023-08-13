@@ -54,13 +54,10 @@ import {
     handleTaskMarketSearch,
 } from './task'
 import {
-    handleDisconnect,
-    handleIdExists,
-    handleLogin,
-    handleRegister,
-    handleIsUserOnline,
-    onlineUsers,
     emitToClients,
+    eventHandlers as userEventHandlers,
+    onlineUsers,
+    setup as setupUsers
 } from './users'
 
 let requestCount = 0
@@ -83,7 +80,7 @@ const socketClients = (process.env.SOCKET_CLIENTS || '')
         return `https://${x}`
     })
 let unapprovedOrigins = []
-console.log('SOCKET_CLIENTS', socketClients)
+console.log('SOCKET_CLIENTS', socketClients.length > 0 ? socketClients : 'all')
 const allowRequest = socketClients.length === 0
     ? undefined
     : (request, callback) => {
@@ -120,11 +117,7 @@ const eventsHandlers = {
     [handleEventsMeta.eventName]: handleEventsMeta,
 
     // User & connection
-    'disconnect': handleDisconnect,
-    'id-exists': handleIdExists,
-    'register': handleRegister,
-    'login': handleLogin,
-    'is-user-online': handleIsUserOnline,
+    ...userEventHandlers,
 
     // Company
     'company': handleCompany,
@@ -181,6 +174,15 @@ const eventsHandlers = {
     'task-market-apply-response': handleTaskMarketApplyResponse,
     'task-market-search': handleTaskMarketSearch,
 }
+console.log(
+    Object
+        .keys(eventsHandlers)
+        .filter(key => !eventsHandlers[key])
+        .reduce((obj, key) => ({
+            ...obj,
+            [key]: eventsHandlers[key],
+        }), {})
+)
 console.log('Events allowed during maintenance mode:',
     Object
         .keys(eventsHandlers)
@@ -301,8 +303,7 @@ const interceptHandler = (eventName, handler) => async function (...args) {
 }
 
 const startListening = () => {
-    // Setup websocket event handlers
-    socket.on('connection', client => {
+    const handleConnection = client => {
         // send event handlers' meta data to client
         emitToClients(
             [client],
@@ -321,7 +322,9 @@ const startListening = () => {
                     )
                 )
             )
-    })
+    }
+    // Setup websocket event handlers
+    socket.on('connection', handleConnection)
 
     // Respond with event hander definitions
     expressApp.use('/', (_req, res) => {
@@ -344,12 +347,7 @@ const startListening = () => {
         const serverHttp = https.createServer(express())
         const socketHttp = socketIO(serverHttp, { allowRequest })
         // Setup websocket event handlers
-        socketHttp.on('connection', client =>
-            Object.keys(eventsHandlers)
-                .forEach(name =>
-                    client.on(name, eventsHandlers[name])
-                )
-        )
+        socketHttp.on('connection', handleConnection)
         const PORT_HTTP = process.env.PORT_HTTP || 4001
         // Start listening
         serverHttp.listen(
@@ -383,9 +381,12 @@ const init = async () => {
         .catch(catchNReport('Failed to setup countries.'))
     await setupCurrencies()
         .catch(catchNReport('Failed to setup currencies.'))
+
+    await setupUsers()
+        .catch(catchNReport('Failed to setup users.'))
     // Attempt to connect to blockchain.
     // Failure to connect will not stop the application but will limit certain things like BONSAI auth check.
-    await connectToBlockchain()
+    connectToBlockchain()
         .catch(catchNReport('Failed to connect to blockchain.'))
 
     startListening()

@@ -1,11 +1,8 @@
 import { BehaviorSubject } from 'rxjs'
-import { isFn, isBool } from './utils/utils'
-import {
-    ROLE_ADMIN,
-    broadcast,
-} from './users'
-import { TYPES, validateObj } from './utils/validator'
 import DataStorage from './utils/DataStorage'
+import { isFn, isBool } from './utils/utils'
+import { TYPES, validateObj } from './utils/validator'
+import { ROLE_ADMIN, broadcast } from './users'
 
 export const settings = new DataStorage('settings.json', false)
 const maintenanceKey = 'maintenance-mode'
@@ -112,16 +109,12 @@ export const broadcastCRUD = ({
         })
         return err
     }
-    broadcast(
-        [],
-        broadcastCRUD.eventName,
-        {
-            action,
-            data,
-            id,
-            type,
-        }
-    )
+    broadcast(broadcastCRUD.eventName, {
+        action,
+        data,
+        id,
+        type,
+    })
 }
 broadcastCRUD.actions = {
     create: 'create',
@@ -160,8 +153,8 @@ clientListenables[broadcastCRUD.eventName] = {
 }
 
 /**
- * @name    getClientEmittables
- * @summary Get a meta data for all events that messaging service client can emit.
+ * @name    getClientEventsMeta
+ * @summary Get a meta data for all events that messaging service client can emit and listen to.
  * 
  * @param   {Object} eventHandlers
  * 
@@ -244,7 +237,7 @@ export async function handleMaintenanceMode(active = false, callback) {
         console.log(`${tag}${status} by @${_id}`)
         rxMaintenanceMode.next(active)
         // broadcast to all clients
-        setTimeout(() => broadcast([], handleMaintenanceMode.eventName, [active]))
+        setTimeout(() => broadcast(handleMaintenanceMode.eventName, [active]))
     }
     return callback(null, rxMaintenanceMode.value)
 }

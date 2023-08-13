@@ -26,7 +26,7 @@ import {
     rxUserLoggedIn,
     rxUserRegistered,
     systemUserSymbol,
-    users
+    dbUsers
 } from './users'
 import { handleMessage } from './messages'
 import { handleNotification, sendNotification } from './notification'
@@ -163,7 +163,7 @@ const setVariables = () => {
 const envErr = setVariables()
 if (envErr) throw new Error(envErr)
 
-const broadCastStatus = (enabled = settings.get(faucetKey) || false) => broadcast([], 'faucet-status', [enabled])
+const broadCastStatus = (enabled = settings.get(faucetKey) || false) => broadcast('faucet-status', [enabled])
 
 /**
  * @name    handleFaucetStatus
@@ -336,7 +336,7 @@ rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
     if (!settings.get(faucetKey)) return
 
     const client = clients.get(clientId)
-    const user = await users.get(userId)
+    const user = await dbUsers.get(userId)
     const notifyUser = (err, txId, amount, status) => {
         !err
             && status === 'sucess'

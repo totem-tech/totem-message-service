@@ -1,6 +1,6 @@
 import { emitToFaucetServer, rewardsPaymentPaused, waitTillFSConnected } from '../faucetRequests'
 import { sendNotification } from '../notification'
-import { emitToUsers, getSupportUsers, ROLE_SUPPORT, users } from '../users'
+import { emitToUsers, getSupportUsers, ROLE_SUPPORT, dbUsers } from '../users'
 import { generateHash } from '../utils/utils'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { setTexts } from '../language'

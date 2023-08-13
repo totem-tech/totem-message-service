@@ -35,7 +35,7 @@ const broadcastPledgeTotal = deferred(async () => {
     rxPldegedTotal.next(value)
 
     // broadcast to all clients
-    broadcast([], eventPldegedTotal, [value])
+    broadcast(eventPldegedTotal, [value])
 }, 300)
 
 /**

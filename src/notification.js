@@ -14,7 +14,7 @@ import {
     idExists,
     RESERVED_IDS,
     systemUserSymbol,
-    users
+    dbUsers
 } from './users'
 import { TYPES, validateObj } from './utils/validator'
 
@@ -134,7 +134,7 @@ function validateUserIsSystem() {
 //                      @toUserIds  array  : receiver user IDs
 //                      @data       object : extra information, can be specific to the module
 //                      @message    string : message to be displayed, unless invitation type has custom view
-export const VALID_TYPES = Object.freeze({
+export const notificationTypes = Object.freeze({
     // chat: {
     //     // Only the application itself should be able to send this notification
     //     referralSuccess: { validate: validateUserIsSystem },
@@ -190,7 +190,17 @@ export const VALID_TYPES = Object.freeze({
         }
     },
     rewards: {
+        dataFields: {
+            status: { required: false, type: TYPES.string },
+        },
+        messageField: {
+            ...commonConfs.str3To160Required,
+            maxLength: 500,
+        },
         // Only the application itself should be able to send this notification
+        validate: validateUserIsSystem,
+
+        // Child notification types
         referralSuccess: {
             dataField: {
                 status: { type: TYPES.string },
@@ -203,15 +213,6 @@ export const VALID_TYPES = Object.freeze({
             // Only the application itself should be able to send this notification
             validate: validateUserIsSystem,
         },
-        messageField: {
-            ...commonConfs.str3To160Required,
-            maxLength: 500,
-        },
-        dataFields: {
-            status: { required: false, type: TYPES.string },
-        },
-        // Only the application itself should be able to send this notification
-        validate: validateUserIsSystem,
     },
     task: {
         // notify user when a task has been assigned to them
@@ -330,7 +331,7 @@ const validatorConfig = {
         unique: true,
     },
     type: {
-        accept: Object.keys(VALID_TYPES),
+        accept: Object.keys(notificationTypes),
         required: true,
         type: TYPES.string,
     },
@@ -462,7 +463,7 @@ export async function sendNotification(senderId, recipients, type, childType, me
 
     if (err) return err
 
-    const typeConfig = VALID_TYPES[type]
+    const typeConfig = notificationTypes[type]
     const childTypeConfig = typeConfig[childType]
     if (childType && !isObj(childTypeConfig)) return errMessages.invalidParams + ': childType'
 
@@ -497,7 +498,7 @@ export async function sendNotification(senderId, recipients, type, childType, me
     if (err) return err
 
     // throw error if any of the user ids are invalid
-    const usersFound = await users.getAll(recipients, true)
+    const usersFound = await dbUsers.getAll(recipients, true)
     const users404 = recipients.filter(id => !usersFound.get(id))
     if (users404.length > 0) return errMessages.invalidUserId
     //`${errMessages.invalidUserId}:${users404.map(id => `\n@${id}`)}`
@@ -567,6 +568,7 @@ export async function handleNotification(recipients, type, childType, message, d
     const err = await sendNotification.apply(this, args)
     callback(err)
 }
+handleNotification.notificationTypes = notificationTypes
 handleNotification.requireLogin = true
 
 // initialize
