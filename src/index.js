@@ -83,12 +83,6 @@ const socketClients = (process.env.SOCKET_CLIENTS || '')
         return `https://${x}`
     })
 let unapprovedOrigins = []
-const basePathRegex = new RegExp(
-    path
-        .resolve('./')
-        .replace(/\.\/\@\-\_/g, ''),
-    'ig'
-)
 console.log('SOCKET_CLIENTS', socketClients.length > 0 ? socketClients : 'all')
 const allowRequest = socketClients.length === 0
     ? undefined
@@ -183,47 +177,20 @@ const eventsHandlers = {
     'task-market-apply-response': handleTaskMarketApplyResponse,
     'task-market-search': handleTaskMarketSearch,
 }
-console.log(
-    Object
-        .keys(eventsHandlers)
-        .filter(key => !eventsHandlers[key])
-        .reduce((obj, key) => ({
-            ...obj,
-            [key]: eventsHandlers[key],
-        }), {})
-)
+// console.log(
+//     Object
+//         .keys(eventsHandlers)
+//         .filter(key => !eventsHandlers[key])
+//         .reduce((obj, key) => ({
+//             ...obj,
+//             [key]: eventsHandlers[key],
+//         }), {})
+// )
 console.log('Events allowed during maintenance mode:',
     Object
         .keys(eventsHandlers)
         .filter(key => eventsHandlers[key].maintenanceMode)
 )
-// const sendMessage = (
-//     content,
-//     tag,
-//     username = DISCORD_WEBHOOK_USERNAME || 'Logger',
-//     webhookUrl = DISCORD_WEBHOOK_URL,
-//     avatar_url = DISCORD_WEBHOOK_AVATAR_URL,
-//     timeout = 60000,
-//     contentRedacted = content.replace(basePathRegex, ''),
-// ) => PromisE.post(
-//     webhookUrl + '?wait=true',
-//     {
-//         avatar_url,
-//         contentRedacted,
-//         username
-//     },
-//     {},
-//     timeout,
-//     false,// `true` will throw error
-// ).catch(err =>
-//     console.error(
-//         tag,
-//         'Discord Webhook: failed to log error message',
-//         err
-//     )
-//     // ToDo: save as JSON and re-attempt later??
-// )
-
 
 const interceptHandler = (eventName, handler) => async function (...args) {
     if (!isFn(handler)) return
