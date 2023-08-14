@@ -1,5 +1,8 @@
 import { BehaviorSubject } from 'rxjs'
 import ioClient from 'socket.io-client'
+import { setTexts } from './language'
+import { sendNotification } from './notification'
+import { settings } from './system'
 import CouchDBStorage from './utils/CouchDBStorage'
 import {
     encrypt,
@@ -10,14 +13,12 @@ import {
 } from './utils/naclHelper'
 import PromisE from './utils/PromisE'
 import {
-    deferred,
     isBool,
     isFn,
     isObj,
     isStr,
     randomInt
 } from './utils/utils'
-import { setTexts } from './language'
 import {
     ROLE_ADMIN,
     broadcast,
@@ -25,12 +26,8 @@ import {
     emitToClients,
     rxUserLoggedIn,
     rxUserRegistered,
-    systemUserSymbol,
     dbUsers
 } from './users'
-import { handleMessage } from './messages'
-import { handleNotification, sendNotification } from './notification'
-import { settings } from './system'
 
 // Error messages
 const texts = setTexts({
@@ -324,14 +321,14 @@ export const emitToFaucetServer = async (eventName, data, timeout = timeoutMS) =
 }
 
 // Emit faucet status to user after login
-rxUserLoggedIn
-    .subscribe(async ({ clientId }) => {
-        emitToClients(
-            [clientId],
-            'faucet-status',
-            [settings.get(faucetKey)]
-        )
-    })
+rxUserLoggedIn.subscribe(({ clientId }) => {
+    emitToClients(
+        [clientId],
+        'faucet-status',
+        [settings.get(faucetKey)]
+    )
+})
+// Send funds to newly registered user
 rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
     if (!settings.get(faucetKey)) return
 

@@ -5,6 +5,7 @@ import express from 'express'
 import fs from 'fs'
 import https from 'https'
 import http from 'http'
+import path from 'path'
 import socketIO from 'socket.io'
 import uuid from 'uuid'
 import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
@@ -59,12 +60,14 @@ import {
     onlineUsers,
     setup as setupUsers
 } from './users'
+import { sendMessage as logDiscord } from './utils/DiscordBotHelper'
 
 let requestCount = 0
 const cert = fs.readFileSync(process.env.CertPath)
 const key = fs.readFileSync(process.env.KeyPath)
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
+process.env.DISCORD_WEBHOOK_USERNAME ??= 'Messaging Service Logger'
 const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const PORT = process.env.PORT || 3001
 const couchDBUrl = process.env.CouchDB_URL
@@ -80,6 +83,12 @@ const socketClients = (process.env.SOCKET_CLIENTS || '')
         return `https://${x}`
     })
 let unapprovedOrigins = []
+const basePathRegex = new RegExp(
+    path
+        .resolve('./')
+        .replace(/\.\/\@\-\_/g, ''),
+    'ig'
+)
 console.log('SOCKET_CLIENTS', socketClients.length > 0 ? socketClients : 'all')
 const allowRequest = socketClients.length === 0
     ? undefined
@@ -188,25 +197,33 @@ console.log('Events allowed during maintenance mode:',
         .keys(eventsHandlers)
         .filter(key => eventsHandlers[key].maintenanceMode)
 )
+// const sendMessage = (
+//     content,
+//     tag,
+//     username = DISCORD_WEBHOOK_USERNAME || 'Logger',
+//     webhookUrl = DISCORD_WEBHOOK_URL,
+//     avatar_url = DISCORD_WEBHOOK_AVATAR_URL,
+//     timeout = 60000,
+//     contentRedacted = content.replace(basePathRegex, ''),
+// ) => PromisE.post(
+//     webhookUrl + '?wait=true',
+//     {
+//         avatar_url,
+//         contentRedacted,
+//         username
+//     },
+//     {},
+//     timeout,
+//     false,// `true` will throw error
+// ).catch(err =>
+//     console.error(
+//         tag,
+//         'Discord Webhook: failed to log error message',
+//         err
+//     )
+//     // ToDo: save as JSON and re-attempt later??
+// )
 
-const logDiscord = (content, tag, timeout = 60000) => PromisE.post(
-    DISCORD_WEBHOOK_URL + '?wait=true',
-    {
-        avatar_url: DISCORD_WEBHOOK_AVATAR_URL,
-        content,
-        username: DISCORD_WEBHOOK_USERNAME || 'Messaging Service Logger'
-    },
-    {},
-    timeout,
-    false,
-).catch(err =>
-    console.error(
-        tag,
-        'Discord Webhook: failed to log error message',
-        err
-    )
-    // ToDo: save as JSON and re-attempt later??
-)
 
 const interceptHandler = (eventName, handler) => async function (...args) {
     if (!isFn(handler)) return
@@ -283,14 +300,14 @@ const interceptHandler = (eventName, handler) => async function (...args) {
             `InterceptHandler Error: uncaught error on event "${eventName}" handler.`,
         ].join('\n'))
         // print the error stack trace
-        console.log(`${err}`, err.stack)
+        console.log(err.stack)
 
         if (DISCORD_WEBHOOK_URL) {
             // send message to discord
             const content = '>>> ' + [
                 `**RequestID:** ${requestId}`,
                 `**Event:** *${eventName}*`,
-                '**Error:** ' + `${err.stack || err}`.replace('Error:', ''),
+                '**Error:** ' + `${err.stack || err}`.replace(/^Error\:\ /, ''),
                 userId ? `**UserID:** ${userId}` : '',
             ].join('\n')
 
