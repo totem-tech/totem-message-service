@@ -1,22 +1,19 @@
-import Keyring from '@polkadot/keyring'
+// import Keyring from '@polkadot/keyring'
 import { BehaviorSubject } from 'rxjs'
-import { bytesToHex } from 'web3-utils'
 import { setTexts } from '../language'
 import {
     broadcast,
-    emitToClients,
-    rxUserLoggedIn
+    // emitToClients,
+    // rxUserLoggedIn
 } from '../users'
-import { hexToBytes, strToU8a } from '../utils/convert'
+// import { hexToBytes } from '../utils/convert'
 import CouchDBStorage from '../utils/CouchDBStorage'
 import { subjectAsPromise } from '../utils/rx'
 import {
     deferred,
     isAddress,
     isDefined,
-    isFn,
-    isObj,
-    isStr
+    isFn
 } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 
