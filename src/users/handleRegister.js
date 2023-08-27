@@ -2,18 +2,22 @@ import { setTexts } from '../language'
 import {
     isFn,
     isObj,
-    isStr
+    isStr,
+    objClean
 } from '../utils/utils'
 import { TYPES, validateObj } from '../utils/validator'
 import {
     clients,
+    dbUsers,
+    idExists,
+    log,
     onlineUsers,
+    RESERVED_IDS,
     rxUserLoggedIn,
     rxUserRegistered,
     secretConf,
     userClientIds,
     userIdConf,
-    dbUsers
 } from './users'
 
 // Error messages
@@ -88,10 +92,10 @@ export default async function handleRegister(userId, secret, address, referredBy
 
         // if (platform === 'twitter') {
         //     // lowercase twitter handle search using custom view
-        //     referrer = (await users.view('lowercase', 'twitterHandle', { key: handle }))[0]
+        //     referrer = (await dbUsers.view('lowercase', 'twitterHandle', { key: handle }))[0]
         // } else {
         //     // referral through other platforms
-        //     referrer = await users.find({
+        //     referrer = await dbUsers.find({
         //         [`socialHandles.${platform}.handle`]: handle,
         //         [`socialHandles.${platform}.verified`]: true
         //     })
@@ -105,6 +109,8 @@ export default async function handleRegister(userId, secret, address, referredBy
         //         platform,
         //         userId: referrer._id,
         //     }
+
+        referredBy = objClean(referredBy, Object.keys(referredByObjConf.properties))
     } else {
         referredBy = undefined
     }
@@ -137,7 +143,37 @@ export default async function handleRegister(userId, secret, address, referredBy
     })
     callback(null)
 }
-
+const referredByObjConf = {
+    properties: {
+        handle: {
+            maxLength: 64,
+            minLegth: 3,
+            required: true,
+            type: TYPES.string,
+        },
+        platform: {
+            accept: [
+                'discord',
+                'facebook',
+                'instagram',
+                'telegram',
+                'twitter',
+                'x', // Twitter's new name
+                'whatsapp',
+            ],
+            maxLength: 32,
+            minLegth: 3,
+            required: true,
+            type: TYPES.string,
+        },
+        userId: {
+            ...userIdConf,
+            required: false,
+        },
+    },
+    required: false,
+    type: TYPES.object,
+}
 handleRegister.description = 'New user registration.'
 handleRegister.params = [
     userIdConf,
@@ -151,37 +187,7 @@ handleRegister.params = [
         ...userIdConf,
         name: 'referredBy',
         required: false,
-        or: {
-            properties: {
-                handle: {
-                    maxLength: 64,
-                    minLegth: 3,
-                    required: true,
-                    type: TYPES.string,
-                },
-                platform: {
-                    accept: [
-                        'discord',
-                        'facebook',
-                        'instagram',
-                        'telegram',
-                        'twitter',
-                        'x', // Twitter's new name
-                        'whatsapp',
-                    ],
-                    maxLength: 32,
-                    minLegth: 3,
-                    required: true,
-                    type: TYPES.string,
-                },
-                userId: {
-                    ...userIdConf,
-                    required: false,
-                },
-            },
-            required: false,
-            type: TYPES.object,
-        },
+        or: referredByObjConf,
     },
     {
         name: 'callback',
