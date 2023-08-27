@@ -62,45 +62,6 @@ import {
 } from './users'
 import { sendMessage as logDiscord } from './utils/DiscordBotHelper'
 
-let requestCount = 0
-const cert = fs.readFileSync(process.env.CertPath)
-const key = fs.readFileSync(process.env.KeyPath)
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
-const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
-process.env.DISCORD_WEBHOOK_USERNAME ??= 'Messaging Service Logger'
-const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
-const PORT = process.env.PORT || 3001
-const couchDBUrl = process.env.CouchDB_URL
-const importFiles = process.env.ImportFiles || process.env.MigrateFiles
-const isDebug = process.env.DEBUG === 'TRUE'
-const HTTPS_ONLY = process.env.HTTPS_ONLY === 'TRUE'
-const socketClients = (process.env.SOCKET_CLIENTS || '')
-    .split(',')
-    .map(x => x.trim())
-    .filter(Boolean)
-    .map(x => {
-        if (x.startsWith('https://') || x.startsWith('http://')) return x
-        return `https://${x}`
-    })
-let unapprovedOrigins = []
-console.log('SOCKET_CLIENTS', socketClients.length > 0 ? socketClients : 'all')
-const allowRequest = socketClients.length === 0
-    ? undefined
-    : (request, callback) => {
-        const { headers: { origin } = {} } = request
-        const allow = socketClients.includes(origin)
-        if (!allow && !unapprovedOrigins.includes(origin)) {
-            unapprovedOrigins.push(origin)
-            // keep maximum of 100 
-            unapprovedOrigins = unapprovedOrigins.slice(-100)
-            console.log('Websocket request rejected from unapproved origin:', origin)
-        }
-        isDebug && console.log({ origin, allow })
-        callback(null, allow)
-    }
-const expressApp = express()
-const server = https.createServer({ cert, key }, expressApp)
-const socket = socketIO(server, { allowRequest })
 // Error messages
 const texts = {
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
@@ -113,6 +74,43 @@ const texts = {
     `,
 }
 setTexts(texts)
+const basePathRegex = new RegExp(
+    path
+        .resolve('./')
+        .replace(/\.\/\@\-\_/g, ''),
+    'ig'
+)
+
+// set discord logger to remove base path from message
+logDiscord.redactRegex = basePathRegex
+const cert = fs.readFileSync(process.env.CertPath)
+const clientUrls = (process.env.SOCKET_CLIENTS || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(x => {
+        if (x.startsWith('https://') || x.startsWith('http://')) return x
+        return `https://${x}`
+    })
+const couchDBUrl = process.env.CouchDB_URL
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
+const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
+process.env.DISCORD_WEBHOOK_USERNAME ??= 'Messaging Service Logger'
+const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
+const expressApp = express()
+const HTTPS_ONLY = process.env.HTTPS_ONLY === 'TRUE'
+const importFiles = process.env.ImportFiles || process.env.MigrateFiles
+const isDebug = process.env.DEBUG === 'TRUE'
+const key = fs.readFileSync(process.env.KeyPath)
+const PORT = process.env.PORT || 3001
+let requestCount = 0
+const server = https.createServer({ cert, key }, expressApp)
+const socket = socketIO(server, {
+    allowRequest: clientUrls.length === 0
+        ? undefined
+        : allowRequest
+})
+let unapprovedOrigins = []
 
 const eventsHandlers = {
     // system & status endpoints
@@ -186,11 +184,25 @@ const eventsHandlers = {
 //             [key]: eventsHandlers[key],
 //         }), {})
 // )
+console.log('SOCKET_CLIENTS', clientUrls.length > 0 ? clientUrls : 'all')
 console.log('Events allowed during maintenance mode:',
     Object
         .keys(eventsHandlers)
         .filter(key => eventsHandlers[key].maintenanceMode)
 )
+
+function allowRequest(request, callback) {
+    const { headers: { origin } = {} } = request
+    const allow = clientUrls.includes(origin)
+    if (!allow && !unapprovedOrigins.includes(origin)) {
+        unapprovedOrigins.push(origin)
+        // keep maximum of 100 
+        unapprovedOrigins = unapprovedOrigins.slice(-100)
+        console.log('Websocket request rejected from unapproved origin:', origin)
+    }
+    isDebug && console.log({ origin, allow })
+    callback(null, allow)
+}
 
 const interceptHandler = (eventName, handler) => async function (...args) {
     if (!isFn(handler)) return
@@ -327,7 +339,7 @@ const startListening = () => {
         () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`)
     )
 
-    if (!HTTPS_ONLY && socketClients.find(x => x.startsWith('http://'))) {
+    if (!HTTPS_ONLY && clientUrls.find(x => x.startsWith('http://'))) {
         const serverHttp = https.createServer(express())
         const socketHttp = socketIO(serverHttp, { allowRequest })
         // Setup websocket event handlers
@@ -347,7 +359,7 @@ const init = async () => {
         err.message = `${prefix} ${err.message}`
         !fail && console.log(new Date().toISOString(), tag, err.message)
 
-        await logDiscord(err.message.replace('Error: ', ''), tag)
+        await logDiscord(`${err.stack || err}`.replace(/^Error\:\ /, ''), tag)
         return fail && Promise.reject(err)
     }
     // attempt to establish a connection to database and exit application if fails
