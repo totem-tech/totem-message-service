@@ -1,4 +1,5 @@
 import { setTexts } from '../language'
+import { clientListenables } from '../system'
 import { arrUnique, isFn } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import {
@@ -13,6 +14,8 @@ import {
     userClientIds,
     userIdConf,
     dbUsers,
+    broadcast,
+    userRoomPrefix,
 } from './users'
 
 // Error messages
@@ -46,12 +49,18 @@ export default async function handleLogin(userId, secret, callback) {
     log(`Login ${!user ? 'failed' : 'success'} | User ID: ${userId} | Client ID: ${client.id} | Origin: `, origin)
     if (!user) return callback(messages.loginFailed)
 
-    const { address, roles = [] } = user
+    const {
+        address,
+        roles = [],
+        settings = {},
+    } = user
+    const { onlineStatus = '' } = settings
     const clientIds = userClientIds.get(user.id) || []
     clientIds.push(client.id)
     userClientIds.set(user.id, arrUnique(clientIds))
     // attach userId to client object
     client.___userId = userId
+    client.___userRoles = roles
     onlineUsers.set(userId, user)
     clients.set(client.id, client)
     rxUserLoggedIn.next({
@@ -63,8 +72,14 @@ export default async function handleLogin(userId, secret, callback) {
 
     console.log('Users online:', userClientIds.size)
     callback(null, { address, roles })
+
+    // broadcast user online status
+    onlineStatus !== 'invisible' && broadcast(handleLogin.eventName, [userId, true])
+
+    client.join(userRoomPrefix + userId)
 }
 handleLogin.description = 'User login'
+handleLogin.eventName = 'login'
 // allow request even during maintenance mode
 handleLogin.maintenanceMode = true
 handleLogin.params = [
@@ -87,3 +102,16 @@ handleLogin.params = [
         type: TYPES.function,
     },
 ]
+clientListenables[handleLogin.eventName] = {
+    eventName: handleLogin.eventName,
+    params: [
+        {
+            name: 'userId',
+            type: TYPES.string,
+        },
+        {
+            name: 'online',
+            type: TYPES.boolean,
+        },
+    ],
+}

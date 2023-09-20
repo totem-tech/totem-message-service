@@ -28,6 +28,7 @@ import {
     rxUserRegistered,
     dbUsers
 } from './users'
+import { sendMessage as logDiscord } from './utils/discordHelper'
 
 // Error messages
 const texts = setTexts({
@@ -348,5 +349,9 @@ rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
             ).catch(() => { })//ignore error
     }
     await handleFaucetRequest.call([client, user], address, notifyUser)
-        .catch(err => console.log('Post-signup faucet request failed. ', err))
+        .catch(err => {
+            const msg = 'Post-signup faucet request failed.\n'
+            logDiscord(msg + err.stack, '[FAUCET] [SIGNUP]')
+            console.log(msg, err)
+        })
 })
