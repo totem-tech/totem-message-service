@@ -6,36 +6,32 @@ import fs from 'fs'
 import https from 'https'
 import http from 'http'
 import path from 'path'
-import { Server } from 'socket.io'
+import socketIO from 'socket.io'
 import uuid from 'uuid'
-import { getConnection, setDefaultUrl } from './utils/CouchDBStorage'
-import { sendMessage as logDiscord } from './utils/discordHelper'
+import CouchDBStorage, { getConnection } from './utils/CouchDBStorage'
+import DataStorage from './utils/DataStorage'
+import PromisE from './utils/PromisE'
 import {
     isArr,
     isError,
     isFn,
     isMap,
-    isStr,
 } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
-// keep this above any local imports that may require the default database connection
-setDefaultUrl(process.env.CouchDB_URL)
 import { getConnection as connectToBlockchain } from './blockchain'
 import { handleCompany, handleCompanySearch } from './companies'
 import { setup as setupCountries, handleCountries } from './countries'
 import { handlers as crowdloanHandlers } from './crowdloan'
-import currencyHandlers, { setup as setupCurrencies } from './currencies'
+import currencyHandlers, { setup as setupCurrencies, updateCache } from './currencies'
 // import { handlers as crowdsaleHanders } from './crowdsale/index'
 import { handleFaucetRequest, handleFaucetStatus } from './faucetRequests'
 import { handleGlAccounts } from './glAccounts'
-import { importToDB } from './importToDB'
 import languageHandlers, { setTexts, setup as setupLang } from './language'
 import {
     handleMessage,
     handleMessageGetRecent,
     handleMessageGroupName,
 } from './messages'
-import { eventHandlers as miscEventHandlers } from './misc'
 import { handleNewsletterSignup } from './newsletterSignup'
 import {
     handleNotification,
@@ -44,7 +40,12 @@ import {
 } from './notification'
 import { eventHandlers as projectEventHanders } from './projects'
 import rewardsHandlers from './rewards'
-import systemEventHandlers, { getClientEventsMeta, rxMaintenanceMode } from './system'
+import {
+    getClientEventsMeta,
+    handleEventsMeta,
+    handleMaintenanceMode,
+    rxMaintenanceMode
+} from './system'
 import {
     handleTask,
     handleTaskGetById,
@@ -54,20 +55,15 @@ import {
     handleTaskMarketSearch,
 } from './task'
 import {
+    emitToClients,
     eventHandlers as userEventHandlers,
     onlineUsers,
-    setup as setupUsers,
-    clients,
-    originClients,
-    rxClientConnection,
-    broadcast,
+    setup as setupUsers
 } from './users'
-import PromisE from './utils/PromisE'
+import { sendMessage as logDiscord } from './utils/DiscordBotHelper'
 
 // Error messages
 const texts = {
-    accessDenied: 'access denied',
-    invalidEvent: 'Invalid or deprecated event!',
     maintenanceMode: 'Messaging service is in maintenance mode. Please try again later.',
     loginRequired: 'You must be logged in to make this request. Please login or create an account.',
     runtimeError: `
@@ -82,7 +78,7 @@ const basePathRegex = new RegExp(
     path
         .resolve('./')
         .replace(/\.\/\@\-\_/g, ''),
-    'ig',
+    'ig'
 )
 
 // set discord logger to remove base path from message
@@ -96,31 +92,33 @@ const clientUrls = (process.env.SOCKET_CLIENTS || '')
         if (x.startsWith('https://') || x.startsWith('http://')) return x
         return `https://${x}`
     })
-
+const couchDBUrl = process.env.CouchDB_URL
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 const DISCORD_WEBHOOK_AVATAR_URL = process.env.DISCORD_WEBHOOK_AVATAR_URL
 process.env.DISCORD_WEBHOOK_USERNAME ??= 'Messaging Service Logger'
 const DISCORD_WEBHOOK_USERNAME = process.env.DISCORD_WEBHOOK_USERNAME
 const expressApp = express()
-const eventLogDurationMs = parseInt(process.env.EVENT_LOG_DURATION_MS) || 5_000 // 5 seconds
 const HTTPS_ONLY = process.env.HTTPS_ONLY === 'TRUE'
 const importFiles = process.env.ImportFiles || process.env.MigrateFiles
 const isDebug = process.env.DEBUG === 'TRUE'
 const key = fs.readFileSync(process.env.KeyPath)
 const PORT = process.env.PORT || 3001
 let requestCount = 0
-const httpsServer = https.createServer({
-    cert,
-    key,
-}, expressApp)
-const socket = new Server(httpsServer, {
+const server = https.createServer({ cert, key }, expressApp)
+const socket = socketIO(server, {
     allowRequest: clientUrls.length === 0
         ? undefined
         : allowRequest
 })
 let unapprovedOrigins = []
 
-const allEventHandlers = {
+const eventsHandlers = {
+    // system & status endpoints
+    [handleMaintenanceMode.eventName]: handleMaintenanceMode,
+    [handleEventsMeta.eventName]: handleEventsMeta,
+
+    // User & connection
+    ...userEventHandlers,
 
     // Company
     'company': handleCompany,
@@ -144,9 +142,6 @@ const allEventHandlers = {
 
     // GL Accounts
     'gl-accounts': handleGlAccounts,
-
-    // referenda etc events
-    ...miscEventHandlers,
 
     // Language
     ...languageHandlers,
@@ -172,11 +167,6 @@ const allEventHandlers = {
     // rewards related handlers
     ...rewardsHandlers,
 
-    // system & status endpoints
-    ...systemEventHandlers,
-    // [handleMaintenanceMode.eventName]: handleMaintenanceMode,
-    // [handleEventsMeta.eventName]: handleEventsMeta,
-
     // Task 
     'task': handleTask,
     'task-get-by-id': handleTaskGetById,
@@ -184,24 +174,21 @@ const allEventHandlers = {
     'task-market-apply': handleTaskMarketApply,
     'task-market-apply-response': handleTaskMarketApplyResponse,
     'task-market-search': handleTaskMarketSearch,
-
-    // User & connection
-    ...userEventHandlers,
 }
 // console.log(
 //     Object
-//         .keys(allEventHandlers)
-//         .filter(key => !allEventHandlers[key])
+//         .keys(eventsHandlers)
+//         .filter(key => !eventsHandlers[key])
 //         .reduce((obj, key) => ({
 //             ...obj,
-//             [key]: allEventHandlers[key],
+//             [key]: eventsHandlers[key],
 //         }), {})
 // )
 console.log('SOCKET_CLIENTS', clientUrls.length > 0 ? clientUrls : 'all')
 console.log('Events allowed during maintenance mode:',
     Object
-        .keys(allEventHandlers)
-        .filter(key => allEventHandlers[key].maintenanceMode)
+        .keys(eventsHandlers)
+        .filter(key => eventsHandlers[key].maintenanceMode)
 )
 
 function allowRequest(request, callback) {
@@ -220,17 +207,14 @@ function allowRequest(request, callback) {
 const interceptHandler = (eventName, handler) => async function (...args) {
     if (!isFn(handler)) return
 
-    const startedAt = new Date()
-    const client = this
     const requestId = uuid.v1()
+    const client = this
     const userId = client.___userId
-    const userRoles = client.___userRoles || []
-    let {
+    const {
         maintenanceMode,
         params = [],
-        requireLogin, // boolean (any user) or array of user roles allowed
+        requireLogin
     } = handler
-
     if (eventName === 'message') {
         // pass on extra information along with the client
         client._data = {
@@ -258,12 +242,6 @@ const interceptHandler = (eventName, handler) => async function (...args) {
         maintenanceModeActive && console.info('Request Count', requestCount)
         // user must be logged
         if (requireLogin && !userId) return gotCb && callback(texts.loginRequired)
-
-        const roleInvalid = requireLogin?.length
-            && !requireLogin.find(role =>
-                userRoles.includes(role)
-            )
-        if (roleInvalid) return gotCb && callback(texts.accessDenied)
 
         // validate event handler params
         const err = isArr(params)
@@ -314,95 +292,41 @@ const interceptHandler = (eventName, handler) => async function (...args) {
 
             logDiscord(content, `[RequestID] ${requestId}`)
         }
+    } finally {
+        requestCount--
+        maintenanceModeActive && console.info('Request Count', requestCount)
     }
-    const finishedAt = new Date()
-    maintenanceModeActive && console.info('Request Count', requestCount)
-    requestCount--
-    const diffMs = finishedAt - startedAt
-    const logUserId = userId || ['login', 'register'].includes(eventName) && args[0]
-    const logtxt = [
-        '[RequestID]', requestId,
-        '[EventName]', eventName,
-        logUserId && `[UserId] ${logUserId}`,
-        '|',
-        `completed in ${diffMs}ms`,
-    ]
-        .filter(Boolean)
-        .join(' ')
-    !isDebug && console.log(logtxt)
-    // if request takes longer than predefined duration report the incident
-    if (diffMs > eventLogDurationMs) logDiscord(logtxt)
 }
 
 const startListening = () => {
     const handleConnection = client => {
-        const {
-            handshake: {
-                headers: {
-                    origin
-                } = {}
-            } = {}
-        } = client
-        // set number of clients by origin
-        origin && originClients.set(origin, (originClients.get(origin) || 0) + 1)
-
-        // add it to list of clients so that broadcasted events can include this client.
-        clients.set(client.id, client)
-
-        // send events' meta data to the client
-        client.emit(
+        // send event handlers' meta data to client
+        emitToClients(
+            [client],
             'events-meta',
-            getClientEventsMeta(allEventHandlers)
+            getClientEventsMeta(eventsHandlers),
         )
 
         // add interceptable event handlers
-        Object.keys(allEventHandlers)
-            .forEach(eventName => {
+        Object.keys(eventsHandlers)
+            .forEach(name =>
                 client.on(
-                    eventName,
+                    name,
                     interceptHandler(
-                        eventName,
-                        allEventHandlers[eventName]
+                        name,
+                        eventsHandlers[name]
                     )
                 )
-            })
-
-        // middleware to do stuff before the event handler is invoked.
-        // Eg: if maintenance mode is enabled. This will cancel the event right here and prevent going to the event handler.
-        // This can be used in the future to dynamically enable or disable events.
-        client.use(([eventName, ...args], next) => {
-            const callback = args.find(isFn)
-            const handler = allEventHandlers[eventName]
-            if (!handler) return callback?.(texts.invalidEvent)
-
-            const maintenanceModeActive = rxMaintenanceMode.value
-            const deny = maintenanceModeActive && !handler.maintenanceMode
-            if (deny) return callback?.(texts.maintenanceMode)
-
-            return next()
-        })
-
-        rxClientConnection.next({
-            client,
-            connected: true,
-            origin,
-        })
+            )
     }
-
-    // setInterval(() => broadcast('test', [1, 2, 3]), 3000)
     // Setup websocket event handlers
     socket.on('connection', handleConnection)
 
-    // Handle HTTP request on the api URL.
-    // Reponds with a JSON object containing the following:
-    //
-    // - dataTypes: list of data type names used in the definitions and their respective native JS type and other info.
-    // - emittables: definitions of websocket events the client can emit.
-    // - listenables: definitions of websocket events the client can listen/subscribe to.
+    // Respond with event hander definitions
     expressApp.use('/', (_req, res) => {
         res.send(
             JSON.stringify(
-                getClientEventsMeta(allEventHandlers),
+                getClientEventsMeta(eventsHandlers),
                 null,
                 4
             )
@@ -410,14 +334,14 @@ const startListening = () => {
     })
 
     // Start listening
-    httpsServer.listen(
+    server.listen(
         PORT,
         () => console.log(`Totem Messaging Service started. Websocket listening on port ${PORT} (https)`)
     )
 
     if (!HTTPS_ONLY && clientUrls.find(x => x.startsWith('http://'))) {
         const serverHttp = https.createServer(express())
-        const socketHttp = new Server(serverHttp, { allowRequest })
+        const socketHttp = socketIO(serverHttp, { allowRequest })
         // Setup websocket event handlers
         socketHttp.on('connection', handleConnection)
         const PORT_HTTP = process.env.PORT_HTTP || 4001
@@ -429,79 +353,157 @@ const startListening = () => {
     }
 }
 const init = async () => {
-    broadcast.socket = socket
-
-    const catchNReport = (prefix, fail = false, logStack = false) => async err => {
+    const catchNReport = (prefix, fail = false) => async err => {
         if (!isError(err)) err = new Error(err)
         const tag = '[StartupError]'
         err.message = `${prefix} ${err.message}`
         !fail && console.log(new Date().toISOString(), tag, err.message)
 
-        await logDiscord(`${logStack && err.stack || err}`.replace(/^Error\:\ /, ''), tag)
+        await logDiscord(`${err.stack || err}`.replace(/^Error\:\ /, ''), tag)
         return fail && Promise.reject(err)
     }
+    // attempt to establish a connection to database and exit application if fails
+    console.log('Setting up connection to CouchDB')
+    await getConnection(couchDBUrl).catch(
+        catchNReport('Failed to instantiate connection to CouchDB.', true)
+    )
+    // Setup languages and also attempt to make the first query to the database.
+    // Failing here is probable indication that it failed to connect to the database
+    await setupLang()
+        .catch(catchNReport('Failed to setup language.', true))
 
-    // importToDB(importFiles).catch(
-    //     catchNReport('Failed to import to DB', false)
-    // )
-    // // attempt to establish a connection to database and exit application if fails
-    // console.log('Setting up connection to CouchDB')
-    // await getConnection().catch(
-    //     catchNReport('Failed to instantiate connection to CouchDB.', true)
-    // )
-    // // Setup languages and also attempt to make the first query to the database.
-    // // Failing here is probable indication that it failed to connect to the database
-    // await setupLang()
-    //     .catch(catchNReport('Failed to setup language.', true))
+    // wait until the following setups are complete but keep the service running even if any of them fails
+    await setupCountries()
+        .catch(catchNReport('Failed to setup countries.'))
+    await setupCurrencies()
+        .catch(catchNReport('Failed to setup currencies.'))
 
-    // // wait until the following setups are complete but keep the service running even if any of them fails
-    // await setupCountries()
-    //     .catch(catchNReport('Failed to setup countries.'))
-    // await setupCurrencies()
-    //     .catch(catchNReport('Failed to setup currencies.'))
+    await setupUsers()
+        .catch(catchNReport('Failed to setup users.'))
+    // Attempt to connect to blockchain.
+    // Failure to connect will not stop the application but will limit certain things like BONSAI auth check.
+    connectToBlockchain()
+        .catch(catchNReport('Failed to connect to blockchain.'))
 
-    // await setupUsers()
-    //     .catch(catchNReport('Failed to setup users.'))
-    // // Attempt to connect to blockchain.
-    // // Failure to connect will not stop the application but will limit certain things like BONSAI auth check.
-    // connectToBlockchain()
-    //     .catch(catchNReport('Failed to connect to blockchain.'))
-
-    // startListening()
-
-
-    // sequencial startup actions
-    const actions = [
-        [() => console.log('Setting up connection to CouchDB')],
-        // attempt to establish a connection to database and exit application if fails
-        [getConnection, [], 'Failed to instantiate connection to CouchDB.', true],
-        // Setup languages and also attempt to make the first query to the database.
-        // Failing here is probable indication that it failed to connect to the database
-        [setupLang, [], 'Failed to setup language.', true],
-        // wait until the following setups are complete but keep the service running even if some of them fails
-        [setupCountries, [], 'Failed to setup countries.'],
-        [setupCurrencies, [], 'Failed to setup currencies.'],
-        [setupUsers, [], 'Failed to setup users.'],
-        [startListening, [], 'Websocket setup failed.', true],
-        [connectToBlockchain, [], 'Failed to connect to blockchain.', false],
-        [importToDB, [importFiles], 'Failed to import to DB', false],
-    ]
-
-    for (let i = 0;i < actions.length;i++) {
-        const [
-            func,
-            args = [],
-            errorMessage,
-            required, // whether to stop application if action fails
-        ] = actions[i]
-
-        await PromisE(func(...args))
-            .catch(
-                catchNReport(
-                    errorMessage,
-                    required
-                )
-            )
-    }
+    startListening()
 }
 init()
+
+if (!!importFiles) setTimeout(() => importToDB(importFiles), 1000)
+
+// Import data from JSON file storage to CouchDB.
+// Existing entries will be ignored and will remain in the JSON file.
+// Successfully stored entries will be removed from JSON file.
+async function importToDB(fileNames) {
+    const filesAr = fileNames.split(',')
+        // only include json file names
+        .filter(x => x.endsWith('.json'))
+        .map(x => x.trim())
+    // list of files:databases where value is an array rather than an object
+    const arrKeys = {
+        'faucet-requests': 'requests', // store the value array under the property called 'requests'
+        'translations': 'texts', // store the value array under the property called 'texts'
+    }
+    // databases where update of document update is allowed
+    const allowUpdates = [
+        'translations', // for easier access to updating translated texts
+    ]
+
+    // nothing to migrate 
+    if (filesAr.length === 0) return
+
+    console.log('Migrating JSON files:', filesAr)
+    for (let i = 0;i < filesAr.length;i++) {
+        const file = filesAr[i]
+        const dbName = (file.split('.json')[0])
+        if (!dbName) continue
+        const jsonStorage = new DataStorage(file, true)
+        const data = jsonStorage.getAll()
+        const total = data.size
+        if (total === 0) {
+            console.log('\nIgnoring empty file:', file)
+            continue
+        }
+
+        console.log(`\nMigrating ${file}: ${data.size} entries`)
+        const db = new CouchDBStorage(
+            await getConnection(), // get the global connection created above
+            dbName.replace(' ', '_'),
+        )
+
+        // wrap array value in an object as required by couchdb
+        if (!!arrKeys[dbName]) Array.from(data)
+            .forEach(([id, arr]) => {
+                if (!isArr(arr)) return
+                const value = {}
+                value[arrKeys[dbName] || 'array'] = arr
+                data.set(id, value)
+            })
+
+        // database specific modifications before submission
+        switch (dbName) {
+            case 'currencies':
+                // convert ratioOfExchange and decimals to integer
+                Array.from(data)
+                    .forEach(([_, value]) => {
+                        // keys to force parse into integer
+                        [
+                            'ratioOfExchange',
+                            'decimals',
+                            'sequence',
+                        ].forEach(key =>
+                            value[key] = parseInt(value[key])
+                        )
+                        // value.ratioOfExchange = parseInt(value.ratioOfExchange)
+                        // value.decimals = parseInt(value.decimals)
+                        // value.sequence = parseInt(value.sequence)
+                    })
+                break
+        }
+
+        // IDs of successful inserts
+        const okIds = []
+        // insert data into database
+        const limit = 999
+        const numBatches = data.size / limit
+        for (let i = 0;i < numBatches;i++) {
+            const start = i * limit
+            const end = start + limit
+            if (numBatches > 1) console.log(`\n${file}: Processing ${start + 1} to ${end} out of ${data.size} entries`)
+            const result = await db.setAll(
+                new Map(
+                    Array.from(data)
+                        .slice(start, end)
+
+                ),
+                !allowUpdates.includes(dbName),
+            )
+            okIds.push(
+                ...result
+                    .map(({ error, reason, ok, id }) => {
+                        if (error) console.log(id, { error, reason, doc: data.get(id) })
+                        return ok && id
+                    })
+                    .filter(Boolean)
+            )
+        }
+
+        // database specifc post-save actions 
+        switch (dbName) {
+            case 'currencies':
+                // regenerate currencies cache
+                updateCache()
+                break
+            case 'translations':
+                // re-generate hashes of translated texts for each language
+                okIds.length && setupLang()
+                break
+        }
+
+        // remove saved entries from the JSON file
+        okIds.forEach(id => data.delete(id))
+        // update JSON file to remove imported entries
+        jsonStorage.setAll(data)
+        console.log(`${file} => saved: ${okIds.length}. Failed or ignored existing: ${total - okIds.length}`)
+    }
+}

@@ -155,16 +155,16 @@ handleCompanySearch.description = 'Search for companies by id, name, registratio
 handleCompanySearch.eventName = 'company-search'
 handleCompanySearch.params = [
     {
-        description: 'Fetch by specific company ID.',
+        description: `Search by company name or registration number. Result limit: ${RESULT_LIMIT}.`,
         name: 'query',
-        type: TYPES.hash,
+        required: true,
+        type: TYPES.string,
         or: {
             description: 'Alternatively, search by (SS58 encoded Substrate) identity',
             type: TYPES.identity,
             or: {
-                description: `Alternatively, search by company name or registration number. Result limit: ${RESULT_LIMIT}.`,
-                required: true,
-                type: TYPES.string,
+                description: 'Alternatively, fetch by specific company ID.',
+                type: TYPES.hash,
             },
         },
     },
@@ -184,7 +184,7 @@ handleCompanySearch.params = [
 handleCompanySearch.requireLogin = false
 handleCompanySearch.result = {
     name: 'companies',
-    type: TYPES.map
+    type: 'map'
 }
 
 // setTimeout(async () => {

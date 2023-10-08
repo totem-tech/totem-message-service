@@ -1,68 +1,79 @@
 import { BehaviorSubject } from 'rxjs'
 import DataStorage from './utils/DataStorage'
-import { isFn, isBool, isAddress } from './utils/utils'
+import { isFn, isBool } from './utils/utils'
 import { TYPES, validateObj } from './utils/validator'
 import { ROLE_ADMIN, broadcast } from './users'
-import { setTexts } from './language'
-
-const texts = {
-    invalidRoom: 'invalid room name',
-}
-setTexts(texts)
 
 export const settings = new DataStorage('settings.json', false)
 const maintenanceKey = 'maintenance-mode'
-let clientEmittables // to be set later by invoking getClientEventsMeta() from index.js
-export const clientListenables = {}
+let clientEmittables // to be set later by invoking getClientEmittables() from index.js
+export const clientListenables = {
+    // 'events-meta': {
+    //     params: [{
+    //         properties: [
+    //             {
+    //                 name: 'emittables',
+    //                 type: TYPES.object,
+    //             },
+    //             {
+    //                 name: 'listenables',
+    //                 type: TYPES.object,
+    //             },
+    //         ],
+    //         type: TYPES.object,
+    //     }]
+    // },
+    // onMessage
+    // message: {
+    //     params: [
+    //         {
+    //             description: 'The message',
+    //             name: 'message',
+    //             type: TYPES.string,
+    //         },
+    //         {
+    //             description: 'Sender user IDs',
+    //             name: 'senderId',
+    //             type: TYPES.string,
+    //         },
+    //         {
+    //             description: 'Recipient user IDs',
+    //             name: 'receiverIds',
+    //             type: TYPES.array,
+    //         },
+    //         {
+    //             name: 'encrypted',
+    //             type: TYPES.boolean,
+    //         },
+    //         {
+    //             name: 'timestamp',
+    //             type: TYPES.date,
+    //         },
+    //         {
+    //             name: 'id',
+    //             requied: false,
+    //             type: TYPES.string,
+    //         },
+    //         {
+    //             name: 'action',
+    //             properties: {
+    //                 data: {
+    //                     type: TYPES.object,
+    //                 },
+    //                 type: {
+    //                     required: true,
+    //                     type: TYPES.string,
+    //                 }
+    //             },
+    //             requied: false,
+    //             type: TYPES.object,
+    //         },
+    //     ],
+    // },
+}
 export const rxMaintenanceMode = new BehaviorSubject(settings.get(maintenanceKey) || false)
 if (rxMaintenanceMode.value) console.log('[MaintenanceMode] activated on startup')
 rxMaintenanceMode.subscribe(active => settings.set(maintenanceKey, active))
-// Information about the data types used in event params
-const dataTypes = {
-    ...Object
-        .keys(TYPES)
-        .reduce((obj, type) => ({
-            ...obj,
-            [type]: {
-                date: {
-                    description: 'Timestamp in ISO format. Eg: ' + new Date().toISOString(),
-                    type: 'string',
-                },
-                email: {
-                    description: `Email address. If not "strict", will accept a single "+" in the username section`,
-                    type: 'string'
-                },
-                hash: {
-                    description: "Hexadecimal string with '0x' prefix. String length must be exactly 66 characters.",
-                    type: 'string',
-                },
-                hex: {
-                    description: "Hexadecimal string with '0x' prefix. String length must be at least 3 characters.",
-                    type: 'string',
-                },
-                identity: {
-                    description: [
-                        'Blockchain wallet address. Accepts:',
-                        '\n1. If "chainId" is "polkadot" (default): SS58 encoded Substrate address.',
-                        '\n2. If "chainId" is "ethereum": a hexadecimal string with "0x" prefix. Length 42 characters.',
-                    ].join(' '),
-                    type: 'string',
-                },
-                integer: {
-                    description: 'Number without any decimals',
-                    type: 'number',
-                },
-                url: {
-                    description: 'URL string with the following format: protocol://domain.name/path',
-                    type: 'string',
-                },
-            }[type] || { type }
-        }), {}),
-    map: {
-        description: '2-dimentional array converted from Map using `Array.from(map)`. `ChatClient` will reconstruct the `Map` automatically.',
-        type: 'array',
-    },
-}
 
 /**
  * @name    broadcastCRUD
@@ -152,35 +163,27 @@ clientListenables[broadcastCRUD.eventName] = {
  *     listenables: Object,
  * }} events meta data
  */
-export const getClientEventsMeta = (eventHandlers, force = false) => {
-    if (force || eventHandlers && !clientEmittables) {
+export const getClientEventsMeta = eventHandlers => {
+    if (eventHandlers && !clientEmittables) {
         clientEmittables = {}
         Object
             .keys(eventHandlers || {})
-            .forEach(eventName => {
-                const handler = eventHandlers[eventName]
-                if (!isFn(handler) || handler.enabled === false) return
+            .forEach(eventName =>
                 clientEmittables[eventName] = {
                     requireLogin: false,
-                    ...handler,
+                    ...eventHandlers[eventName],
                 }
-            })
+            )
     }
     return {
-        dataTypes,
         emittables: clientEmittables,
-        listenables: clientListenables,
+        listenables: clientListenables
     }
 }
 
-export function handleEventsMeta(callback) {
-    const meta = getClientEventsMeta()
-    callback(null, meta)
-}
+export const handleEventsMeta = callback => callback(null, getClientEventsMeta())
 handleEventsMeta.description = 'Get list of all events metadata'
 handleEventsMeta.eventName = 'events-meta'
-// allow request even during maintenance mode
-handleEventsMeta.maintenanceMode = true
 handleEventsMeta.params = [{
     required: true,
     name: 'callback',
@@ -259,42 +262,4 @@ handleMaintenanceMode.params = [
 handleMaintenanceMode.result = {
     name: 'active',
     type: TYPES.boolean,
-}
-
-export function handleRoom(room, join = true, callback) {
-    const [client] = this
-    client[join ? 'join' : 'leave'](room)
-    callback(null)
-}
-handleRoom.description = 'Join or leave room.'
-handleRoom.eventName = 'room'
-handleRoom.maintenanceMode = true
-handleRoom.params = [
-    {
-        customMessages: {
-            regex: texts.invalidRoom,
-        },
-        name: 'room',
-        regex: '^[a-z][a-z0-9-_]+$',
-        required: true,
-        type: TYPES.string,
-    },
-    {
-        defaultValue: true,
-        name: 'join',
-        required: false,
-        type: TYPES.boolean,
-    },
-    {
-        name: 'callback',
-        required: true,
-        type: TYPES.function,
-    },
-]
-handleRoom.requireLogin = false
-
-export default {
-    [handleEventsMeta.eventName]: handleEventsMeta,
-    [handleRoom.eventName]: handleRoom,
-    [handleMaintenanceMode.eventName]: handleMaintenanceMode,
 }

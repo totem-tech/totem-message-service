@@ -28,7 +28,6 @@ import {
     rxUserRegistered,
     dbUsers
 } from './users'
-import { sendMessage as logDiscord } from './utils/discordHelper'
 
 // Error messages
 const texts = setTexts({
@@ -80,14 +79,15 @@ faucetClient.on('connect', async () => {
     const [err, resultData] = await emitToFaucetServer('test-decrypt', data)
     console.log('Connected to faucet server')
     const isEqual = JSON.stringify(resultData) === JSON.stringify(data)
-    if (err || !isEqual) console.log('-----------------Update faucet server public keys.---------------\nReason: ', err)
+    if (err || !isEqual) console.log('----------------------Update faucet server public keys.---------------\nReason: ', err)
     rxFSConnected.next(!err)
 })
 faucetClient.on('connect_error', (err) => {
     // send message to discord error logger channel
-    if (shouldLogError) console.log('Faucet client connection failed: ', `${err}`)
-    rxFSConnected.value && rxFSConnected.next(false)
+    // if(shouldLogError) 
     shouldLogError = false
+    console.log('Faucet client connection failed: ', err)
+    rxFSConnected.next(false)
 })
 faucetClient.on('disconnect', (err) => {
     // send message to discord error logger channel
@@ -348,9 +348,5 @@ rxUserRegistered.subscribe(async ({ address, clientId, userId }) => {
             ).catch(() => { })//ignore error
     }
     await handleFaucetRequest.call([client, user], address, notifyUser)
-        .catch(err => {
-            const msg = 'Post-signup faucet request failed.\n'
-            logDiscord(msg + err.stack, '[FAUCET] [SIGNUP]')
-            console.log(msg, err)
-        })
+        .catch(err => console.log('Post-signup faucet request failed. ', err))
 })

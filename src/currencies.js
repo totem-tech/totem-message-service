@@ -100,7 +100,7 @@ export const handleCurrencyConvert = async (from, to, amount, callback) => {
     callback(err, convertedAmount, rounded)
 }
 handleCurrencyConvert.description = 'Currency conversion'
-handleCurrencyConvert.eventName = 'currency-convert'
+handleCurrencyConvert.eventName = ''
 
 /**
  * @name    handleCurrencyList

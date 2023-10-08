@@ -5,11 +5,10 @@ import {
     arrUnique,
     isArr,
     isFn,
-    isMap,
     isObj,
     isStr
 } from '../utils/utils'
-import { TYPES } from '../utils/validator'
+import { TYPES, validateObj } from '../utils/validator'
 
 // Error messages
 const messages = {
@@ -29,18 +28,13 @@ const defaultFields = [
 ]
 export const clients = new Map()
 export const dbUsers = new CouchDBStorage(null, 'users', defaultFields)
-export const onlineSupportUsers = new Map()
-export const onlineUsers = new Map()
-// Stores number of clients by origin
-export const originClients = new Map()
-// Subjet triggered whenever a new connections is esablished or disconnected
-// value: { client, connected: boolean, host }
-export const rxClientConnection = new Subject()
 export const rxUserRegistered = new Subject() // value: {address, clientId, referredBy, userId}
 export const rxUserLoggedIn = new Subject() // value: {address, clientId, clientIds, userId}
-export const systemUserSymbol = Symbol('I am the system meawser!')
+export const rxWSClientConnected = new Subject() // value: client {id,....}
+export const onlineUsers = new Map()
 export const userClientIds = new Map()
-export const userRoomPrefix = 'user::'
+export const systemUserSymbol = Symbol('I am the system meawser!')
+export const onlineSupportUsers = new Map()
 // `RegExp` instances are not transferrable through Websocket events.
 // Using array make it possible to be sent to frontent/clients through Websocket.
 // The utils/validator is configured to automatically create RegExp instance if array is provided.
@@ -143,37 +137,24 @@ export const RESERVED_IDS = Object.freeze([
  * })
  * ```
  * 
- * @param   {String}    eventName    name of the websocket event
- * @param   {Array}     params       (optional) parameters to be supplied to the client
- * @param   {Object|String[]} config (optional) if Array, socket client IDs. If Object, below properties are accepted.
- * @param   {String[]}  config.ignore (optional) ignore rooms/client IDs. A client ID is by default is also a room.
- * @param   {String}    config.namespace (optional) broadcast to a specific namespace only
- * @param   {String[]}  config.rooms    (optional) broadcast to specific rooms only. If namespace is specified, only rooms within the namespace will be included.
+ * @param   {String}    eventName   name of the websocket event
+ * @param   {Array}     params      (optional) parameters to be supplied to the client
+ * @param   {String[]}  ignoreClientIds  (optional) socket client IDs
  */
 export const broadcast = (
     eventName,
     params,
-    config,
+    ignoreClientIds = [],
 ) => {
-    if (!isStr(eventName) || !eventName) return
-
-    if (!isArr(params)) params = [params]
-
-    const {
-        ignore = isArr(config) && config || [],
-        rooms = [],
-        namespace,
-        volatile = false,
-    } = isObj(config) && config || {}
-
-    let { socket } = broadcast
-    if (volatile) socket = socket.volatile
-    if (namespace) socket = socket.of(namespace)
-    if (rooms.length) socket = socket.to(...rooms)
-    if (ignore?.length) socket = socket.except(...toClientIds(ignore))
-    return socket.emit(eventName, ...toParams(params))
+    if (!isStr(eventName)) return
+    ignoreClientIds = isArr(ignoreClientIds)
+        ? ignoreClientIds
+        : [ignoreClientIds]
+    const clientIds = Array.from(clients)
+        .map(([clientId]) => clientId)
+        .filter(id => !ignoreClientIds.includes(id))
+    emitToClients(clientIds, eventName, params)
 }
-broadcast.socket = null
 
 /**
  * @name    emitToClients
@@ -185,23 +166,30 @@ broadcast.socket = null
  * })
  * ```
  * 
- * @param {String[]|Object[]}   clientIds   socket clients or IDs
- * @param {String}              eventName   name of the websocket event
- * @param {Array}               params      (optional) parameters to be supplied to the client
+ * @param   {String[]}  clientIds   socket client IDs
+ * @param   {String}    eventName   name of the websocket event
+ * @param   {Array}     params      (optional) parameters to be supplied to the client
  */
 export const emitToClients = (
     clientIds,
     eventName = '',
     params
 ) => {
-    clientIds = toClientIds(clientIds)
-    if (!isStr(eventName) || !isArr(clientIds) || !clientIds.length) return
+    clientIds = isStr(clientIds)
+        ? [clientIds]
+        : clientIds
+    if (!isStr(eventName) || !isArr(clientIds)) return
+
     if (!isArr(params)) params = [params]
 
-    if (broadcast.socket) return broadcast
-        .socket
-        .to(...clientIds)
-        .emit(eventName, ...toParams(params))
+    arrUnique(clientIds)
+        .forEach(clientId => {
+            const client = isObj(clientId)
+                ? clientId
+                : clients.get(clientId)
+            if (!isArr(params)) console.log({ params })
+            client?.emit?.(eventName, ...params)
+        })
 }
 
 /**
@@ -219,15 +207,20 @@ export const emitToUsers = (
     params = [],
     excludeClientId,
 ) => {
-    excludeClientId = toClientIds(excludeClientId)
-    userIds = arrUnique(userIds || [])
-    if (!userIds.length) return
-
-    if (broadcast.socket) return broadcast
-        .socket
-        .to(...userIds.map(id => `${userRoomPrefix}${id}`))
-        .except(excludeClientId)
-        .emit(eventName, ...toParams(params))
+    excludeClientId = isArr(excludeClientId)
+        ? excludeClientId
+        : [excludeClientId]
+    arrUnique(userIds || [])
+        .forEach(userId => {
+            const clientIds = userClientIds.get(userId) || []
+            emitToClients(
+                clientIds.filter(cid =>
+                    !excludeClientId.includes(cid)
+                ),
+                eventName,
+                params,
+            )
+        })
 }
 
 // returns an array of users with role 'support'
@@ -286,6 +279,32 @@ export const isUserOnline = userId => {
     return !!onlineUsers.get(userId)
 }
 
+// cleanup on user client disconnect (and user logout)
+export async function handleDisconnect() {
+    const [client, user] = this
+    clients.delete(client.id)
+    if (!user) return // nothing to do
+
+    const clientIds = userClientIds.get(user.id) || []
+    const clientIdIndex = clientIds.indexOf(client.id)
+    // remove clientId
+    clientIds.splice(clientIdIndex, 1)
+    const uniqClientIds = arrUnique(clientIds)
+    const online = uniqClientIds.length > 0
+    if (online) {
+        userClientIds.set(user.id, uniqClientIds)
+    } else {
+        userClientIds.delete(user.id)
+        onlineUsers.delete(user.id)
+    }
+
+    log('Client disconnected | User ID:', user.id, ' | Client ID: ', client.id)
+
+    if (!onlineSupportUsers.get(user.id) || online) return
+    // support user went offline
+    onlineSupportUsers.delete(user.id)
+}
+
 export const setup = async () => {
     const db = await dbUsers.getDB()
     // create indexes for the users collection, ignores if index already exists
@@ -315,21 +334,3 @@ export const setup = async () => {
         }`
     )
 }
-
-const toClientIds = clientIds => (
-    isArr(clientIds)
-        ? clientIds
-        : [clientIds]
-)
-    .filter(Boolean)
-    .map(id =>
-        isObj(id)
-            ? id.id // client socket
-            : id
-    )
-
-const toParams = (params = []) => params.map(param =>
-    isMap(param)
-        ? [...param] // convert Map to 2D Array
-        : param
-)

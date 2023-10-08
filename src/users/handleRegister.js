@@ -175,7 +175,6 @@ const referredByObjConf = {
     type: TYPES.object,
 }
 handleRegister.description = 'New user registration.'
-handleRegister.eventName = 'register'
 handleRegister.params = [
     userIdConf,
     secretConf,
