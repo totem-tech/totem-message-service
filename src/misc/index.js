@@ -1,9 +1,6 @@
-import {
-    handleGetReferendas,
-    handleGetVotes,
-} from './referenda'
+import { getReferendaList, getVotes } from './referenda'
 
 export const eventHandlers = {
-    [handleGetReferendas.eventName]: handleGetReferendas,
-    [handleGetVotes.eventName]: handleGetVotes
+    [getReferendaList.eventName]: getReferendaList,
+    [getVotes.eventName]: getVotes
 }

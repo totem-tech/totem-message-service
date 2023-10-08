@@ -202,7 +202,7 @@ handleProjectsByHashes.params = [
 ]
 handleProjectsByHashes.result = {
     name: 'activities',
-    type: 'map',
+    type: TYPES.map,
 }
 
 export const eventHandlers = {

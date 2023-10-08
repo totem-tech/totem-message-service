@@ -80,15 +80,14 @@ faucetClient.on('connect', async () => {
     const [err, resultData] = await emitToFaucetServer('test-decrypt', data)
     console.log('Connected to faucet server')
     const isEqual = JSON.stringify(resultData) === JSON.stringify(data)
-    if (err || !isEqual) console.log('----------------------Update faucet server public keys.---------------\nReason: ', err)
+    if (err || !isEqual) console.log('-----------------Update faucet server public keys.---------------\nReason: ', err)
     rxFSConnected.next(!err)
 })
 faucetClient.on('connect_error', (err) => {
     // send message to discord error logger channel
-    // if(shouldLogError) 
+    if (shouldLogError) console.log('Faucet client connection failed: ', `${err}`)
+    rxFSConnected.value && rxFSConnected.next(false)
     shouldLogError = false
-    console.log('Faucet client connection failed: ', err)
-    rxFSConnected.next(false)
 })
 faucetClient.on('disconnect', (err) => {
     // send message to discord error logger channel

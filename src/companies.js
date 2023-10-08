@@ -184,7 +184,7 @@ handleCompanySearch.params = [
 handleCompanySearch.requireLogin = false
 handleCompanySearch.result = {
     name: 'companies',
-    type: 'map'
+    type: TYPES.map
 }
 
 // setTimeout(async () => {
