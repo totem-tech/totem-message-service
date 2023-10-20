@@ -23,11 +23,9 @@ const apiKey = process.env.SUBSCAN_API_KEY
 const broadcastEvent = 'referenda-list-with-votes'
 const delayMs = parseInt(process.env.Referenda_Update_DelayMS) || 60_000
 const delaySlowDown = process.env.Referenda_Update_SlowDown !== 'FALSE'
-const endedStatuses = [
-    'Rejected',
-    'Timeout',
-    'Executed',
-    'Approved'
+const votingActiveStatuses = [
+    'Submitted',
+    'Decision',
 ]
 let referendaList, listTsLastUpdated
 const referendaRoom = 'referenda'
@@ -188,10 +186,10 @@ setTimeout(() => {
                 const votes = await subscan.referendaGetVotes(id, {}, true)
                 entry = {
                     info: referendum,
-                    ended: endedStatuses.includes(referendum.status),
                     rewardPool: referendaRewards?.[i] || 0,
                     tsUpdated: new Date().toISOString(),
                     votes: [...votes],
+                    votingActive: votingActiveStatuses.includes(referendum.status),
                 }
                 referendaCache.set(id, entry)
             }
@@ -200,6 +198,7 @@ setTimeout(() => {
         return result
     }
     const broadcastVotes = async () => {
+        let votingActive = false
         if (autoUpdate) {
             resultPromise = resultPromise?.pending
                 ? resultPromise
@@ -214,7 +213,9 @@ setTimeout(() => {
                     volatile: true, // use UDP instead of TCP for better performance
                 }
             )
+            votingActive = [...result].every(x => x[1]?.votingActive)
         }
+        if (!votingActive) return // not need to auto update anymore
         for (let i = 0;i < delayMultiplier;i++) {
             await PromisE.delay(delayMs)
         }
