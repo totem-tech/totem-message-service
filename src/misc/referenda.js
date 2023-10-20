@@ -9,13 +9,26 @@ import PromisE from '../utils/PromisE'
 import SubscanHelper from '../utils/substrate/SubscanHelper'
 import {
     deferred,
+    isArr,
+    isDefined,
     isFn,
-    isInteger
+    isInteger,
+    isMap
 } from '../utils/utils'
 import { TYPES } from '../utils/validator'
+import DataStorage from '../utils/DataStorage'
+import { subjectAsPromise } from '../utils/rx'
 
 const apiKey = process.env.SUBSCAN_API_KEY
+const broadcastEvent = 'referenda-list-with-votes'
 const delayMs = parseInt(process.env.Referenda_Update_DelayMS) || 60_000
+const delaySlowDown = process.env.Referenda_Update_SlowDown !== 'FALSE'
+const endedStatuses = [
+    'Rejected',
+    'Timeout',
+    'Executed',
+    'Approved'
+]
 let referendaList, listTsLastUpdated
 const referendaRoom = 'referenda'
 const referendaIds = (process.env.Referenda_IDs || '')
@@ -25,6 +38,7 @@ const referendaIds = (process.env.Referenda_IDs || '')
 const referendaRewards = (process.env.Referenda_Rewards || '')
     .split(',')
     .map(n => Number(n))
+const referendaCache = new DataStorage('referenda-cache')
 const subscan = new SubscanHelper('polkadot', apiKey)
 
 /**
@@ -53,7 +67,7 @@ getReferendaList.params = [{
     required: true,
     type: TYPES.function,
 }]
-getReferendaList.requireLogin = [ROLE_ADMIN] // only admin users can use this
+// getReferendaList.requireLogin = [ROLE_ADMIN] // only admin users can use this
 getReferendaList.result = {
     name: 'referendums',
     type: TYPES.map
@@ -86,21 +100,16 @@ getVotes.params = [
         type: TYPES.function,
     },
 ]
-getVotes.requireLogin = [ROLE_ADMIN]
+// getVotes.requireLogin = [ROLE_ADMIN]
 getVotes.result = {
     description: 'Go here for sample map item (see `data.list` in the `Example Response` section): https://support.subscan.io/#referendumv2-votes.',
     type: TYPES.map,
 }
 // add listenable events
-clientListenables[getVotes.eventName] = {
+clientListenables[broadcastEvent] = {
     description: 'Listen for broadcasts of pre-specified Polkadot referenda votes, list of referenda IDs and their associated reward pools. Only available to users (anonymous or logged in) who joins the specified room.',
-    eventName: getVotes.eventName,
+    eventName: broadcastEvent,
     params: [
-        getVotes.result,
-        {
-            name: 'tsUpdated',
-            type: TYPES.date,
-        },
         {
             properties: [
                 {
@@ -112,8 +121,17 @@ clientListenables[getVotes.eventName] = {
                     name: 'rewardPool',
                     type: TYPES.number,
                 },
+                {
+                    name: 'tsUpdated',
+                    type: TYPES.date,
+                },
+                {
+                    description: 'List of votes for the referendum. Transmitted as 2D Array.',
+                    name: 'votes',
+                    type: TYPES.map,
+                },
             ],
-            name: 'referendaList',
+            name: 'referendaListWithVotes',
             type: TYPES.map,
         },
     ],
@@ -132,6 +150,7 @@ setTimeout(() => {
     // First 3 updates, every 30 seconds (or whatever is set in `delayMs`), then gradually slow down towards max multiplier.
     // Reset after new user joins.
     const slowDown = deferred((multiplier = 2) => {
+        if (!delaySlowDown) return
         if (multiplier >= 512 || !autoUpdate) return autoUpdate = false
 
         delayMultiplier = multiplier
@@ -150,38 +169,46 @@ setTimeout(() => {
             slowDown(nextMultiplier)
         }, ms)
     }, delayMs * 3 + 1)
-    const getRewardsNInfo = async () => {
-        const referendaList = await getReferendaList()
-        const map = new Map()
-        referendaIds.forEach((id, i) =>
-            map.set(id, {
-                info: referendaList.get(id),
-                rewardPool: referendaRewards?.[i] || 0
-            })
-        )
-        return map
+    const getReferendaListNVotes = async () => {
+        let allReferenda
+        const result = new Map()
+        for (let i = 0;i < referendaIds.length;i++) {
+            const id = referendaIds[i]
+            let entry = referendaCache.get(id)
+            if (!entry?.ended) {
+                console.log(new Date().toISOString().slice(11, 19), `Referenda ${id}: updating`)
+                allReferenda ??= await getReferendaList()
+                const referendum = allReferenda.get(id)
+                console.log(
+                    new Date().toISOString().slice(11, 19),
+                    `Referenda ${id}: updated. Status: ${referendum.status}`
+                )
+                if (!referendum) continue
+
+                const votes = await subscan.referendaGetVotes(id, {}, true)
+                entry = {
+                    info: referendum,
+                    ended: endedStatuses.includes(referendum.status),
+                    rewardPool: referendaRewards?.[i] || 0,
+                    tsUpdated: new Date().toISOString(),
+                    votes: [...votes],
+                }
+                referendaCache.set(id, entry)
+            }
+            entry && result.set(id, entry)
+        }
+        return result
     }
     const broadcastVotes = async () => {
         if (autoUpdate) {
-            console.log(new Date().toISOString().slice(11, 19), 'Referenda: updating')
             resultPromise = resultPromise?.pending
                 ? resultPromise
-                : PromisE(subscan.referendaGetVotesBatch(referendaIds))
-            const votes = await resultPromise
-                .then(r => {
-                    console.log(new Date().toISOString().slice(11, 19), 'Referenda: updated')
-                    r.ts = new Date().toISOString()
-                    return r
-                })
-                .catch(_err => { })
-            votes && rxResult.next(votes)
-            !!votes && broadcast(
-                getVotes.eventName,
-                [
-                    votes,
-                    votes.ts,
-                    await getRewardsNInfo(),
-                ],
+                : PromisE(getReferendaListNVotes())
+            const result = await resultPromise
+            rxResult.next(result)
+            broadcast(
+                broadcastEvent,
+                [result],
                 {
                     rooms: [referendaRoom],
                     volatile: true, // use UDP instead of TCP for better performance
@@ -193,39 +220,6 @@ setTimeout(() => {
         }
         broadcastVotes()
     }
-    // const startAutoBroadcast = async () => {
-    //     if (autoUpdate) return
-    //     console.log(new Date().toISOString().split(11, 19), 'Referenda: starting autoupdater')
-    //     autoUpdate = true
-    //     do {
-    //         resultPromise = resultPromise?.pending || !autoUpdate
-    //             ? resultPromise
-    //             : PromisE(subscan.referendaGetVotesBatch(referendaIds))
-    //                 .then(r => {
-    //                     r.ts = new Date().toISOString()
-    //                     return r
-    //                 })
-    //                 .catch(_err => { })
-    //         const votes = await resultPromise
-    //         !!votes && broadcast(
-    //             getVotes.eventName,
-    //             [
-    //                 votes,
-    //                 votes.ts,
-    //                 await getRewardsNInfo(),
-    //             ],
-    //             {
-    //                 rooms: [referendaRoom],
-    //                 volatile: true, // use UDP instead of TCP for better performance
-    //             }
-    //         )
-
-    //         for (let i = 0;i < delayMultiplier;i++) {
-    //             if (!autoUpdate) return console.log(new Date().toISOString().split(11, 19), 'Referenda: stopped autoupdater')
-    //             await PromisE.delay(delayMs)
-    //         }
-    //     } while (autoUpdate)
-    // }
     // https://socket.io/docs/v4/rooms/
     // Room events: 'create-room', 'delete-room', 'join-room', 'leave-room'
     let memberCount = 0
@@ -235,30 +229,26 @@ setTimeout(() => {
         clearTimeout(timeoutId)
         slowDown(2)
     }
-    const handleJoinRoom = (room, clientId) => {
+    const handleJoinRoom = async (room, clientId) => {
         if (room !== referendaRoom) return
 
         memberCount++
         delayMultiplier = 1
         clearTimeout(timeoutId)
         slowDown(2)
-        // if (!autoUpdate) return startAutoBroadcast()
 
         // Immediately send cached result to user.
         // User may receive the first result twice due to race conditions with room broadcast.
-        resultPromise?.resolved && resultPromise
-            .then(async votes => {
-                votes && emitToClients(
-                    clientId,
-                    getVotes.eventName,
-                    [
-                        votes,
-                        votes.ts,
-                        await getRewardsNInfo(),
-                    ],
-                )
-            })
-            .catch(() => { })
+        const result = isMap(rxResult.value)
+            ? rxResult.value
+            : await subjectAsPromise(rxResult, isMap)[0]
+                .catch(_ => { })
+        result && emitToClients(
+            clientId,
+            broadcastEvent,
+            [result],
+        )
+
     }
     const handleDeleteRoom = () => autoUpdate = false
     const ifRoom = cb => (...args) => args[0] === referendaRoom && cb(...args)
