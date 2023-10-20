@@ -173,7 +173,7 @@ setTimeout(() => {
         for (let i = 0;i < referendaIds.length;i++) {
             const id = referendaIds[i]
             let entry = referendaCache.get(id)
-            if (!entry?.ended) {
+            if (!entry?.votingActive) {
                 console.log(new Date().toISOString().slice(11, 19), `Referenda ${id}: updating`)
                 allReferenda ??= await getReferendaList()
                 const referendum = allReferenda.get(id)
@@ -213,7 +213,8 @@ setTimeout(() => {
                     volatile: true, // use UDP instead of TCP for better performance
                 }
             )
-            votingActive = [...result].every(x => x[1]?.votingActive)
+            votingActive = result.size > 0
+                && [...result].every(x => x[1]?.votingActive)
         }
         if (!votingActive) return // not need to auto update anymore
         for (let i = 0;i < delayMultiplier;i++) {
