@@ -137,10 +137,13 @@ clientListenables[broadcastEvent] = {
 }
 
 setTimeout(() => {
+    const log = (...args) => console.log(
+        new Date().toISOString().replace(/[A-Z]/g, ' ') + '[REFERENDA]',
+        ...args
+    )
     // automatically broadcast votes to users who joined the "referenda" room.
     const { adapter } = broadcast.socket.of('/')
     const maxMultiplier = 256
-    let autoUpdate = true
     let delayMultiplier = 1
     let resultPromise
     const rxResult = new BehaviorSubject()
@@ -149,7 +152,7 @@ setTimeout(() => {
     // Reset after new user joins.
     const slowDown = deferred((multiplier = 2) => {
         if (!delaySlowDown) return
-        if (multiplier >= 512 || !autoUpdate) return autoUpdate = false
+        if (multiplier >= 512) return
 
         delayMultiplier = multiplier
 
@@ -157,8 +160,7 @@ setTimeout(() => {
         const ms = delayMs * nextMultiplier + 1
         clearTimeout(timeoutId)
         timeoutId = setTimeout(() => {
-            const skip = !autoUpdate
-                || delayMultiplier !== multiplier // multiplier changed (new user joined) =>> a new timer has started
+            const skip = delayMultiplier !== multiplier // multiplier changed (user joined) =>> a new timer has started
                 || multiplier >= maxMultiplier
             if (skip) return
 
@@ -173,14 +175,12 @@ setTimeout(() => {
         for (let i = 0;i < referendaIds.length;i++) {
             const id = referendaIds[i]
             let entry = referendaCache.get(id)
-            if (!entry?.votingActive) {
-                console.log(new Date().toISOString().slice(11, 19), `Referenda ${id}: updating`)
+            if (entry?.votingActive) {
+                log(id, 'updating')
                 allReferenda ??= await getReferendaList()
                 const referendum = allReferenda.get(id)
-                console.log(
-                    new Date().toISOString().slice(11, 19),
-                    `Referenda ${id}: updated. Status: ${referendum.status}`
-                )
+                const votingActive = votingActiveStatuses.includes(referendum.status)
+                log(`${id}: updated. Status: ${referendum.status}. Voting Active: ${votingActive}`)
                 if (!referendum) continue
 
                 const votes = await subscan.referendaGetVotes(id, {}, true)
@@ -189,7 +189,7 @@ setTimeout(() => {
                     rewardPool: referendaRewards?.[i] || 0,
                     tsUpdated: new Date().toISOString(),
                     votes: [...votes],
-                    votingActive: votingActiveStatuses.includes(referendum.status),
+                    votingActive,
                 }
                 referendaCache.set(id, entry)
             }
@@ -199,24 +199,23 @@ setTimeout(() => {
     }
     const broadcastVotes = async () => {
         let votingActive = false
-        if (autoUpdate) {
-            resultPromise = resultPromise?.pending
-                ? resultPromise
-                : PromisE(getReferendaListNVotes())
-            const result = await resultPromise
-            rxResult.next(result)
-            broadcast(
-                broadcastEvent,
-                [result],
-                {
-                    rooms: [referendaRoom],
-                    volatile: true, // use UDP instead of TCP for better performance
-                }
-            )
-            votingActive = result.size > 0
-                && [...result].every(x => x[1]?.votingActive)
-        }
-        if (!votingActive) return // not need to auto update anymore
+        resultPromise = resultPromise?.pending
+            ? resultPromise
+            : PromisE(getReferendaListNVotes())
+        const result = await resultPromise
+        rxResult.next(result)
+        broadcast(
+            broadcastEvent,
+            [result],
+            {
+                rooms: [referendaRoom],
+                volatile: true, // use UDP instead of TCP for better performance
+            }
+        )
+        votingActive = result.size > 0
+            && [...result].every(x => x[1]?.votingActive)
+        if (!votingActive) return log('Voting not active. Exited auto broadcast.')
+
         for (let i = 0;i < delayMultiplier;i++) {
             await PromisE.delay(delayMs)
         }
@@ -224,9 +223,7 @@ setTimeout(() => {
     }
     // https://socket.io/docs/v4/rooms/
     // Room events: 'create-room', 'delete-room', 'join-room', 'leave-room'
-    let memberCount = 0
     const resetTimer = () => {
-        autoUpdate = true
         delayMultiplier = 1
         clearTimeout(timeoutId)
         slowDown(2)
@@ -234,7 +231,6 @@ setTimeout(() => {
     const handleJoinRoom = async (room, clientId) => {
         if (room !== referendaRoom) return
 
-        memberCount++
         delayMultiplier = 1
         clearTimeout(timeoutId)
         slowDown(2)
@@ -252,12 +248,12 @@ setTimeout(() => {
         )
 
     }
-    const handleDeleteRoom = () => autoUpdate = false
+    // const handleDeleteRoom = () => autoUpdate = false
     const ifRoom = cb => (...args) => args[0] === referendaRoom && cb(...args)
     adapter.on('create-room', ifRoom(resetTimer))
-    adapter.on('delete-room', ifRoom(handleDeleteRoom))
+    // adapter.on('delete-room', ifRoom(handleDeleteRoom))
     adapter.on('join-room', ifRoom(handleJoinRoom))
-    adapter.on('leave-room', ifRoom(() => memberCount--))
+    // adapter.on('leave-room', ifRoom(() => memberCount--))
 
     broadcastVotes()
 }, 10)
