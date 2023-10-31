@@ -166,12 +166,12 @@ export const broadcast = (
         volatile = false,
     } = isObj(config) && config || {}
 
-    let { socket } = broadcast
-    if (volatile) socket = socket.volatile
-    if (namespace) socket = socket.of(namespace)
-    if (rooms.length) socket = socket.to(...rooms)
-    if (ignore?.length) socket = socket.except(...toClientIds(ignore))
-    return socket.emit(eventName, ...toParams(params))
+    let { socket: io } = broadcast
+    if (volatile) io = io.volatile
+    if (namespace) io = io.of(namespace)
+    if (rooms.length) io = io.to(...rooms)
+    if (ignore?.length) io = io.except?.(...toClientIds(ignore)) || io
+    return io.emit(eventName, ...toParams(params))
 }
 broadcast.socket = null
 
@@ -211,23 +211,24 @@ export const emitToClients = (
  * @param   {String[]}          userIds 
  * @param   {Sting}             eventName
  * @param   {Array}             params          (optional) event parameters. Default: `[]`
- * @param   {String|String[]}   excludeClientId (optional)
+ * @param   {String|String[]}   excludeClientIds (optional)
  */
 export const emitToUsers = (
     userIds,
     eventName,
     params = [],
-    excludeClientId,
+    excludeClientIds,
 ) => {
-    excludeClientId = toClientIds(excludeClientId)
+    excludeClientIds = toClientIds(excludeClientIds)
     userIds = arrUnique(userIds || [])
     if (!userIds.length) return
 
-    if (broadcast.socket) return broadcast
-        .socket
-        .to(...userIds.map(id => `${userRoomPrefix}${id}`))
-        .except(excludeClientId)
-        .emit(eventName, ...toParams(params))
+    const userRooms = userIds.map(id => `${userRoomPrefix}${id}`)
+    let socket = broadcast
+        ?.socket
+        ?.in(...userRooms)
+    if (excludeClientIds.length) socket = socket?.except?.(...excludeClientIds) || socket
+    return socket?.emit?.(eventName, ...toParams(params))
 }
 
 // returns an array of users with role 'support'

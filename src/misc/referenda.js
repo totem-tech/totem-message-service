@@ -5,7 +5,10 @@ import {
     broadcast,
     emitToClients
 } from '../users'
+import DataStorage from '../utils/DataStorage'
+import { sendMessage as logDiscord } from '../utils/discordHelper'
 import PromisE from '../utils/PromisE'
+import { subjectAsPromise } from '../utils/rx'
 import SubscanHelper from '../utils/substrate/SubscanHelper'
 import {
     deferred,
@@ -16,8 +19,6 @@ import {
     isMap
 } from '../utils/utils'
 import { TYPES } from '../utils/validator'
-import DataStorage from '../utils/DataStorage'
-import { subjectAsPromise } from '../utils/rx'
 
 const apiKey = process.env.SUBSCAN_API_KEY
 const broadcastEvent = 'referenda-list-with-votes'
@@ -55,6 +56,8 @@ export const getReferendaList = async callback => {
     if (shouldUpdate) {
         if (!referendaList?.pending) referendaList = PromisE(subscan.referendaGetList({}, true))
         listTsLastUpdated = now
+        const result = await referendaList
+        new DataStorage('referenda-list.json').setAll(result)
     }
     isFn(callback) && callback(null, await referendaList)
     return referendaList
@@ -78,10 +81,12 @@ getReferendaList.result = {
  * @param   {String[]}  ids
  * @param   {Function}  callback
  */
-export const getVotes = async (ids = referendaIds, callback) => callback?.(
-    null,
-    await subscan.referendaGetVotesBatch(ids, true)
-)
+export const getVotes = async (ids = referendaIds, callback) => {
+    const result = await subscan.referendaGetVotesBatch(ids, true)
+    callback?.(null, result)
+
+    new DataStorage('referenda-votes.json').setAll(result)
+}
 getVotes.description = `Get referenda votes by referenda IDs and/or identity.`
 getVotes.eventName = 'referenda-get-votes'
 getVotes.params = [
@@ -198,23 +203,28 @@ setTimeout(() => {
         return result
     }
     const broadcastVotes = async () => {
-        let votingActive = false
-        resultPromise = resultPromise?.pending
-            ? resultPromise
-            : PromisE(getReferendaListNVotes())
-        const result = await resultPromise
-        rxResult.next(result)
-        broadcast(
-            broadcastEvent,
-            [result],
-            {
-                rooms: [referendaRoom],
-                volatile: true, // use UDP instead of TCP for better performance
-            }
-        )
-        votingActive = result.size > 0
-            && [...result].every(x => x[1]?.votingActive)
-        if (!votingActive) return log('Voting not active. Exited auto broadcast.')
+        try {
+            let votingActive = false
+            resultPromise = resultPromise?.pending
+                ? resultPromise
+                : PromisE(getReferendaListNVotes())
+            const result = await resultPromise
+            rxResult.next(result)
+            broadcast(
+                broadcastEvent,
+                [result],
+                {
+                    rooms: [referendaRoom],
+                    volatile: true, // use UDP instead of TCP for better performance
+                }
+            )
+            votingActive = result.size > 0
+                && [...result].every(x => x[1]?.votingActive)
+            if (!votingActive) return log('Voting not active. Exited auto broadcast.')
+        } catch (err) {
+            console.log('[REFERENDA] update failed', err)
+            logDiscord(err, '[REFERENDA]')
+        }
 
         for (let i = 0;i < delayMultiplier;i++) {
             await PromisE.delay(delayMs)
