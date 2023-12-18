@@ -35,12 +35,15 @@ const generalStats = async (storage, config = {}) => {
     const stats = {
         total: storage.getAll().size,
     }
+    const getPropValue = (key = '', value) => key.split('?.').length > 1
+        ? eval(`value?.${key}`)
+        : value[key]
     storage
         .toArray()
         .forEach(([key, value]) => {
             keysCountOccurance.forEach(key => {
-                const iValue = value[key]
-                stats[key] = stats[key] || {}
+                const iValue = getPropValue(key, value)
+                stats[key] ??= {}
                 stats[key][iValue] = (stats[key][iValue] || 0) + 1
 
                 const keySwap = {
@@ -65,13 +68,13 @@ const generalStats = async (storage, config = {}) => {
             // })
 
             keysCountUnique.forEach(key => {
-                const iValue = value[key]
+                const iValue = getPropValue(key, value)
                 if (iValue === undefined) return
 
-                stats[key] = stats[key] || new Map()
+                stats[key] ??= new Map()
                 const map = stats[key]
                 try {
-                    map.set(value[key], true)
+                    map.set(iValue, true)
                 } catch (err) {
                     console.log({ map, stats })
                     throw err
@@ -79,7 +82,7 @@ const generalStats = async (storage, config = {}) => {
             })
 
             keysSum.forEach(key => {
-                const iValue = value[key]
+                const iValue = getPropValue(key, value)
                 if (!isValidNumber(iValue)) return
 
                 const iKey = `${key}__sum`

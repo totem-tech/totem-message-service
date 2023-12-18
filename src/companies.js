@@ -13,7 +13,7 @@ import { isCountryCode } from './countries'
 import { setTexts } from './language'
 import { TYPES } from './utils/validator'
 
-const companies = new CouchDBStorage(null, 'companies') // disable caching
+export const companies = new CouchDBStorage(null, 'companies') // disable caching
 // Must-have properties
 const requiredKeys = [
     'countryCode',          // 2 letter country code

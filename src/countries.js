@@ -36,7 +36,7 @@ export const setup = async () => {
 
     console.log('Fetching list of countries...')
     // const getCountries = async () => await (await fetch(URL_COUNTRIES_LIST)).json()
-    const countriesArr = await PromisE.fetch(url)
+    const countriesArr = await PromisE.fetch(URL_COUNTRIES_LIST)
         .then(arr => {
             // save the entire result as JSON file as a backup
             new DataStorage('countries.json')
@@ -79,6 +79,7 @@ export const setup = async () => {
                 name,
                 code: c.cca2,     // 2 letter code
                 code3: c.cca3,    // 3 letter code
+                continents: c.continents,
                 phoneCode: !root
                     ? undefined
                     : root + suffix,

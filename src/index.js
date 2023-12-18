@@ -10,6 +10,7 @@ import { Server } from 'socket.io'
 import uuid from 'uuid'
 import { getConnection, setDefaultUrl } from './utils/CouchDBStorage'
 import { sendMessage as logDiscord } from './utils/discordHelper'
+import PromisE from './utils/PromisE'
 import {
     isArr,
     isError,
@@ -21,6 +22,7 @@ import { TYPES, validateObj } from './utils/validator'
 // keep this above any local imports that may require the default database connection
 setDefaultUrl(process.env.CouchDB_URL)
 import { getConnection as connectToBlockchain } from './blockchain'
+import cdpEventHandlers, { setup as setupCDP } from './cdp'
 import { handleCompany, handleCompanySearch } from './companies'
 import { setup as setupCountries, handleCountries } from './countries'
 import { handlers as crowdloanHandlers } from './crowdloan'
@@ -62,7 +64,6 @@ import {
     rxClientConnection,
     broadcast,
 } from './users'
-import PromisE from './utils/PromisE'
 
 // Error messages
 const texts = {
@@ -121,6 +122,8 @@ const socket = new Server(httpsServer, {
 let unapprovedOrigins = []
 
 const allEventHandlers = {
+    // CDP
+    ...cdpEventHandlers,
 
     // Company
     'company': handleCompany,
@@ -483,6 +486,7 @@ const init = async () => {
         [setupCurrencies, [], 'Failed to setup currencies.'],
         [setupUsers, [], 'Failed to setup users.'],
         [startListening, [], 'Websocket setup failed.', true],
+        [setupCDP, [], 'Failed to setup CDP', true],
         [connectToBlockchain, [], 'Failed to connect to blockchain.', false],
         [importToDB, [importFiles], 'Failed to import to DB', false],
     ]

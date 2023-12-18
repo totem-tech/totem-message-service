@@ -18,7 +18,7 @@ import { isBool, isObj, isStr } from '../../src/utils/utils'
  * 
  * @returns {DataStorage}
  */
-export async function execute(dbName, filename, limit, skip, url, selector, fileOverride) {
+export async function execute(dbName, filename, limit, skip, url, selector, fileOverride, timeout) {
     url = url || process.env.CouchDB_URL
     dbName = dbName || process.env.DBName
     filename = filename || process.env.FILENAME
@@ -27,6 +27,7 @@ export async function execute(dbName, filename, limit, skip, url, selector, file
     fileOverride = isBool(fileOverride)
         ? fileOverride
         : `${process.env.FILE_OVERRIDE}`.toLowerCase() !== 'false'
+    timeout ??= parseInt(process.env.CouchDB_TIMEOUT || 60_000)
     if (!dbName) throw new Error('DBName required')
     if (!url) throw new Error('CouchDB_URL required')
 
@@ -36,8 +37,20 @@ export async function execute(dbName, filename, limit, skip, url, selector, file
 
     const db = new CouchDBStorage(url, dbName)
     const result = !selector
-        ? await db.getAll([], true, limit, skip)
-        : await db.search(selector, limit, skip, true)
+        ? await db.getAll(
+            [],
+            true,
+            limit,
+            skip,
+            {},
+            timeout
+        )
+        : await db.search(
+            selector,
+            limit,
+            skip,
+            true
+        )
     const ts = new Date().toISOString()
     filename = filename || `${dbName}-${ts}-${skip || 1}-${skip + result.size}.json`
     filename = filename.replace(/\:/g, '-')
