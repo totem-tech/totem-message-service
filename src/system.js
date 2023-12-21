@@ -161,7 +161,12 @@ export const getClientEventsMeta = (eventHandlers, force = false) => {
                 const handler = eventHandlers[eventName]
                 if (!isFn(handler) || handler.enabled === false) return
                 clientEmittables[eventName] = {
-                    requireLogin: false,
+                    ...handler.params?.length > 0 && {
+                        failFast: true,
+                        includeLabel: true,
+                        includeValue: true,
+                        requireLogin: false,
+                    },
                     ...handler,
                 }
             })

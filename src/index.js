@@ -229,6 +229,10 @@ const interceptHandler = (eventName, handler) => async function (...args) {
     const userId = client.___userId
     const userRoles = client.___userRoles || []
     let {
+        customMessages,
+        failFast = true,
+        includeLabel = true,
+        includeValue = true,
         maintenanceMode,
         params = [],
         requireLogin, // boolean (any user) or array of user roles allowed
@@ -274,8 +278,10 @@ const interceptHandler = (eventName, handler) => async function (...args) {
             && validateObj(
                 [...args],
                 params,
-                true,
-                true
+                failFast,
+                includeLabel,
+                customMessages,
+                includeValue,
             )
         if (err) {
             console.log('Event pre-validation failed:', { eventName, args, err })

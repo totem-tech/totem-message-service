@@ -8,8 +8,34 @@ import { TYPES } from '../utils/validator'
 const accessCodes = new CouchDBStorage(null, 'cdp_access-codes')
 const messages = {
     error404: 'invalid access code or registration number!',
+    codeInvalid: 'invalid access code',
+    companyIdInvalid: 'invalid company ID',
+    regNumInvalid: 'invalid registration number',
 }
 // setTexts(messages)
+const defs = {
+    accessCode: {
+        customMessages: messages.codeInvalid,
+        maxLength: 9,
+        minLength: 8,
+        name: 'accessCode',
+        required: true,
+        type: TYPES.string,
+    },
+    companyId: {
+        customMessages: messages.companyIdInvalid,
+        name: 'companyId',
+        required: true,
+        type: TYPES.hash,
+    },
+    regNum: {
+        customMessages: messages.regNumInvalid,
+        minLength: 6,
+        name: 'registrationNumber',
+        required: true,
+        type: TYPES.string,
+    },
+}
 
 async function handleUpdateStatus(
     accessCode,
@@ -37,27 +63,12 @@ async function handleUpdateStatus(
     await accessCodes.set(entry._id, entry)
     callback(null)
 }
+handleUpdateStatus.includeLabel = false
+handleUpdateStatus.includeValue = false // exclude value from error message
 handleUpdateStatus.params = [
-    {
-        maxLength: 16,
-        minLength: 8,
-        name: 'accessCode',
-        required: true,
-        type: TYPES.string,
-    },
-    {
-        maxLength: 66,
-        minLength: 66,
-        name: 'companyId',
-        required: true,
-        type: TYPES.string,
-    },
-    {
-        minLength: 6,
-        name: 'registrationNumber',
-        required: true,
-        type: TYPES.string,
-    },
+    defs.accessCode,
+    defs.companyId,
+    defs.regNum,
     {
         defaultValue: {},
         name: 'status',
@@ -113,27 +124,12 @@ async function handleValidateAccessCode(
         valid,
     )
 }
+handleValidateAccessCode.includeLabel = false
+handleValidateAccessCode.includeValue = false // exclude value from error message
 handleValidateAccessCode.params = [
-    {
-        maxLength: 9,
-        minLength: 8,
-        name: 'accessCode',
-        required: true,
-        type: TYPES.string,
-    },
-    {
-        maxLength: 66,
-        minLength: 66,
-        name: 'companyId',
-        required: true,
-        type: TYPES.string,
-    },
-    {
-        minLength: 6,
-        name: 'registrationNumber',
-        required: true,
-        type: TYPES.string,
-    },
+    defs.accessCode,
+    defs.companyId,
+    defs.regNum,
     {
         name: 'callback',
         required: true,
@@ -160,7 +156,10 @@ export const setup = async () => {
 
     // create demo CDP entries
     if (process.env.DEBUG === 'TRUE') {
-        const sampleEnties = await companies.getAll(null, false, 100)
+        // const sampleEnties = await companies.getAll(null, false, 100)
+        const sampleEnties = await companies.search({
+            registrationNumber: '04254364'
+        }, 1, 0, false)
         await accessCodes.setAll(
             sampleEnties.map(({ _id, registrationNumber }) => ({
                 _id,
