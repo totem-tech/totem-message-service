@@ -22,8 +22,8 @@ const messages = {
 const defs = {
     accessCode: {
         customMessages: messages.invalidCode,
-        maxLength: 9,
-        minLength: 8,
+        maxLength: 9, // with "-"
+        minLength: 8, // without "-"
         name: 'accessCode',
         required: true,
         type: TYPES.string,
@@ -54,7 +54,8 @@ const defs = {
     },
 }
 defs.publicData = {
-    name: 'publicData',
+    description: 'Company public information',
+    name: 'publicInfo',
     properties: [
         {
             name: 'countryCode',
@@ -89,22 +90,31 @@ defs.publicData = {
     type: TYPES.object,
 }
 
+/**
+ * @name    getCodeSanitised
+ * @description turns everything into alphanumeric uppercase string
+ * @param {*} value 
+ * 
+ * @returns {String}
+ */
+export const getCodeSanitised = value => `${value || ''}`
+    .match(/[a-z0-9]/ig)
+    ?.join('')
+    ?.toUpperCase() || ''
+
 async function handleVerify(cdp, callback) {
-    const entry = await accessCodes.find({ cdp })
+    const entry = await accessCodes.find({ cdp: getCodeSanitised(cdp) })
+    const err = !isObj(entry?.companyData) && messages.invalidCdp
     callback(
-        ...!isObj(entry?.companyData)
-            ? [messages.invalidCdp]
-            : [
-                null,
-                objClean(
-                    entry.companyData,
-                    handleVerify
-                        .result
-                        .properties
-                        .map(x => x.name)
-                        .filter(Boolean)
-                )
-            ]
+        err,
+        !err && objClean(
+            entry.companyData,
+            handleVerify
+                .result
+                .properties
+                .map(x => x.name)
+                .filter(Boolean)
+        ) || undefined
 
     )
 }
@@ -125,7 +135,7 @@ async function handleUpdateStatus(
     if (!isFn(callback)) return
 
     const entry = await accessCodes.find({
-        accessCode,
+        accessCode: getCodeSanitised(accessCode),
         companyId,
         registrationNumber,
     })
@@ -178,7 +188,7 @@ async function handleValidateAccessCode(
     if (!isFn(callback)) return
 
     const entry = await accessCodes.find({
-        accessCode,
+        accessCode: getCodeSanitised(accessCode),
         companyId,
         registrationNumber,
     })
@@ -195,7 +205,11 @@ async function handleValidateAccessCode(
         !!entry && valid
             ? null
             : messages.invalidCodeOrReg,
-        valid,
+        valid
+            ? !entry?.cdp
+                ? valid
+                : entry
+            : false
     )
 }
 handleValidateAccessCode.includeLabel = false
@@ -207,7 +221,13 @@ handleValidateAccessCode.params = [
     defs.callback,
 ]
 handleValidateAccessCode.result = {
+    description: 'Indicates wheteher access code is valid.',
     name: 'valid',
+    or: {
+        description: 'If access code is valid and company already acquired a CDP, will return the CDP entry.',
+        name: 'cdp',
+        type: TYPES.string,
+    },
     type: TYPES.boolean,
 }
 
@@ -228,6 +248,10 @@ export const setup = async () => {
             index: { fields: ['cdp'] },
             name: 'cdp-index',
         },
+        {
+            index: { fields: ['registrationNumber'] },
+            name: 'registrationNumber-index',
+        },
     ]
 
     // create indexes. Ignore if already exists
@@ -242,6 +266,8 @@ export const setup = async () => {
         await accessCodes.setAll(
             sampleEnties.map(({ _id, registrationNumber }) => ({
                 _id,
+                // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
+                // without "-" 
                 accessCode: generateHash(
                     _id + registrationNumber,
                     'blake2',
