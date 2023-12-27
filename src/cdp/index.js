@@ -10,7 +10,7 @@ import {
 } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
-const accessCodes = new CouchDBStorage(null, 'cdp_access-codes')
+const storage = new CouchDBStorage(null, 'cdp_access-codes')
 const messages = {
     invalidCdp: 'invalid CDP reference',
     invalidCode: 'invalid access code',
@@ -102,8 +102,18 @@ export const getCodeSanitised = value => `${value || ''}`
     ?.join('')
     ?.toUpperCase() || ''
 
+async function handleCheckCreate(companyId, callback) {
+    const entry = await storage.find({ companyId })
+
+    callback(null, !entry?.accessCode)
+}
+handleCheckCreate.params = [
+    defs.companyId,
+    defs.callback,
+]
+
 async function handleVerify(cdp, callback) {
-    const entry = await accessCodes.find({ cdp: getCodeSanitised(cdp) })
+    const entry = await storage.find({ cdp: getCodeSanitised(cdp) })
     const err = !isObj(entry?.companyData) && messages.invalidCdp
     callback(
         err,
@@ -124,7 +134,7 @@ handleVerify.params = [
 ]
 handleVerify.result = defs.publicData
 
-//  WIP
+//  ToDo: WIP & to be implemented on the frontend
 async function handleUpdateStatus(
     accessCode,
     companyId,
@@ -134,7 +144,7 @@ async function handleUpdateStatus(
 ) {
     if (!isFn(callback)) return
 
-    const entry = await accessCodes.find({
+    const entry = await storage.find({
         accessCode: getCodeSanitised(accessCode),
         companyId,
         registrationNumber,
@@ -148,11 +158,9 @@ async function handleUpdateStatus(
         entry[key] = status[key]
     })
 
-    await accessCodes.set(entry._id, entry)
+    await storage.set(entry._id, entry)
     callback(null)
 }
-handleUpdateStatus.includeLabel = false
-handleUpdateStatus.includeValue = false // exclude value from error message
 handleUpdateStatus.params = [
     defs.accessCode,
     defs.companyId,
@@ -187,7 +195,7 @@ async function handleValidateAccessCode(
 ) {
     if (!isFn(callback)) return
 
-    const entry = await accessCodes.find({
+    const entry = await storage.find({
         accessCode: getCodeSanitised(accessCode),
         companyId,
         registrationNumber,
@@ -199,7 +207,7 @@ async function handleValidateAccessCode(
     if (valid && !entry.tsFirstAccessed) {
         entry.stepIndex = 0
         entry.tsFirstAccessed = new Date().toISOString()
-        await accessCodes.set(entry._id, entry)
+        await storage.set(entry._id, entry)
     }
     callback(
         !!entry && valid
@@ -212,8 +220,6 @@ async function handleValidateAccessCode(
             : false
     )
 }
-handleValidateAccessCode.includeLabel = false
-handleValidateAccessCode.includeValue = false // exclude value from error message
 handleValidateAccessCode.params = [
     defs.accessCode,
     defs.companyId,
@@ -232,7 +238,7 @@ handleValidateAccessCode.result = {
 }
 
 export const setup = async () => {
-    const db = await accessCodes.getDB()
+    const db = await storage.getDB()
     const indexes = [
         {
             index: {
@@ -249,6 +255,10 @@ export const setup = async () => {
             name: 'cdp-index',
         },
         {
+            index: { fields: ['companyId'] },
+            name: 'companyId-index',
+        },
+        {
             index: { fields: ['registrationNumber'] },
             name: 'registrationNumber-index',
         },
@@ -263,7 +273,7 @@ export const setup = async () => {
         const sampleEnties = await companies.search({
             registrationNumber: '04254364'
         }, 1, 0, false)
-        await accessCodes.setAll(
+        await storage.setAll(
             sampleEnties.map(({ _id, registrationNumber }) => ({
                 _id,
                 // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
@@ -294,8 +304,17 @@ export const setup = async () => {
     }
 }
 
-export default {
+const handlers = {
+    'cdp-check-create': handleCheckCreate,
     'cdp-update-status': handleUpdateStatus,
     'cdp-validate-code': handleValidateAccessCode,
     'cdp-verify': handleVerify,
 }
+
+Object
+    .values(handlers)
+    .forEach(handler => {
+        handler.includeLabel = false // only error message. exclude param label/name
+        handler.includeValue = false // exclude value from error message
+    })
+export default handlers
