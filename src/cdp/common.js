@@ -148,6 +148,7 @@ const publicData = {
     name: 'publicInfo',
     properties: [
         cdp,
+        companyId,
         {
             name: 'countryCode',
             type: TYPES.string,
@@ -206,7 +207,10 @@ export const getPublicData = companyOrCdpEntry => isObj(companyOrCdpEntry)
     && objClean(
         {
             ...companyOrCdpEntry,
-            ...companyOrCdpEntry.companyData
+            ...companyOrCdpEntry.companyData,
+            ...!companyOrCdpEntry.accessCode && { // entry from companies database
+                [companyId.name]: companyOrCdpEntry._id
+            },
         },
         defs
             .publicData

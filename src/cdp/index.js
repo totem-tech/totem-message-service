@@ -130,7 +130,7 @@ const handlers = {
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,
     // 'cdp-update-status': handleUpdateStatus,
-    'cdp-validate-code': handleValidateAccessCode,
+    'cdp-validate-access-code': handleValidateAccessCode,
     'cdp-verify': handleVerify,
 }
 
