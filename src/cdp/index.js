@@ -1,244 +1,67 @@
-import { companies } from '../companies'
-import { setTexts } from '../language'
-import CouchDBStorage from '../utils/CouchDBStorage'
+import { } from '../companies'
 import PromisE from '../utils/PromisE'
-import {
-    generateHash,
-    isFn,
-    isObj,
-    objClean
-} from '../utils/utils'
-import { TYPES } from '../utils/validator'
+import { generateHash } from '../utils/utils'
+import { dbCdpAccessCodes, dbCompanies } from './common'
+import handleCheckCreate from './handleCheckCreate'
+import handleCompanySearch from './handleCompanySearch'
+import handleValidateAccessCode from './handleValidateAccessCode'
+import handleVerify from './handleVerify'
 
-const storage = new CouchDBStorage(null, 'cdp_access-codes')
-const messages = {
-    invalidCdp: 'invalid CDP reference',
-    invalidCode: 'invalid access code',
-    invalidCodeOrReg: 'invalid access code or registration number',
-    invalidCompany: 'invalid company ID',
-    invalidRegNum: 'invalid registration number',
-}
-// setTexts(messages)
-const defs = {
-    accessCode: {
-        customMessages: messages.invalidCode,
-        maxLength: 9, // with "-"
-        minLength: 8, // without "-"
-        name: 'accessCode',
-        required: true,
-        type: TYPES.string,
-    },
-    callback: {
-        name: 'callback',
-        required: true,
-        type: TYPES.function,
-    },
-    cdp: {
-        customMessages: messages.invalidCdp,
-        name: 'cdp',
-        required: true,
-        type: TYPES.string,
-    },
-    companyId: {
-        customMessages: messages.invalidCompany,
-        name: 'companyId',
-        required: true,
-        type: TYPES.hash,
-    },
-    regNum: {
-        customMessages: messages.invalidRegNum,
-        minLength: 6,
-        name: 'registrationNumber',
-        required: true,
-        type: TYPES.string,
-    },
-}
-defs.publicData = {
-    description: 'Company public information',
-    name: 'publicInfo',
-    properties: [
-        {
-            name: 'countryCode',
-            type: TYPES.string,
-        },
-        {
-            description: 'Company name',
-            name: 'name',
-            type: TYPES.string,
-        },
-        defs.cdp,
-        {
-            name: 'regAddress',
-            type: TYPES.object,
-        },
-        defs.regNum,
-        {
-            name: 'tsCdpIssued',
-            type: TYPES.date,
-        },
-        {
+// // //  ToDo: WIP & to be implemented on the frontend
+// // async function handleUpdateStatus(
+// //     accessCode,
+// //     companyId,
+// //     registrationNumber,
+// //     status,
+// //     callback
+// // ) {
+// //     if (!isFn(callback)) return
 
-            name: 'url',
-            type: TYPES.string,
-        },
-        {
+// //     const entry = await storage.find({
+// //         accessCode: getCodeSanitised(accessCode),
+// //         companyId,
+// //         registrationNumber,
+// //     })
+// //     if (!entry) return callback(messages.invalidCodeOrReg)
 
-            name: 'vatNumber',
-            type: TYPES.string,
-        },
-    ],
-    type: TYPES.object,
-}
+// //     const { params = [] } = handleUpdateStatus
+// //     params[2].map(x => {
+// //         const key = x.name
+// //         if (!key || !status.hasOwnProperty(key)) return
+// //         entry[key] = status[key]
+// //     })
 
-/**
- * @name    getCodeSanitised
- * @description turns everything into alphanumeric uppercase string
- * @param {*} value 
- * 
- * @returns {String}
- */
-export const getCodeSanitised = value => `${value || ''}`
-    .match(/[a-z0-9]/ig)
-    ?.join('')
-    ?.toUpperCase() || ''
-
-async function handleCheckCreate(companyId, callback) {
-    const entry = await storage.find({ companyId })
-
-    callback(null, !entry?.accessCode)
-}
-handleCheckCreate.params = [
-    defs.companyId,
-    defs.callback,
-]
-
-async function handleVerify(cdp, callback) {
-    const entry = await storage.find({ cdp: getCodeSanitised(cdp) })
-    const err = !isObj(entry?.companyData) && messages.invalidCdp
-    callback(
-        err,
-        !err && objClean(
-            entry.companyData,
-            handleVerify
-                .result
-                .properties
-                .map(x => x.name)
-                .filter(Boolean)
-        ) || undefined
-
-    )
-}
-handleVerify.params = [
-    defs.cdp,
-    defs.callback,
-]
-handleVerify.result = defs.publicData
-
-//  ToDo: WIP & to be implemented on the frontend
-async function handleUpdateStatus(
-    accessCode,
-    companyId,
-    registrationNumber,
-    status,
-    callback
-) {
-    if (!isFn(callback)) return
-
-    const entry = await storage.find({
-        accessCode: getCodeSanitised(accessCode),
-        companyId,
-        registrationNumber,
-    })
-    if (!entry) return callback(messages.invalidCodeOrReg)
-
-    const { params = [] } = handleUpdateStatus
-    params[2].map(x => {
-        const key = x.name
-        if (!key || !status.hasOwnProperty(key)) return
-        entry[key] = status[key]
-    })
-
-    await storage.set(entry._id, entry)
-    callback(null)
-}
-handleUpdateStatus.params = [
-    defs.accessCode,
-    defs.companyId,
-    defs.regNum,
-    {
-        defaultValue: {},
-        name: 'status',
-        properties: [
-            {
-                max: 99,
-                min: 0,
-                name: 'stepIndex',
-                required: false,
-                type: TYPES.integer,
-            },
-            {
-                name: 'tsFormCompleted', // last step (before payment) completed
-                required: false,
-                type: TYPES.date,
-            },
-        ],
-        type: TYPES.object,
-    },
-    defs.callback,
-]
-
-async function handleValidateAccessCode(
-    accessCode,
-    companyId,
-    registrationNumber,
-    callback
-) {
-    if (!isFn(callback)) return
-
-    const entry = await storage.find({
-        accessCode: getCodeSanitised(accessCode),
-        companyId,
-        registrationNumber,
-    })
-
-    const valid = entry?.registrationNumber === registrationNumber
-        && entry?.accessCode === accessCode
-
-    if (valid && !entry.tsFirstAccessed) {
-        entry.stepIndex = 0
-        entry.tsFirstAccessed = new Date().toISOString()
-        await storage.set(entry._id, entry)
-    }
-    callback(
-        !!entry && valid
-            ? null
-            : messages.invalidCodeOrReg,
-        valid
-            ? !entry?.cdp
-                ? valid
-                : entry
-            : false
-    )
-}
-handleValidateAccessCode.params = [
-    defs.accessCode,
-    defs.companyId,
-    defs.regNum,
-    defs.callback,
-]
-handleValidateAccessCode.result = {
-    description: 'Indicates wheteher access code is valid.',
-    name: 'valid',
-    or: {
-        description: 'If access code is valid and company already acquired a CDP, will return the CDP entry.',
-        name: 'cdp',
-        type: TYPES.string,
-    },
-    type: TYPES.boolean,
-}
+// //     await storage.set(entry._id, entry)
+// //     callback(null)
+// // }
+// // handleUpdateStatus.params = [
+// //     defs.accessCode,
+// //     defs.companyId,
+// //     defs.regNum,
+// //     {
+// //         defaultValue: {},
+// //         name: 'status',
+// //         properties: [
+// //             {
+// //                 max: 99,
+// //                 min: 0,
+// //                 name: 'stepIndex',
+// //                 required: false,
+// //                 type: TYPES.integer,
+// //             },
+// //             {
+// //                 name: 'tsFormCompleted', // last step (before payment) completed
+// //                 required: false,
+// //                 type: TYPES.date,
+// //             },
+// //         ],
+// //         type: TYPES.object,
+// //     },
+// //     defs.callback,
+// // ]
 
 export const setup = async () => {
-    const db = await storage.getDB()
+    const db = await dbCdpAccessCodes.getDB()
     const indexes = [
         {
             index: {
@@ -269,11 +92,10 @@ export const setup = async () => {
 
     // create demo CDP entries
     if (process.env.DEBUG === 'TRUE') {
-        // const sampleEnties = await companies.getAll(null, false, 100)
-        const sampleEnties = await companies.search({
+        const sampleEnties = await dbCompanies.search({
             registrationNumber: '04254364'
         }, 1, 0, false)
-        await storage.setAll(
+        await dbCdpAccessCodes.setAll(
             sampleEnties.map(({ _id, registrationNumber }) => ({
                 _id,
                 // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
@@ -306,7 +128,8 @@ export const setup = async () => {
 
 const handlers = {
     'cdp-check-create': handleCheckCreate,
-    'cdp-update-status': handleUpdateStatus,
+    'cdp-company-search': handleCompanySearch,
+    // 'cdp-update-status': handleUpdateStatus,
     'cdp-validate-code': handleValidateAccessCode,
     'cdp-verify': handleVerify,
 }
