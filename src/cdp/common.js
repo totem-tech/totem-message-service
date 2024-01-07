@@ -3,6 +3,7 @@ import { isObj, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
 export const dbCdpAccessCodes = new CouchDBStorage(null, 'cdp_access-codes')
+export const dbCdpLog = new CouchDBStorage(null, 'cdp_log')
 export const dbCompanies = new CouchDBStorage(null, 'companies')
 export const messages = {
     companyName: 'company name',

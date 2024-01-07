@@ -1,68 +1,20 @@
 import { } from '../companies'
 import PromisE from '../utils/PromisE'
 import { generateHash } from '../utils/utils'
-import { dbCdpAccessCodes, dbCompanies } from './common'
+import { dbCdpAccessCodes, dbCdpLog, dbCompanies } from './common'
 import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
+import handleLogProgress from './handleLogProgress'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
 
-// // //  ToDo: WIP & to be implemented on the frontend
-// // async function handleUpdateStatus(
-// //     accessCode,
-// //     companyId,
-// //     registrationNumber,
-// //     status,
-// //     callback
-// // ) {
-// //     if (!isFn(callback)) return
-
-// //     const entry = await storage.find({
-// //         accessCode: getCodeSanitised(accessCode),
-// //         companyId,
-// //         registrationNumber,
-// //     })
-// //     if (!entry) return callback(messages.invalidCodeOrReg)
-
-// //     const { params = [] } = handleUpdateStatus
-// //     params[2].map(x => {
-// //         const key = x.name
-// //         if (!key || !status.hasOwnProperty(key)) return
-// //         entry[key] = status[key]
-// //     })
-
-// //     await storage.set(entry._id, entry)
-// //     callback(null)
-// // }
-// // handleUpdateStatus.params = [
-// //     defs.accessCode,
-// //     defs.companyId,
-// //     defs.regNum,
-// //     {
-// //         defaultValue: {},
-// //         name: 'status',
-// //         properties: [
-// //             {
-// //                 max: 99,
-// //                 min: 0,
-// //                 name: 'stepIndex',
-// //                 required: false,
-// //                 type: TYPES.integer,
-// //             },
-// //             {
-// //                 name: 'tsFormCompleted', // last step (before payment) completed
-// //                 required: false,
-// //                 type: TYPES.date,
-// //             },
-// //         ],
-// //         type: TYPES.object,
-// //     },
-// //     defs.callback,
-// // ]
-
 export const setup = async () => {
-    const db = await dbCdpAccessCodes.getDB()
-    const indexes = [
+    const createIndexes = (db, indexes = []) => PromisE.all(
+        indexes.map(index =>
+            db.createIndex(index)
+        )
+    )
+    const cdpIndexes = [
         {
             index: {
                 fields: [
@@ -86,9 +38,42 @@ export const setup = async () => {
             name: 'registrationNumber-index',
         },
     ]
+    const logIndexes = [
+        {
+            index: { fields: ['create'] },
+            name: 'create-index',
+        },
+        {
+            index: { fields: ['registrationNumber'] },
+            name: 'registrationNumber-index',
+        },
+        {
+            index: { fields: ['stepIndex'] },
+            name: 'stepIndex-index',
+        },
+        {
+            index: { fields: ['stepName'] },
+            name: 'stepName-index',
+        },
+        {
+            index: { fields: ['tsCreated'] },
+            name: 'tsCreated-index',
+        },
+        {
+            index: { fields: ['type'] },
+            name: 'type-index',
+        },
+    ]
 
     // create indexes. Ignore if already exists
-    await PromisE.all(indexes.map(index => db.createIndex(index)))
+    await createIndexes(
+        await dbCdpAccessCodes.getDB(),
+        cdpIndexes
+    )
+    await createIndexes(
+        await dbCdpLog.getDB(),
+        logIndexes,
+    )
 
     // create demo CDP entries
     if (process.env.DEBUG === 'TRUE') {
@@ -119,7 +104,7 @@ export const setup = async () => {
                 stepIndex: null,
                 tsCdpIssued: null,
                 tsFirstAccessed: null,
-                tsFormCompleted: null,
+                tsStepCompleted: {},
                 tsPaid: null,
             }))
         )
@@ -129,7 +114,7 @@ export const setup = async () => {
 const handlers = {
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,
-    // 'cdp-update-status': handleUpdateStatus,
+    'cdp-log-progress': handleLogProgress,
     'cdp-validate-access-code': handleValidateAccessCode,
     'cdp-verify': handleVerify,
 }

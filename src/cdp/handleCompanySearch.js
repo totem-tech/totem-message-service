@@ -10,7 +10,9 @@ export default async function handleCDPCompanySearch(regNum, callback) {
     if (!isFn(callback)) return
 
     const selector = { registrationNumber: regNum }
-    const companyOrCDPEntry = await dbCdpAccessCodes.find(selector)
+    const companyOrCDPEntry = await dbCdpAccessCodes
+        .find(selector)
+        ?.companyData
         || await dbCompanies.find(selector)
     callback(null, getPublicData(companyOrCDPEntry))
 }

@@ -1,10 +1,10 @@
-import { isObj, objClean } from '../utils/utils'
+import { isObj } from '../utils/utils'
 import {
+    dbCdpAccessCodes,
     defs,
     getCodeSanitised,
+    getPublicData,
     messages,
-    dbCdpAccessCodes,
-    getPublicData
 } from './common'
 
 export default async function handleVerify(cdp, callback) {
