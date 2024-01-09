@@ -107,6 +107,17 @@ const regNum = {
 const ubo = {
     name: 'ubo',
     properties: [
+        cdp,
+        {
+            maxLegnth: 2,
+            name: 'country',
+            required: false,
+            type: TYPES.string,
+        },
+        {
+            name: 'legalEntity',
+            type: TYPES.boolean,
+        },
         {
             maxLegnth: 128,
             description: 'Name of the company or person.',
@@ -122,21 +133,14 @@ const ubo = {
             required: true,
             type: 'number',
         },
-        cdp,
         regNum,
-        {
-            maxLegnth: 2,
-            name: 'countryCode',
-            required: false,
-            type: TYPES.string,
-        },
     ],
     type: TYPES.object,
 }
 const ubos = {
     maxLength: 4, // maximum 4 array items.
     name: 'ubos',
-    // items: 
+    items: ubo.properties,
     type: TYPES.array,
 }
 const vatNum = {
@@ -148,6 +152,20 @@ const publicData = {
     description: messages.pubInfo,
     name: 'publicInfo',
     properties: [
+        {
+            name: 'accounts',
+            properties: [
+                {
+                    name: 'accountRefDay',
+                    type: TYPES.string,
+                },
+                {
+                    name: 'accountRefMonth',
+                    type: TYPES.string,
+                },
+            ],
+            type: TYPES.object,
+        },
         cdp,
         companyId,
         {
