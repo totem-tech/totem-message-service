@@ -1,14 +1,18 @@
-import { } from '../companies'
 import PromisE from '../utils/PromisE'
 import { generateHash } from '../utils/utils'
-import { dbCdpAccessCodes, dbCdpLog, dbCompanies } from './common'
+import {
+    dbCdpAccessCodes,
+    dbCdpLog,
+    dbCompanies
+} from './common'
 import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
 import handleLogProgress from './handleLogProgress'
+import handleStripeCreateIntent, { handleStripeCheckPaid, setupStripe } from './handleStripeCreateIntent'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
 
-export const setup = async () => {
+export const setup = async (expressApp) => {
     const createIndexes = (db, indexes = []) => PromisE.all(
         indexes.map(index =>
             db.createIndex(index)
@@ -109,12 +113,16 @@ export const setup = async () => {
             }))
         )
     }
+
+    await setupStripe(expressApp)
 }
 
 const handlers = {
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,
     'cdp-log-progress': handleLogProgress,
+    'cdp-stripe-create-intent': handleStripeCreateIntent,
+    'cdp-stripe-check-paid': handleStripeCheckPaid,
     'cdp-validate-access-code': handleValidateAccessCode,
     'cdp-verify': handleVerify,
 }

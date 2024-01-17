@@ -14,31 +14,23 @@ export default async function handleValidateAccessCode(
     callback
 ) {
     if (!isFn(callback)) return
+    accessCode = getCodeSanitised(accessCode)
+    const entry = await dbCdpAccessCodes.get(companyId)
+    if (!entry) return callback(messages.invalidCompany)
 
-    const entry = await dbCdpAccessCodes.find({
-        accessCode: getCodeSanitised(accessCode),
-        companyId,
-        registrationNumber,
-    })
-
-    const valid = entry?.registrationNumber === registrationNumber
-        && entry?.accessCode === accessCode
+    const valid = entry.registrationNumber === registrationNumber
+        && entry.accessCode === accessCode
+    if (!valid) return callback(messages.invalidCodeOrReg)
 
     if (valid && !entry.tsFirstAccessed) {
         entry.stepIndex = 0
         entry.tsFirstAccessed = new Date().toISOString()
         await dbCdpAccessCodes.set(entry._id, entry)
     }
-    callback(
-        !!entry && valid
-            ? null
-            : messages.invalidCodeOrReg,
-        valid
-            ? !entry?.cdp
-                ? valid
-                : entry
-            : false
-    )
+    const result = !entry?.cdp
+        ? valid
+        : entry
+    callback(null, result)
 }
 handleValidateAccessCode.description = 'Authenticate user & allow access to read & update public and private company information.'
 handleValidateAccessCode.params = [

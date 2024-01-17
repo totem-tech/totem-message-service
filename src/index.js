@@ -89,12 +89,13 @@ const basePathRegex = new RegExp(
 // set discord logger to remove base path from message
 logDiscord.redactRegex = basePathRegex
 const cert = fs.readFileSync(process.env.CertPath)
+const ALL = 'ALL'
 const clientUrls = (process.env.SOCKET_CLIENTS || '')
     .split(',')
     .map(x => x.trim())
     .filter(Boolean)
     .map(x => {
-        if (x.startsWith('https://') || x.startsWith('http://')) return x
+        if (x === ALL || x.startsWith('https://') || x.startsWith('http://')) return x
         return `https://${x}`
     })
 
@@ -117,7 +118,9 @@ const httpsServer = https.createServer({
 const socket = new Server(httpsServer, {
     allowRequest: clientUrls.length === 0
         ? undefined
-        : allowRequest
+        : clientUrls.length === 1 && clientUrls[0] === ALL
+            ? (_, callback) => callback(null, true) // allow requests from all clients regardless of origin
+            : allowRequest
 })
 let unapprovedOrigins = []
 
@@ -408,10 +411,16 @@ const startListening = () => {
     // - dataTypes: list of data type names used in the definitions and their respective native JS type and other info.
     // - emittables: definitions of websocket events the client can emit.
     // - listenables: definitions of websocket events the client can listen/subscribe to.
-    expressApp.use('/', (_req, res) => {
-        res.send(
+    expressApp.use('/', (request, result) => {
+        const { headers: { host = '' } = {} } = request
+        const isCdp = host.includes('company-') && host.endsWith('.agency')
+        if (isCdp) {
+            const appUrl = host.split('api.')[1] || ''
+            return request.redirect(`https://${appUrl}`)
+        }
+        result.send(
             JSON.stringify(
-                getClientEventsMeta(allEventHandlers),
+                getClientEventsMeta(allEventHandlers, host),
                 null,
                 4
             )
@@ -450,35 +459,6 @@ const init = async () => {
         return fail && Promise.reject(err)
     }
 
-    // importToDB(importFiles).catch(
-    //     catchNReport('Failed to import to DB', false)
-    // )
-    // // attempt to establish a connection to database and exit application if fails
-    // console.log('Setting up connection to CouchDB')
-    // await getConnection().catch(
-    //     catchNReport('Failed to instantiate connection to CouchDB.', true)
-    // )
-    // // Setup languages and also attempt to make the first query to the database.
-    // // Failing here is probable indication that it failed to connect to the database
-    // await setupLang()
-    //     .catch(catchNReport('Failed to setup language.', true))
-
-    // // wait until the following setups are complete but keep the service running even if any of them fails
-    // await setupCountries()
-    //     .catch(catchNReport('Failed to setup countries.'))
-    // await setupCurrencies()
-    //     .catch(catchNReport('Failed to setup currencies.'))
-
-    // await setupUsers()
-    //     .catch(catchNReport('Failed to setup users.'))
-    // // Attempt to connect to blockchain.
-    // // Failure to connect will not stop the application but will limit certain things like BONSAI auth check.
-    // connectToBlockchain()
-    //     .catch(catchNReport('Failed to connect to blockchain.'))
-
-    // startListening()
-
-
     // sequencial startup actions
     const actions = [
         [() => console.log('Setting up connection to CouchDB')],
@@ -491,8 +471,8 @@ const init = async () => {
         [setupCountries, [], 'Failed to setup countries.'],
         [setupCurrencies, [], 'Failed to setup currencies.'],
         [setupUsers, [], 'Failed to setup users.'],
+        [setupCDP, [expressApp], 'Failed to setup CDP', true],
         [startListening, [], 'Websocket setup failed.', true],
-        [setupCDP, [], 'Failed to setup CDP', true],
         [connectToBlockchain, [], 'Failed to connect to blockchain.', false],
         [importToDB, [importFiles], 'Failed to import to DB', false],
     ]

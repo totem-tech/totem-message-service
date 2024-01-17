@@ -56,6 +56,7 @@
     "request": "^2.88.2",
     "socket.io": "^3.0.4",
     "socket.io-client": "^3.0.4",
+    "stripe": "^14.12.0",
     "tweetnacl": "^1.0.3",
     "twitter-lite": "^1.1.0",
     "uuid": "^3.3.3",

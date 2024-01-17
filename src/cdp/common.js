@@ -2,8 +2,10 @@ import CouchDBStorage from '../utils/CouchDBStorage'
 import { isObj, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
+// dbCdpAccessCodes entries must have companyId as their IDs
 export const dbCdpAccessCodes = new CouchDBStorage(null, 'cdp_access-codes')
 export const dbCdpLog = new CouchDBStorage(null, 'cdp_log')
+export const dbCdpStripeIntents = new CouchDBStorage(null, 'cdp_stripe-intents')
 export const dbCompanies = new CouchDBStorage(null, 'companies')
 export const messages = {
     companyName: 'company name',
