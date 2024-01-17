@@ -416,7 +416,7 @@ const startListening = () => {
         const isCdp = host.includes('company-') && host.endsWith('.agency')
         if (isCdp) {
             const appUrl = host.split('api.')[1] || ''
-            return request.redirect(`https://${appUrl}`)
+            return result?.redirect?.(`https://${appUrl}`)
         }
         result.send(
             JSON.stringify(
