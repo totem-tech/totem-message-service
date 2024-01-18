@@ -414,11 +414,11 @@ const startListening = () => {
     expressApp.use('/', (request, result) => {
         const { headers: { host = '' } = {} } = request
         const isCdp = host.includes('company-') && host.endsWith('.agency')
-        if (isCdp) {
-            const appUrl = host.split('api.')[1] || ''
-            return result?.redirect?.(`https://${appUrl}`)
-        }
-        result.send(
+        // if (isCdp) {
+        //     const appUrl = host.split('api.')[1] || ''
+        //     return result?.redirect?.(`https://${appUrl}`)
+        // }
+        !isCdp && result.send(
             JSON.stringify(
                 getClientEventsMeta(allEventHandlers, host),
                 null,
