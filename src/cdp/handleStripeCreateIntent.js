@@ -14,18 +14,21 @@ const API_KEY = process.env.CDP_STRIPE_API_KEY
 const CURRENCY = 'gbp'
 let stripe = new getStripe(API_KEY)
 
-const checkPaid = async (intentId, amount) => await stripe
-	.paymentIntents
-	.retrieve(intentId)
-	.then(intent =>
-		intent?.id == intentId
+const checkPaid = async (intentId, companyId) => {
+	const intent = await stripe
+		.paymentIntents
+		.retrieve(intentId)
+	const intentPaid = intent?.id == intentId
 		&& intent?.status === 'succeeded'
-		&& (!isPositiveNumber(amount) || intent?.amount === amount)
-	)
+		&& intent?.amount_received === AMOUNT_GBP_PENNIES
+	const intentLog = !!intentPaid && await dbCdpStripeIntents.get(intentId)
+	return intentLog?.companyId === companyId
+}
 
 
-export const handleStripeCheckPaid = async (intentId, amount, callback) => callback?.(
-	await checkPaid(intentId, amount)
+export const handleStripeCheckPaid = async (intentId, companyId, callback) => callback?.(
+	null,
+	await checkPaid(intentId, companyId)
 )
 handleStripeCheckPaid.params = [
 	{
@@ -34,12 +37,14 @@ handleStripeCheckPaid.params = [
 		required: true,
 		type: TYPES.string,
 	},
-	{
-		description: 'If provided check if intent amount matches the amount supplied.',
-		name: 'amount',
-		required: false,
-		type: TYPES.number
-	},
+	// {
+	// 	defaultValue: AMOUNT_GBP_PENNIES,
+	// 	description: 'If provided check if intent amount matches the amount supplied.',
+	// 	name: 'amount',
+	// 	required: false,
+	// 	type: TYPES.number
+	// },
+	defs.companyId,
 	defs.callback,
 ]
 handleStripeCheckPaid.result = {
@@ -88,6 +93,7 @@ export default async function handleStripeCreateIntent(
 		companyId,
 		createAccessCode: !accessCode,
 		currency,
+		intentId: paymentIntent.id,
 		paid: false, // to be updated after payment is completed
 		registrationNumber: regNum,
 	}

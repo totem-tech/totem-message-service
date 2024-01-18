@@ -68,6 +68,12 @@ export const setup = async (expressApp) => {
             name: 'type-index',
         },
     ]
+    const dbStripeIntentIndexes = [
+        {
+            index: { fields: ['companyId'] },
+            name: 'companyId-index',
+        },
+    ]
 
     // create indexes. Ignore if already exists
     await createIndexes(
@@ -78,41 +84,42 @@ export const setup = async (expressApp) => {
         await dbCdpLog.getDB(),
         logIndexes,
     )
+    await createIndexes(dbStripeIntentIndexes)
 
     // create demo CDP entries
-    if (process.env.DEBUG === 'TRUE') {
-        const sampleEnties = await dbCompanies.search({
-            registrationNumber: '04254364'
-        }, 1, 0, false)
-        await dbCdpAccessCodes.setAll(
-            sampleEnties.map(({ _id, registrationNumber }) => ({
-                _id,
-                // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
-                // without "-" 
-                accessCode: generateHash(
-                    _id + registrationNumber,
-                    'blake2',
-                    32
-                )
-                    .slice(2)
-                    .toUpperCase(),
-                companyId: _id,
-                registrationNumber,
+    // if (process.env.DEBUG === 'TRUE') {
+    //     const sampleEnties = await dbCompanies.search({
+    //         registrationNumber: '04254364'
+    //     }, 1, 0, false)
+    //     await dbCdpAccessCodes.setAll(
+    //         sampleEnties.map(({ _id, registrationNumber }) => ({
+    //             _id,
+    //             // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
+    //             // without "-" 
+    //             accessCode: generateHash(
+    //                 _id + registrationNumber,
+    //                 'blake2',
+    //                 32
+    //             )
+    //                 .slice(2)
+    //                 .toUpperCase(),
+    //             companyId: _id,
+    //             registrationNumber,
 
-                // to be generated/updated on payment
-                cdp: null,
-                companyData: null,
-                paymentReference: null,
+    //             // to be generated/updated on payment
+    //             cdp: null,
+    //             companyData: null,
+    //             paymentReference: null,
 
-                // to be updated by front end
-                stepIndex: null,
-                tsCdpIssued: null,
-                tsFirstAccessed: null,
-                tsStepCompleted: {},
-                tsPaid: null,
-            }))
-        )
-    }
+    //             // to be updated by front end
+    //             stepIndex: null,
+    //             tsCdpIssued: null,
+    //             tsFirstAccessed: null,
+    //             tsStepCompleted: {},
+    //             tsPaid: null,
+    //         }))
+    //     )
+    // }
 
     await setupStripe(expressApp)
 }

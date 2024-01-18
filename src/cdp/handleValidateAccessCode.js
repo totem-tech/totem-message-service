@@ -16,7 +16,7 @@ export default async function handleValidateAccessCode(
     if (!isFn(callback)) return
     accessCode = getCodeSanitised(accessCode)
     const entry = await dbCdpAccessCodes.get(companyId)
-    if (!entry) return callback(messages.invalidCompany)
+    if (!entry) return callback(messages.invalidCodeOrReg)
 
     const valid = entry.registrationNumber === registrationNumber
         && entry.accessCode === accessCode
