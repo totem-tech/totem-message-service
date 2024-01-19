@@ -33,9 +33,10 @@ handleReport.params = [
     defs.accessCode,
     defs.regNum,
     {
-        accept: [0],
         defaultValue: 0,
         label: 'reason',
+        max: 50,
+        min: 0,
         name: 'reasonCode',
         required: false,
         type: TYPES.number,
