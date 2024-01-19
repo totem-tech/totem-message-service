@@ -38,7 +38,7 @@ export default async function handleLogProgress(
     !!entry && await dbCdpLog.set(
         null,
         {
-            create: !entry.cdp,
+            create: !entry.accessCode, // create a new access code
             registrationNumber: entry.registrationNumber,
             stepIndex,
             stepName,

@@ -8,6 +8,7 @@ import {
 import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
 import handleLogProgress from './handleLogProgress'
+import handleReport from './handleReport'
 import handleStripeCreateIntent, { handleStripeCheckPaid, setupStripe } from './handleStripeCreateIntent'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
@@ -128,6 +129,7 @@ const handlers = {
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,
     'cdp-log-progress': handleLogProgress,
+    'cdp-report': handleReport,
     'cdp-stripe-create-intent': handleStripeCreateIntent,
     'cdp-stripe-check-paid': handleStripeCheckPaid,
     'cdp-validate-access-code': handleValidateAccessCode,
