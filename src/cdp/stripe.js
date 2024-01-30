@@ -169,7 +169,7 @@ export default async function handleStripeCreateIntent(
 		})
 		.catch(err => new Error(err))
 	// stripe threw an error
-	if (isError(paymentIntent)) return callback(paymentIntent)
+	if (isError(paymentIntent)) return callback(paymentIntent.message)
 
 	const intentLogEntry = {
 		amount,
