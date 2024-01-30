@@ -6,7 +6,7 @@ import {
 	defs,
 	messages,
 } from './common'
-import { isFn, isPositiveNumber, objClean } from '../utils/utils'
+import { isError, isFn, isPositiveNumber, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
 const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
@@ -151,20 +151,26 @@ export default async function handleStripeCreateIntent(
 		phone = ''
 	} = billingDetails
 	// Create a PaymentIntent with the order amount and currency
-	const paymentIntent = await stripe.paymentIntents.create({
-		amount,
-		// In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
-		automatic_payment_methods: {
-			enabled: true,
-			// allow_redirects: 'always' //default
-		},
-		currency: CURRENCY, // pounds sterling
-		shipping: {
-			address,
-			name,
-		},
-		receipt_email: email
-	})
+	const paymentIntent = await stripe
+		.paymentIntents
+		.create({
+			amount,
+			// In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+			automatic_payment_methods: {
+				enabled: true,
+				// allow_redirects: 'always' //default
+			},
+			currency: CURRENCY, // pounds sterling
+			shipping: {
+				address,
+				name,
+			},
+			receipt_email: email
+		})
+		.catch(err => new Error(err))
+	// stripe threw an error
+	if (isError(paymentIntent)) return callback(paymentIntent)
+
 	const intentLogEntry = {
 		amount,
 		billingDetails: {
