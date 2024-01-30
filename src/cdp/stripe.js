@@ -6,13 +6,81 @@ import {
 	defs,
 	messages,
 } from './common'
-import { isFn, isPositiveNumber } from '../utils/utils'
+import { isFn, isPositiveNumber, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
 const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
 const API_KEY = process.env.CDP_STRIPE_API_KEY
 const CURRENCY = 'gbp'
 let stripe = new getStripe(API_KEY)
+const addressDef = {
+	name: 'address',
+	properties: [
+		{
+			description: 'City, district, suburb, town, or village.',
+			name: 'city',
+			required: true,
+			type: TYPES.string,
+		},
+		{
+			description: 'Two-letter country code (ISO 3166-1 alpha-2). Mode details: https://stripe.com/docs/api/payment_methods/object#payment_method_object-billing_details-address-country',
+			maxLength: 2,
+			minLength: 2,
+			name: 'country',
+			required: true,
+			type: TYPES.string,
+		},
+		{
+			description: 'Address line 1 (e.g., street, PO Box, or company name).',
+			name: 'line1',
+			required: true,
+			type: TYPES.string,
+		},
+		{
+			description: 'Address line 2 (e.g., apartment, suite, unit, or building).',
+			name: 'line2',
+			required: false,
+			type: TYPES.string,
+		},
+		{
+			description: 'ZIP or postal code.',
+			name: 'postal_code',
+			required: true,
+			type: TYPES.string,
+		},
+		{
+			description: 'State, county, province, or region.',
+			name: 'state',
+			required: true,
+			type: TYPES.string,
+		},
+	],
+	type: TYPES.object,
+}
+const billingDetailsDef = {
+	name: 'billingDetails',
+	properties: [
+		addressDef,
+		{
+			name: 'email',
+			required: true,
+			type: TYPES.email,
+		},
+		{
+			description: 'Full name.',
+			name: 'name',
+			required: true,
+			type: TYPES.string,
+		},
+		{
+			description: 'Billing phone number (including extension).',
+			name: 'phone',
+			required: false,
+			type: TYPES.string,
+		},
+	],
+	type: TYPES.object,
+}
 
 const checkPaid = async (intentId, companyId) => {
 	const intent = await stripe
@@ -37,13 +105,6 @@ handleStripeCheckPaid.params = [
 		required: true,
 		type: TYPES.string,
 	},
-	// {
-	// 	defaultValue: AMOUNT_GBP_PENNIES,
-	// 	description: 'If provided check if intent amount matches the amount supplied.',
-	// 	name: 'amount',
-	// 	required: false,
-	// 	type: TYPES.number
-	// },
 	defs.companyId,
 	defs.callback,
 ]
@@ -56,6 +117,7 @@ export default async function handleStripeCreateIntent(
 	code,
 	companyId,
 	regNum,
+	billingDetails = {},
 	callback
 ) {
 	if (!isFn(callback)) return
@@ -78,18 +140,39 @@ export default async function handleStripeCreateIntent(
 
 	const amount = AMOUNT_GBP_PENNIES
 	const currency = CURRENCY
+	// remove any unintentional/unwanted properties
+	const address = objClean(
+		billingDetails.address || {},
+		addressDef.properties.map(x => x.name)
+	)
+	const {
+		email = '',
+		name = '',
+		phone = ''
+	} = billingDetails
 	// Create a PaymentIntent with the order amount and currency
 	const paymentIntent = await stripe.paymentIntents.create({
 		amount,
 		// In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
 		automatic_payment_methods: {
 			enabled: true,
+			// allow_redirects: 'always' //default
 		},
 		currency: CURRENCY, // pounds sterling
+		shipping: {
+			address,
+			name,
+		},
+		receipt_email: email
 	})
-
 	const intentLogEntry = {
 		amount,
+		billingDetails: {
+			address,
+			email,
+			name,
+			phone,
+		},
 		companyId,
 		createAccessCode: !accessCode,
 		currency,
@@ -110,6 +193,7 @@ handleStripeCreateIntent.params = [
 	},
 	defs.companyId,
 	defs.regNum,
+	billingDetailsDef,
 	defs.callback,
 ]
 handleStripeCreateIntent.result = {

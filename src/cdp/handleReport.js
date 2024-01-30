@@ -15,12 +15,10 @@ export default async function handleReport(
     callback
 ) {
     accessCode = getCodeSanitised(accessCode)
-    const entry = await dbCdpAccessCodes.find({
-        registrationNumber
-    })
+    const entry = await dbCdpAccessCodes.find({ registrationNumber })
     if (!entry || entry.accessCode !== accessCode) return callback(messages.invalidCodeOrReg)
 
-    await dbCdpReports.set('', {
+    await dbCdpReports.set(null, {
         companyId: entry.companyId,
         reasonCode,
         registrationNumber,

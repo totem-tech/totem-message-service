@@ -9,7 +9,7 @@ import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
 import handleLogProgress from './handleLogProgress'
 import handleReport from './handleReport'
-import handleStripeCreateIntent, { handleStripeCheckPaid, setupStripe } from './handleStripeCreateIntent'
+import handleStripeCreateIntent, { handleStripeCheckPaid, setupStripe } from './stripe'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
 
