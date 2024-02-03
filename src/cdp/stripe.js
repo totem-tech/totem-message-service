@@ -11,6 +11,7 @@ import { TYPES } from '../utils/validator'
 
 const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
 const API_KEY = process.env.CDP_STRIPE_API_KEY
+const CLIENT_API_KEY = process.env.CDP_STRIPE_CLIENT_API_KEY
 const CURRENCY = 'gbp'
 let stripe = new getStripe(API_KEY)
 const addressDef = {
@@ -204,6 +205,16 @@ handleStripeCreateIntent.params = [
 ]
 handleStripeCreateIntent.result = {
 	name: 'stripeClientSecret',
+	type: TYPES.string,
+}
+
+export function handleStripeClientAPIKey(callback) {
+	callback?.(null, CLIENT_API_KEY)
+}
+handleStripeClientAPIKey.description = 'Fetch Stipe client API key'
+handleStripeClientAPIKey.params = [defs.callback]
+handleStripeClientAPIKey.result = {
+	name: 'clientAPIKey',
 	type: TYPES.string,
 }
 
