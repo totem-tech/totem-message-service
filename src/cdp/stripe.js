@@ -79,6 +79,18 @@ const billingDetailsDef = {
 			required: false,
 			type: TYPES.string,
 		},
+		{ // ToDo: generate
+			description: 'Date CDP is valid from',
+			name: 'tsValidFrom',
+			required: false,
+			type: TYPES.date,
+		},
+		{
+			description: 'CDP expiry date',
+			name: 'tsValidTo',
+			required: false,
+			type: TYPES.date,
+		},
 	],
 	type: TYPES.object,
 }
@@ -189,7 +201,7 @@ export default async function handleStripeCreateIntent(
 	}
 	await dbCdpStripeIntents.set(paymentIntent.id, intentLogEntry)
 
-	callback(null, paymentIntent.client_secret)
+	callback(null, objClean(paymentIntent, ['client_secret', 'id']))
 }
 handleStripeCreateIntent.description = 'Create Stripe payment intent for Company Digital Passports'
 handleStripeCreateIntent.params = [
@@ -204,8 +216,19 @@ handleStripeCreateIntent.params = [
 	defs.callback,
 ]
 handleStripeCreateIntent.result = {
-	name: 'stripeClientSecret',
-	type: TYPES.string,
+	properties: [
+		{
+			description: 'Stripe payment client secret',
+			name: 'clientSecret',
+			type: TYPES.string,
+		},
+		{
+			description: 'Stripe payment intent ID',
+			name: 'id',
+			type: TYPES.string,
+		},
+	],
+	type: TYPES.object,
 }
 
 export function handleStripeClientAPIKey(callback) {

@@ -4,6 +4,7 @@ import { TYPES } from '../utils/validator'
 
 // dbCdpAccessCodes entries must have companyId as their IDs
 export const dbCdpAccessCodes = new CouchDBStorage(null, 'cdp_access-codes')
+export const dbCdpDrafts = new CouchDBStorage(null, 'cdp_drafts')
 export const dbCdpLog = new CouchDBStorage(null, 'cdp_log')
 export const dbCdpReports = new CouchDBStorage(null, 'cdp_reports')
 export const dbCdpStripeIntents = new CouchDBStorage(null, 'cdp_stripe-intents')
@@ -173,6 +174,10 @@ const publicData = {
         companyId,
         {
             name: 'countryCode',
+            type: TYPES.string,
+        },
+        {
+            name: 'countryOfOrigin',
             type: TYPES.string,
         },
         {

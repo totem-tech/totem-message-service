@@ -12,6 +12,7 @@ import handleReport from './handleReport'
 import handleStripeCreateIntent, { handleStripeCheckPaid, handleStripeClientAPIKey, setupStripe } from './stripe'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
+import { handleDraft } from './handleDraft'
 
 export const setup = async (expressApp) => {
     const createIndexes = (db, indexes = []) => PromisE.all(
@@ -128,6 +129,7 @@ export const setup = async (expressApp) => {
 const handlers = {
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,
+    'cdp-draft': handleDraft,
     'cdp-log-progress': handleLogProgress,
     'cdp-report': handleReport,
     'cdp-stripe-client-api-key': handleStripeClientAPIKey,
