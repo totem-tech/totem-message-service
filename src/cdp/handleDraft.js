@@ -73,7 +73,7 @@ export async function handleDraft(
             ?.values
             ?.paymentIntentId
         allowUninvited = !!intentId
-            && draft.step === PAYMENT_INDEX
+            && draft?.step === PAYMENT_INDEX
             && formSteps
                 .slice(0, PAYMENT_INDEX)
                 .every(stepName => !!draft?.[stepName]?.completed)
