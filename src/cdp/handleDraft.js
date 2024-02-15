@@ -86,7 +86,7 @@ export async function handleDraft(
         // - all steps are completed
         // - current step is payment
         // - payment intent is created
-        && !!code || allowUninvited
+        && (!!code || allowUninvited)
     if (save) {
         draft = objClean(
             draft,

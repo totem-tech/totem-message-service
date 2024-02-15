@@ -2,13 +2,13 @@ import { isObj } from '../utils/utils'
 import {
     dbCdpAccessCodes,
     defs,
-    getCodeSanitised,
+    sanitiseAccessCode,
     getPublicData,
     messages,
 } from './common'
 
 export default async function handleVerify(cdp, callback) {
-    const selector = { cdp: getCodeSanitised(cdp) }
+    const selector = { cdp: sanitiseAccessCode(cdp) }
     const cdpEntry = await dbCdpAccessCodes.find(selector)
     const err = !isObj(cdpEntry?.companyData) && messages.invalidCdp
     callback(

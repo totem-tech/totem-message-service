@@ -1,15 +1,14 @@
 import PromisE from '../utils/PromisE'
-import { generateHash } from '../utils/utils'
-import {
-    dbCdpAccessCodes,
-    dbCdpLog,
-    dbCompanies
-} from './common'
+import { dbCdpAccessCodes, dbCdpLog } from './common'
 import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
 import handleLogProgress from './handleLogProgress'
 import handleReport from './handleReport'
-import handleStripeCreateIntent, { handleStripeCheckPaid, handleStripeClientAPIKey, setupStripe } from './stripe'
+import handleStripeCreateIntent, {
+    handleStripeCheckPaid,
+    handleStripeClientAPIKey,
+    setupStripe
+} from './stripe'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
 import { handleDraft } from './handleDraft'
@@ -90,37 +89,29 @@ export const setup = async (expressApp) => {
 
     // create demo CDP entries
     // if (process.env.DEBUG === 'TRUE') {
-    //     const sampleEnties = await dbCompanies.search({
-    //         registrationNumber: '04254364'
+    //     const demoCompanies = await dbCompanies.search({
+    //         registrationNumber: '06226808'
     //     }, 1, 0, false)
-    //     await dbCdpAccessCodes.setAll(
-    //         sampleEnties.map(({ _id, registrationNumber }) => ({
-    //             _id,
-    //             // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
-    //             // without "-" 
-    //             accessCode: generateHash(
-    //                 _id + registrationNumber,
-    //                 'blake2',
-    //                 32
-    //             )
-    //                 .slice(2)
-    //                 .toUpperCase(),
-    //             companyId: _id,
-    //             registrationNumber,
+    //     //const demoCompanies = await dbCompanies.getAll(null, false, 3)
+    //     const demoEntries = demoCompanies.map(({
+    //         _id,
+    //         identity,
+    //         registrationNumber
+    //     }) => ({
+    //         _id,
+    //         // ToDO: generate by encrypting to a throwaway key? Use faucet keypair?
+    //         // without "-" 
+    //         accessCode: generateAccessCode(identity),
+    //         companyId: _id,
+    //         registrationNumber,
 
-    //             // to be generated/updated on payment
-    //             cdp: null,
-    //             companyData: null,
-    //             paymentReference: null,
-
-    //             // to be updated by front end
-    //             stepIndex: null,
-    //             tsCdpIssued: null,
-    //             tsFirstAccessed: null,
-    //             tsStepCompleted: {},
-    //             tsPaid: null,
-    //         }))
-    //     )
+    //         // to be generated/updated on payment
+    //         cdp: null,
+    //         companyData: null,
+    //         paymentReference: null,
+    //         tsCdpIssued: null,
+    //     }))
+    //     await dbCdpAccessCodes.setAll(demoEntries)
     // }
 
     await setupStripe(expressApp)

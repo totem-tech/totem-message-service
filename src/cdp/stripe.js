@@ -6,10 +6,14 @@ import {
 	defs,
 	messages,
 } from './common'
-import { isError, isFn, isPositiveNumber, objClean } from '../utils/utils'
+import {
+	isError,
+	isFn,
+	objClean,
+} from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
-const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
+export const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
 const API_KEY = process.env.CDP_STRIPE_API_KEY
 const CLIENT_API_KEY = process.env.CDP_STRIPE_CLIENT_API_KEY
 const CURRENCY = 'gbp'
@@ -95,22 +99,41 @@ const billingDetailsDef = {
 	type: TYPES.object,
 }
 
-const checkPaid = async (intentId, companyId) => {
+export const checkPaid = async (intentId, companyId) => {
+	if (!intentId) return false
+	if (!stripe) await setupStripe()
+
 	const intent = await stripe
 		.paymentIntents
 		.retrieve(intentId)
-	const intentPaid = intent?.id == intentId
-		&& intent?.status === 'succeeded'
-		&& intent?.amount_received === AMOUNT_GBP_PENNIES
-	const intentLog = !!intentPaid && await dbCdpStripeIntents.get(intentId)
-	return intentLog?.companyId === companyId
+	const {
+		amount_received,
+		id,
+		metadata: md1 = {},
+		status,
+	} = intent || {}
+	const paymentSuccess = id == intentId && status === 'succeeded'
+	if (!paymentSuccess) return false
+
+	const intentLog = await dbCdpStripeIntents.get(intentId)
+	const {
+		amount,
+		metadata: md2 = {},
+	} = intentLog || {}
+	if (!intentLog || md?.companyId !== companyId) return false
+
+	const paymentValid = amount_received === amount
+		&& Object // check all metatadata matches
+			.keys(md2)
+			.every(key => md1[key] === md2[key])
+	return paymentValid
 }
 
-
-export const handleStripeCheckPaid = async (intentId, companyId, callback) => callback?.(
-	null,
-	await checkPaid(intentId, companyId)
-)
+export const handleStripeCheckPaid = async (
+	intentId,
+	companyId,
+	callback
+) => callback?.(null, await checkPaid(intentId, companyId))
 handleStripeCheckPaid.params = [
 	{
 		description: 'Stripe payment intent ID',
@@ -122,7 +145,7 @@ handleStripeCheckPaid.params = [
 	defs.callback,
 ]
 handleStripeCheckPaid.result = {
-	name: 'succeeded',
+	name: 'paymentValid',
 	type: TYPES.boolean
 }
 
@@ -134,13 +157,14 @@ export default async function handleStripeCreateIntent(
 	callback
 ) {
 	if (!isFn(callback)) return
+	if (!companyId) return callback(messages.invalidCompany)
 
-	const companyOrCdpEntry = companyId && (
-		await dbCdpAccessCodes.get(companyId) || await dbCompanies.get(companyId)
-	)
+	const companyOrCdpEntry = await dbCdpAccessCodes.get(companyId)
+		|| await dbCompanies.get(companyId)
 	if (!companyOrCdpEntry) return callback(messages.invalidCompany)
 	const {
 		accessCode,
+		cdpIssueIndex = 0,
 		registrationNumber
 	} = companyOrCdpEntry || {}
 
@@ -164,6 +188,11 @@ export default async function handleStripeCreateIntent(
 		phone = ''
 	} = billingDetails
 	// Create a PaymentIntent with the order amount and currency
+	const metadata = {
+		cdpIssueIndex,
+		companyId,
+		registrationNumber,
+	}
 	const paymentIntent = await stripe
 		.paymentIntents
 		.create({
@@ -171,9 +200,13 @@ export default async function handleStripeCreateIntent(
 			// In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
 			automatic_payment_methods: {
 				enabled: true,
-				// allow_redirects: 'always' //default
+				allow_redirects: 'always' //default
 			},
 			currency: CURRENCY, // pounds sterling
+			description: !companyOrCdpEntry.cdp
+				? 'CDP: Application'
+				: `CDP: Renewal (${cdpIssueIndex})`,
+			metadata,
 			shipping: {
 				address,
 				name,
@@ -192,12 +225,11 @@ export default async function handleStripeCreateIntent(
 			name,
 			phone,
 		},
-		companyId,
 		createAccessCode: !accessCode,
 		currency,
 		intentId: paymentIntent.id,
+		metadata,
 		paid: false, // to be updated after payment is completed
-		registrationNumber: regNum,
 	}
 	await dbCdpStripeIntents.set(paymentIntent.id, intentLogEntry)
 
@@ -244,6 +276,7 @@ handleStripeClientAPIKey.result = {
 // setup stripe instance
 export function setupStripe(expressApp) {
 	if (!API_KEY) throw new Error('Missing environment variable: CDP_STRIPE_API_KEY')
+	// if (!CLIENT_API_KEY) throw new Error('Missing environment variable: CDP_STRIPE_CLIENT_API_KEY')
 
 	stripe ??= new getStripe(API_KEY)
 }

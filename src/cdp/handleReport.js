@@ -3,7 +3,7 @@ import {
     dbCdpAccessCodes,
     dbCdpReports,
     defs,
-    getCodeSanitised,
+    sanitiseAccessCode,
     messages
 } from './common'
 
@@ -14,7 +14,7 @@ export default async function handleReport(
     remarks = '',
     callback
 ) {
-    accessCode = getCodeSanitised(accessCode)
+    accessCode = sanitiseAccessCode(accessCode)
     const entry = await dbCdpAccessCodes.find({ registrationNumber })
     if (!entry || entry.accessCode !== accessCode) return callback(messages.invalidCodeOrReg)
 

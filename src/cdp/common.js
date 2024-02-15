@@ -1,5 +1,12 @@
 import CouchDBStorage from '../utils/CouchDBStorage'
-import { isObj, objClean } from '../utils/utils'
+import { ss58Decode } from '../utils/convert'
+import { randomBytes } from '../utils/naclHelper/utils'
+import {
+    generateHash,
+    isObj,
+    objClean,
+    strFill
+} from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
 // dbCdpAccessCodes entries must have companyId as their IDs
@@ -21,8 +28,8 @@ export const messages = {
 // setTexts(messages)
 const accessCode = {
     customMessages: messages.invalidCode,
-    maxLength: 9, // with "-"
-    minLength: 8, // without "-"
+    maxLength: 14, // with "-"
+    minLength: 12, // without "-"
     name: 'accessCode',
     required: true,
     type: TYPES.string,
@@ -181,6 +188,11 @@ const publicData = {
             type: TYPES.string,
         },
         {
+            description: 'Blockchain identity/address',
+            name: 'identity',
+            type: TYPES.identity,
+        },
+        {
             description: messages.companyName,
             name: 'name',
             type: TYPES.string,
@@ -218,23 +230,67 @@ export const defs = {
     regNum,
 }
 
-/**
- * @name    getCodeSanitised
- * @description turns everything into alphanumeric uppercase string
- * @param {*} value 
- * 
- * @returns {String}
- */
-export const getCodeSanitised = value => `${value || ''}`
-    .match(/[a-z0-9]/ig)
-    ?.join('')
-    ?.toUpperCase() || ''
+export const generateAccessCode = identity => {
+    const identityBytes = ss58Decode(identity)
+    const salt = randomBytes(8, false)
+    const salt2 = randomBytes(8, false)
+    const salt3 = randomBytes(8, false)
+    const saltedBytes = new Uint8Array([
+        ...salt,
+        ...identityBytes.slice(0, 16),
+        ...salt2,
+        ...identityBytes.slice(16),
+        ...salt3,
+    ])
+    const saltedHash = generateHash(
+        saltedBytes,
+        'blake2',
+        256,
+    )
+        .slice(2) // remove '0x'
+    return [
+        ...saltedHash.slice(0, 4),
+        ...saltedHash.slice(30, 34),
+        ...saltedHash.slice(-4),
+    ]
+        .map(randomCase)
+        .join('')
+}
+
+export const generateCDP = (identity, countryCode, accountRefMonth) => {
+    const identityBytes = ss58Decode(identity)
+    const salt = randomBytes(8, false)
+    const saltedBytes = new Uint8Array([
+        ...salt,
+        ...identityBytes
+    ])
+    const saltedHash = generateHash(
+        saltedBytes,
+        'blake2',
+        256,
+    )
+        .slice(2) // remove "0x"
+        .toUpperCase()
+    const cdp = [
+        countryCode,
+        `${accountRefMonth ?? ''}`
+            .padStart(2, '0')
+            .slice(-2),
+        saltedHash.slice(0, 4),
+        saltedHash.slice(-4)
+    ].join('')
+    return cdp
+}
+// setTimeout(() => {
+//     console.log('\n<= CDP =>', generateCDP('5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY', 'GB', 6))
+//     console.log('\n<= Code =>', generateAccessCode('5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'))
+// })
 
 export const getPublicData = companyOrCdpEntry => isObj(companyOrCdpEntry)
     && objClean(
         {
-            ...companyOrCdpEntry,
             ...companyOrCdpEntry.companyData,
+            ...companyOrCdpEntry,
             ...!companyOrCdpEntry.accessCode && { // entry from companies database
                 [companyId.name]: companyOrCdpEntry._id
             },
@@ -246,3 +302,39 @@ export const getPublicData = companyOrCdpEntry => isObj(companyOrCdpEntry)
             .filter(Boolean)
     )
     || undefined
+
+/**
+ * @name    randomCase
+ * @summary randomly upper/lower-case string
+ * 
+ * @param   {String} str 
+ * 
+ * @returns {String}
+ */
+export const randomCase = (str = '') => {
+    const upperCase = Math.ceil(Math.random(1e10) * 1e10) % 2 === 0
+    return !upperCase
+        ? str.toLowerCase()
+        : str.toUpperCase()
+}
+
+/**
+ * @name    getCodeSanitised
+ * @description Sanitise access code. Turns everything into alphanumeric string.
+ * @param {*} value 
+ * 
+ * @returns {String}
+ */
+export const sanitiseAccessCode = value => `${value || ''}`
+    .match(/[a-z0-9]/ig)
+    ?.join('')
+    || ''
+
+/**
+ * @name    getCDPSanitised
+ * @description Sanitise CDP reference. Turns everything into uppercase alphanumeric string.
+ * @param {*} value 
+ * 
+ * @returns {String}
+ */
+export const sanitiseCDP = value => sanitiseAccessCode(value).toUpperCase()

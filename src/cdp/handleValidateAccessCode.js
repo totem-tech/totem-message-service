@@ -2,7 +2,7 @@ import { isFn } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import {
     defs,
-    getCodeSanitised,
+    sanitiseAccessCode,
     messages,
     dbCdpAccessCodes
 } from './common'
@@ -14,7 +14,8 @@ export default async function handleValidateAccessCode(
     callback
 ) {
     if (!isFn(callback)) return
-    accessCode = getCodeSanitised(accessCode)
+
+    accessCode = sanitiseAccessCode(accessCode)
     const entry = await dbCdpAccessCodes.get(companyId)
     if (!entry) return callback(messages.invalidCodeOrReg)
 
