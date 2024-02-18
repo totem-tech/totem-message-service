@@ -1,24 +1,28 @@
-import getStripe from 'stripe'
+import Stripe from 'stripe'
+import {
+	generateHash,
+	isError,
+	isFn,
+	isPositiveInteger,
+	objClean,
+} from '../utils/utils'
+import { TYPES, validate, validateObj } from '../utils/validator'
 import {
 	dbCdpAccessCodes,
 	dbCdpStripeIntents,
 	dbCompanies,
-	defs,
-	messages,
-} from './common'
-import {
-	isError,
-	isFn,
-	objClean,
-} from '../utils/utils'
-import { TYPES } from '../utils/validator'
+} from './couchdb'
+import { defs, messages } from './validation'
+import handleCalcValidityPeriod from './handleCalcValidityPeriod'
+import verifyGeneratedData from './verifyGeneratedData'
+import { getIdentity, getPublicKeys } from './nacl'
 
 export const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
 const API_KEY = process.env.CDP_STRIPE_API_KEY
 const CLIENT_API_KEY = process.env.CDP_STRIPE_CLIENT_API_KEY
 const CURRENCY = 'gbp'
-let stripe = new getStripe(API_KEY)
-const addressDef = {
+let stripe = new Stripe(API_KEY)
+const stripeAddressDef = {
 	name: 'address',
 	properties: [
 		{
@@ -62,10 +66,10 @@ const addressDef = {
 	],
 	type: TYPES.object,
 }
-const billingDetailsDef = {
+const stripeBillingDetailsDef = {
 	name: 'billingDetails',
 	properties: [
-		addressDef,
+		stripeAddressDef,
 		{
 			name: 'email',
 			required: true,
@@ -82,18 +86,6 @@ const billingDetailsDef = {
 			name: 'phone',
 			required: false,
 			type: TYPES.string,
-		},
-		{ // ToDo: generate
-			description: 'Date CDP is valid from',
-			name: 'tsValidFrom',
-			required: false,
-			type: TYPES.date,
-		},
-		{
-			description: 'CDP expiry date',
-			name: 'tsValidTo',
-			required: false,
-			type: TYPES.date,
 		},
 	],
 	type: TYPES.object,
@@ -120,12 +112,14 @@ export const checkPaid = async (intentId, companyId) => {
 		amount,
 		metadata: md2 = {},
 	} = intentLog || {}
-	if (!intentLog || md?.companyId !== companyId) return false
+
+	if (!intentLog || md2?.companyId !== companyId) return false
 
 	const paymentValid = amount_received === amount
 		&& Object // check all metatadata matches
 			.keys(md2)
 			.every(key => md1[key] === md2[key])
+
 	return paymentValid
 }
 
@@ -154,69 +148,117 @@ export default async function handleStripeCreateIntent(
 	companyId,
 	regNum,
 	billingDetails = {},
+	generatedData = {},
 	callback
 ) {
+	// remove any unintentional/unwanted properties
+	generatedData = objClean(
+		generatedData,
+		defs
+			.generatedData
+			.properties
+			.map(x => x.name),
+	)
+	if (!stripe) await setupStripe()
+
 	if (!isFn(callback)) return
 	if (!companyId) return callback(messages.invalidCompany)
 
-	const companyOrCdpEntry = await dbCdpAccessCodes.get(companyId)
-		|| await dbCompanies.get(companyId)
-	if (!companyOrCdpEntry) return callback(messages.invalidCompany)
-	const {
+	const company = await dbCompanies.get(companyId)
+	const cdpEntry = await dbCdpAccessCodes.get(companyId)
+	if (!company || !cdpEntry) return callback(messages.invalidCompany)
+
+	let {
 		accessCode,
-		cdpIssueIndex = 0,
+		accounts: {
+			accountRefMonth
+		} = {},
+		cdpIssueCount = 0,
 		registrationNumber
-	} = companyOrCdpEntry || {}
+	} = { ...company, ...cdpEntry }
+	accountRefMonth = Number(accountRefMonth)
+	const invalidMonth = !accountRefMonth
+		|| accountRefMonth > 12
+		|| accountRefMonth < 1
+	if (invalidMonth) return callback(messages.invalidCompany)
 
 	const allowIntent = registrationNumber === regNum
 		// if an access code is available, it must be provided
 		&& (!accessCode || accessCode === code)
+		&& !isPositiveInteger(cdpIssueCount)
 	if (!allowIntent) return callback(messages.invalidCodeOrReg)
 
-	if (!stripe) await setupStripe()
+	// verify signature
+	const ok = verifyGeneratedData(companyId, generatedData)
+	if (!ok) return callback(messages.invalidSignature)
 
+	generatedData.serverIdentity = getIdentity()
 	const amount = AMOUNT_GBP_PENNIES
 	const currency = CURRENCY
 	// remove any unintentional/unwanted properties
 	const address = objClean(
 		billingDetails.address || {},
-		addressDef.properties.map(x => x.name)
+		stripeAddressDef.properties.map(x => x.name)
 	)
 	const {
 		email = '',
 		name = '',
 		phone = ''
 	} = billingDetails
-	// Create a PaymentIntent with the order amount and currency
+	let tsValidTo, tsErr
+	await handleCalcValidityPeriod(
+		accountRefMonth,
+		companyId,
+		(err, ts) => {
+			tsValidTo = ts
+			tsErr = err
+		}
+	)
+	if (tsErr) return callback(tsErr)
+	const year = new Date(tsValidTo).getFullYear()
+	const month = new Date(tsValidTo).getMonth() + 1
+	const monthYear = `${month}/${year}`
+	// this allows stripe to re-use payment intent and also not clog up the database
+	const idempotencyKey = generateHash([
+		companyId,
+		monthYear,
+		cdpIssueCount,
+		JSON.stringify(address),
+		name,
+		email,
+		phone,
+	].join('__'))
 	const metadata = {
-		cdpIssueIndex,
+		cdpIssueCount: `${cdpIssueCount}`,
 		companyId,
 		registrationNumber,
+		tsValidTo,
 	}
-	const paymentIntent = await stripe
+	const intentParams = {
+		amount,
+		// In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+		automatic_payment_methods: {
+			enabled: true,
+			allow_redirects: 'always' //default
+		},
+		currency: CURRENCY, // pounds sterling
+		description: !cdpEntry.cdp
+			? 'CDP: Application'
+			: `CDP: Renewal - ${monthYear}`,
+		metadata,
+		shipping: {
+			address,
+			name,
+		},
+		receipt_email: email
+	}
+	const intent = await stripe
 		.paymentIntents
-		.create({
-			amount,
-			// In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
-			automatic_payment_methods: {
-				enabled: true,
-				allow_redirects: 'always' //default
-			},
-			currency: CURRENCY, // pounds sterling
-			description: !companyOrCdpEntry.cdp
-				? 'CDP: Application'
-				: `CDP: Renewal (${cdpIssueIndex})`,
-			metadata,
-			shipping: {
-				address,
-				name,
-			},
-			receipt_email: email
-		})
+		.create(intentParams, { idempotencyKey })
 		.catch(err => new Error(err))
 	// stripe threw an error
-	if (isError(paymentIntent)) return callback(paymentIntent.message)
-
+	if (isError(intent)) return callback(intent.message)
+	const existingLogEntry = await dbCdpStripeIntents.get(intent.id)
 	const intentLogEntry = {
 		amount,
 		billingDetails: {
@@ -227,13 +269,22 @@ export default async function handleStripeCreateIntent(
 		},
 		createAccessCode: !accessCode,
 		currency,
-		intentId: paymentIntent.id,
+		generatedData,
+		intentId: intent.id,
 		metadata,
-		paid: false, // to be updated after payment is completed
+		status: 'created', // to be updated after payment is completed
 	}
-	await dbCdpStripeIntents.set(paymentIntent.id, intentLogEntry)
+	await dbCdpStripeIntents.set(intent.id, intentLogEntry, true)
 
-	callback(null, objClean(paymentIntent, ['client_secret', 'id']))
+	callback(null, {
+		...objClean(intent, ['client_secret', 'id']),
+		idempotencyKey,
+		isNewIntent: !existingLogEntry,
+		// for reused intent check if payment was previously successful
+		previouslyPaid: !!existingLogEntry
+			&& await checkPaid(intent.id, companyId)
+				.catch(() => false)
+	})
 }
 handleStripeCreateIntent.description = 'Create Stripe payment intent for Company Digital Passports'
 handleStripeCreateIntent.params = [
@@ -244,7 +295,8 @@ handleStripeCreateIntent.params = [
 	},
 	defs.companyId,
 	defs.regNum,
-	billingDetailsDef,
+	stripeBillingDetailsDef,
+	defs.generatedData,
 	defs.callback,
 ]
 handleStripeCreateIntent.result = {
@@ -257,6 +309,11 @@ handleStripeCreateIntent.result = {
 		{
 			description: 'Stripe payment intent ID',
 			name: 'id',
+			type: TYPES.string,
+		},
+		{
+			description: 'Indicates whether the intent was previous created and is being re-used',
+			name: 'isNewIntent',
 			type: TYPES.string,
 		},
 	],
@@ -278,5 +335,7 @@ export function setupStripe(expressApp) {
 	if (!API_KEY) throw new Error('Missing environment variable: CDP_STRIPE_API_KEY')
 	// if (!CLIENT_API_KEY) throw new Error('Missing environment variable: CDP_STRIPE_CLIENT_API_KEY')
 
-	stripe ??= new getStripe(API_KEY)
+	stripe ??= new Stripe(API_KEY)
 }
+
+// stripe.paymentIntents.retrieve('pi_3OkM95A0mJCmFu491IGKosjN').then(console.log)

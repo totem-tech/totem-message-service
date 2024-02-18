@@ -1,9 +1,10 @@
-const { isFn } = require('../../src/utils/utils')
+import DataStorage from '../../src/utils/DataStorage'
+import { isFn } from '../../src/utils/utils'
 
 const paths = (process.env.SCRIPT || '')
     .split(',')
     .map(x => x.replace('.js', ''))
-console.log({ paths })
+console.log('Script paths:', paths)
 
 const execute = async () => {
     let lastResult
@@ -12,12 +13,14 @@ const execute = async () => {
             ? ''
             : './' // assume current directory
         const path = `${pathPrefix}${paths[i]}`
-        console.time(path)
+        console.log('Running script: ', path)
+        const timerKey = path + ' execution completed in'
+        console.time(timerKey)
         const imported = await require(path).default
         lastResult = isFn(imported)
             ? await imported(lastResult)
             : imported
-        console.timeEnd(path)
+        console.timeEnd(timerKey)
     }
 
     process.exit(0)

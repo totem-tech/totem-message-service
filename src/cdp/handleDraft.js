@@ -1,6 +1,14 @@
+import { ss58Decode } from '../utils/convert'
 import { isObj, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
-import { dbCdpAccessCodes, dbCdpDrafts, dbCdpStripeIntents, dbCompanies, defs, messages } from './common'
+import {
+    dbCdpAccessCodes,
+    dbCdpDrafts,
+    dbCdpStripeIntents,
+    dbCompanies
+} from './couchdb'
+import { decrypt } from './nacl'
+import { defs, messages } from './validation'
 
 const formSteps = [
     'address',
@@ -62,47 +70,54 @@ export async function handleDraft(
         || await dbCompanies.get(companyId)
     if (!company) return callback(messages.invalidCompany)
 
-    let allowUninvited = false
     const { accessCode: code } = company
-    if (code && code !== accessCode) callback(messages.invalidCode)
-    if (!code && draft) {
-        // handle saving drafts for uninvited users.
-        // only allow saving after completing all steps and in the payment step
-        const intentId = draft
-            ?.[formSteps[PAYMENT_INDEX]]
-            ?.values
-            ?.paymentIntentId
-        allowUninvited = !!intentId
-            && draft?.step === PAYMENT_INDEX
-            && formSteps
-                .slice(0, PAYMENT_INDEX)
-                .every(stepName => !!draft?.[stepName]?.completed)
-            && (await dbCdpStripeIntents.get(intentId))?.companyId === companyId
-    }
+    if (code && code !== accessCode) return callback(messages.invalidCode)
+
+    const intentId = draft
+        ?.[formSteps[PAYMENT_INDEX]]
+        ?.values
+        ?.paymentIntentId
+    const intentLog = intentId && await dbCdpStripeIntents.get(intentId)
+    const validIntentCompany = !intentId
+        || intentLog?.metadata?.companyId === companyId
+    if (!validIntentCompany) return callback(`${messages.invalidIntent}: ${intentId}`)
+
+    const allStepsCompleted = draft && formSteps
+        .slice(0, PAYMENT_INDEX)
+        .every(stepName => !!draft?.[stepName]?.completed)
+    // handle saving drafts for uninvited users.
+    // only allow saving after completing all steps and in the payment step
+    const isUninvited = !code
+    const gotDraft = isObj(draft)
+    const allowUninvited = isUninvited
+        && gotDraft
+        && !!intentId
+        && draft?.step === PAYMENT_INDEX
+        && allStepsCompleted
     const save = companyId
-        && isObj(draft)
+        && gotDraft
         && Object.keys(draft).length > 0
         // for uninvited user ONLY save draft if:
         // - all steps are completed
         // - current step is payment
         // - payment intent is created
         && (!!code || allowUninvited)
-    if (save) {
-        draft = objClean(
-            draft,
-            draftDef
-                .properties
-                .map(x => x.name)
-                .filter(Boolean)
-                .sort()
-        )
-        await dbCdpDrafts.set(companyId, draft)
-    } else {
+    if (!save) {
         draft = await dbCdpDrafts.get(companyId)
         draft && delete draft._id
         draft && delete draft._rev
+        return callback(null, draft)
     }
 
+    draft = objClean(
+        draft,
+        draftDef
+            .properties
+            .map(x => x.name)
+            .filter(Boolean)
+            .sort()
+    )
+    await dbCdpDrafts.set(companyId, draft)
     callback(null, draft)
 }
 handleDraft.description = 'Get and save draft'

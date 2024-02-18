@@ -1,4 +1,5 @@
-import { defs, dbCdpAccessCodes } from './common'
+import { dbCdpAccessCodes } from './couchdb'
+import { defs } from './validation'
 
 /**
  * @name    handleCheckCreate

@@ -1,11 +1,8 @@
 import { TYPES } from '../utils/validator'
-import {
-    dbCdpAccessCodes,
-    dbCdpReports,
-    defs,
-    sanitiseAccessCode,
-    messages
-} from './common'
+import { dbCdpAccessCodes, dbCdpReports } from './couchdb'
+import { sanitiseAccessCode } from './utils'
+import { defs, messages } from './validation'
+
 
 export default async function handleReport(
     accessCode,

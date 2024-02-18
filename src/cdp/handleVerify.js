@@ -1,20 +1,15 @@
 import { isObj } from '../utils/utils'
-import {
-    dbCdpAccessCodes,
-    defs,
-    sanitiseAccessCode,
-    getPublicData,
-    messages,
-} from './common'
+import { dbCdpAccessCodes, dbCompanies } from './couchdb'
+import { getPublicData, sanitiseAccessCode } from './utils'
+import { defs, messages } from './validation'
 
 export default async function handleVerify(cdp, callback) {
     const selector = { cdp: sanitiseAccessCode(cdp) }
     const cdpEntry = await dbCdpAccessCodes.find(selector)
-    const err = !isObj(cdpEntry?.companyData) && messages.invalidCdp
-    callback(
-        err,
-        !err && getPublicData(cdpEntry) || undefined
-    )
+    if (!cdpEntry) return callback(messages.invalidCdp)
+
+    const companyEntry = await dbCompanies.get(cdpEntry._id)
+    callback(null, getPublicData(cdpEntry, companyEntry || {}))
 }
 handleVerify.description = 'Verify CDP and fetch company public information'
 handleVerify.params = [

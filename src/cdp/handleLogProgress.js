@@ -4,8 +4,8 @@ import {
     dbCdpAccessCodes,
     dbCdpLog,
     dbCompanies,
-    defs
-} from './common'
+} from './couchdb'
+import { defs } from './validation'
 
 const numSteps = 7 // maximum number of steps in the CDP form (excluding issue step)
 const orSelectorDef = {

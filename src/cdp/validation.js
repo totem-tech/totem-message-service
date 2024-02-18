@@ -1,28 +1,18 @@
-import CouchDBStorage from '../utils/CouchDBStorage'
-import { ss58Decode } from '../utils/convert'
-import { randomBytes } from '../utils/naclHelper/utils'
-import {
-    generateHash,
-    isObj,
-    objClean,
-    strFill
-} from '../utils/utils'
+/**
+ * All validation type definitions.
+ * These are also used as event parameter metadata.
+ */
 import { TYPES } from '../utils/validator'
 
-// dbCdpAccessCodes entries must have companyId as their IDs
-export const dbCdpAccessCodes = new CouchDBStorage(null, 'cdp_access-codes')
-export const dbCdpDrafts = new CouchDBStorage(null, 'cdp_drafts')
-export const dbCdpLog = new CouchDBStorage(null, 'cdp_log')
-export const dbCdpReports = new CouchDBStorage(null, 'cdp_reports')
-export const dbCdpStripeIntents = new CouchDBStorage(null, 'cdp_stripe-intents')
-export const dbCompanies = new CouchDBStorage(null, 'companies')
 export const messages = {
     companyName: 'company name',
     invalidCdp: 'invalid CDP reference',
     invalidCode: 'invalid access code',
     invalidCodeOrReg: 'invalid access code or registration number',
     invalidCompany: 'invalid company ID',
+    invalidIntent: 'invalid intent ID',
     invalidRegNum: 'invalid registration number',
+    invalidSignature: 'invalid signature',
     pubInfo: 'company public information',
 }
 // setTexts(messages)
@@ -62,6 +52,59 @@ const companyId = {
     required: true,
     type: TYPES.hash,
 }
+const generatedData = {
+    description: 'Generated Blockchain identity and encrypted data in an object.',
+    name: 'generatedData',
+    properties: [
+        {
+            description: 'Blockchain identity/address',
+            name: 'address',
+            required: true,
+            type: TYPES.identity,
+        },
+        // {
+        // 	name: 'isBox',
+        // 	required: true,
+        // 	type: TYPES.boolean,
+        // },
+        {
+            name: 'uriEncrypted',
+            required: true,
+            type: TYPES.hex,
+        },
+        {
+            name: 'uriEncryptedSigned',
+            required: true,
+            type: TYPES.hex,
+        },
+    ],
+    required: true,
+    type: TYPES.object,
+}
+const publicKeys = {
+    description: 'Encryption and signer public keys',
+    name: 'publicKeys',
+    properties: [
+        {
+            description: 'Encryption public key to encrypt data to.',
+            name: 'encrypt',
+            required: true,
+            type: TYPES.hex,
+        },
+        {
+            description: 'Signature public key to verify signatures.',
+            name: 'sign',
+            required: true,
+            type: TYPES.hex,
+        },
+    ],
+    required: true,
+    type: TYPES.object,
+}
+generatedData.properties.push({
+    ...publicKeys,
+    name: 'userPublicKeys'
+})
 const regAddress = {
     name: 'regAddress',
     properties: [
@@ -201,7 +244,7 @@ const publicData = {
         regNum,
         {
             maxLegnth: 24,  // eg: "2001-01-01T01:01:01.001Z"
-            name: 'tsCdpIssued',
+            name: 'tsCdpFirstIssued',
             type: TYPES.date,
         },
         {
@@ -226,115 +269,8 @@ export const defs = {
     callback,
     cdp,
     companyId,
+    generatedData,
     publicData,
+    publicKeys,
     regNum,
 }
-
-export const generateAccessCode = identity => {
-    const identityBytes = ss58Decode(identity)
-    const salt = randomBytes(8, false)
-    const salt2 = randomBytes(8, false)
-    const salt3 = randomBytes(8, false)
-    const saltedBytes = new Uint8Array([
-        ...salt,
-        ...identityBytes.slice(0, 16),
-        ...salt2,
-        ...identityBytes.slice(16),
-        ...salt3,
-    ])
-    const saltedHash = generateHash(
-        saltedBytes,
-        'blake2',
-        256,
-    )
-        .slice(2) // remove '0x'
-    return [
-        ...saltedHash.slice(0, 4),
-        ...saltedHash.slice(30, 34),
-        ...saltedHash.slice(-4),
-    ]
-        .map(randomCase)
-        .join('')
-}
-
-export const generateCDP = (identity, countryCode, accountRefMonth) => {
-    const identityBytes = ss58Decode(identity)
-    const salt = randomBytes(8, false)
-    const saltedBytes = new Uint8Array([
-        ...salt,
-        ...identityBytes
-    ])
-    const saltedHash = generateHash(
-        saltedBytes,
-        'blake2',
-        256,
-    )
-        .slice(2) // remove "0x"
-        .toUpperCase()
-    const cdp = [
-        countryCode,
-        `${accountRefMonth ?? ''}`
-            .padStart(2, '0')
-            .slice(-2),
-        saltedHash.slice(0, 4),
-        saltedHash.slice(-4)
-    ].join('')
-    return cdp
-}
-// setTimeout(() => {
-//     console.log('\n<= CDP =>', generateCDP('5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY', 'GB', 6))
-//     console.log('\n<= Code =>', generateAccessCode('5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'))
-// })
-
-export const getPublicData = companyOrCdpEntry => isObj(companyOrCdpEntry)
-    && objClean(
-        {
-            ...companyOrCdpEntry.companyData,
-            ...companyOrCdpEntry,
-            ...!companyOrCdpEntry.accessCode && { // entry from companies database
-                [companyId.name]: companyOrCdpEntry._id
-            },
-        },
-        defs
-            .publicData
-            .properties
-            .map(x => x.name)
-            .filter(Boolean)
-    )
-    || undefined
-
-/**
- * @name    randomCase
- * @summary randomly upper/lower-case string
- * 
- * @param   {String} str 
- * 
- * @returns {String}
- */
-export const randomCase = (str = '') => {
-    const upperCase = Math.ceil(Math.random(1e10) * 1e10) % 2 === 0
-    return !upperCase
-        ? str.toLowerCase()
-        : str.toUpperCase()
-}
-
-/**
- * @name    getCodeSanitised
- * @description Sanitise access code. Turns everything into alphanumeric string.
- * @param {*} value 
- * 
- * @returns {String}
- */
-export const sanitiseAccessCode = value => `${value || ''}`
-    .match(/[a-z0-9]/ig)
-    ?.join('')
-    || ''
-
-/**
- * @name    getCDPSanitised
- * @description Sanitise CDP reference. Turns everything into uppercase alphanumeric string.
- * @param {*} value 
- * 
- * @returns {String}
- */
-export const sanitiseCDP = value => sanitiseAccessCode(value).toUpperCase()

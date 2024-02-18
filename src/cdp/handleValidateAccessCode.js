@@ -1,11 +1,8 @@
 import { isFn } from '../utils/utils'
 import { TYPES } from '../utils/validator'
-import {
-    defs,
-    sanitiseAccessCode,
-    messages,
-    dbCdpAccessCodes
-} from './common'
+import { dbCdpAccessCodes } from './couchdb'
+import { sanitiseAccessCode } from './utils'
+import { defs, messages } from './validation'
 
 export default async function handleValidateAccessCode(
     accessCode,

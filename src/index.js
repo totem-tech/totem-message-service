@@ -74,7 +74,12 @@ const texts = {
     runtimeError: `
         Runtime error occured. Please try again later or drop us a message in the Totem Support chat.
         You can also email us at support@totemaccounting.com. 
-        Someone from the Totem team will get back to you as soon as possible.
+        Someone from the support team will get back to you as soon as possible.
+        Don't forget to mention the following Request ID
+    `,
+    runtimeError2: `
+        Runtime error occured. Please try again later or email us at support@company-passport.agency.
+        Someone from the support team will get back to you as soon as possible.
         Don't forget to mention the following Request ID
     `,
 }
@@ -304,7 +309,13 @@ const interceptHandler = (eventName, handler) => async function (...args) {
         }
         await handler.apply(thisArg, args)
     } catch (err) {
-        gotCb && callback(`${texts.runtimeError}: ${requestId}`)
+        gotCb && callback([
+            eventName.startsWith('cdp-')
+                ? texts.runtimeError2
+                : texts.runtimeError,
+            ': ',
+            requestId,
+        ].join(''))
 
         // Print error meta data
         console.log([

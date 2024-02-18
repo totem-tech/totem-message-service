@@ -1,91 +1,26 @@
-import PromisE from '../utils/PromisE'
-import { dbCdpAccessCodes, dbCdpLog } from './common'
+import { setup as setupCouchDB } from './couchdb'
+import handleCalcValidityPeriod from './handleCalcValidityPeriod'
 import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
+import handleCreateAccessCode from './handleCreateAccessCode'
+import { handleDraft } from './handleDraft'
+import handleGetPublicKeys from './handleGetPublicKeys'
 import handleLogProgress from './handleLogProgress'
 import handleReport from './handleReport'
+import handleValidateAccessCode from './handleValidateAccessCode'
+import handleVerify from './handleVerify'
+import { setup as setupNacl } from './nacl'
 import handleStripeCreateIntent, {
     handleStripeCheckPaid,
     handleStripeClientAPIKey,
     setupStripe
 } from './stripe'
-import handleValidateAccessCode from './handleValidateAccessCode'
-import handleVerify from './handleVerify'
-import { handleDraft } from './handleDraft'
+import { generateAccessCode } from './utils'
 
 export const setup = async (expressApp) => {
-    const createIndexes = (db, indexes = []) => PromisE.all(
-        indexes.map(index =>
-            db.createIndex(index)
-        )
-    )
-    const cdpIndexes = [
-        {
-            index: {
-                fields: [
-                    'accessCode',
-                    'companyId',
-                    'registrationNumber',
-                ]
-            },
-            name: 'accessCode-companyId-registrationNumber-index',
-        },
-        {
-            index: { fields: ['cdp'] },
-            name: 'cdp-index',
-        },
-        {
-            index: { fields: ['companyId'] },
-            name: 'companyId-index',
-        },
-        {
-            index: { fields: ['registrationNumber'] },
-            name: 'registrationNumber-index',
-        },
-    ]
-    const logIndexes = [
-        {
-            index: { fields: ['create'] },
-            name: 'create-index',
-        },
-        {
-            index: { fields: ['registrationNumber'] },
-            name: 'registrationNumber-index',
-        },
-        {
-            index: { fields: ['stepIndex'] },
-            name: 'stepIndex-index',
-        },
-        {
-            index: { fields: ['stepName'] },
-            name: 'stepName-index',
-        },
-        {
-            index: { fields: ['tsCreated'] },
-            name: 'tsCreated-index',
-        },
-        {
-            index: { fields: ['type'] },
-            name: 'type-index',
-        },
-    ]
-    const dbStripeIntentIndexes = [
-        {
-            index: { fields: ['companyId'] },
-            name: 'companyId-index',
-        },
-    ]
+    await setupCouchDB()
 
-    // create indexes. Ignore if already exists
-    await createIndexes(
-        await dbCdpAccessCodes.getDB(),
-        cdpIndexes
-    )
-    await createIndexes(
-        await dbCdpLog.getDB(),
-        logIndexes,
-    )
-    await createIndexes(dbStripeIntentIndexes)
+    await setupNacl()
 
     // create demo CDP entries
     // if (process.env.DEBUG === 'TRUE') {
@@ -107,9 +42,7 @@ export const setup = async (expressApp) => {
 
     //         // to be generated/updated on payment
     //         cdp: null,
-    //         companyData: null,
-    //         paymentReference: null,
-    //         tsCdpIssued: null,
+    //         tsCdpFirstIssued: null,
     //     }))
     //     await dbCdpAccessCodes.setAll(demoEntries)
     // }
@@ -118,9 +51,13 @@ export const setup = async (expressApp) => {
 }
 
 const handlers = {
+    'cdp-calc-validity-period': handleCalcValidityPeriod,
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,
+    'cdp-company-search': handleCompanySearch,
+    'cdp-set-access-code': handleCreateAccessCode,
     'cdp-draft': handleDraft,
+    'cdp-get-public-keys': handleGetPublicKeys,
     'cdp-log-progress': handleLogProgress,
     'cdp-report': handleReport,
     'cdp-stripe-client-api-key': handleStripeClientAPIKey,
