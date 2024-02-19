@@ -342,5 +342,3 @@ export function setupStripe(expressApp) {
 
 	stripe ??= new Stripe(API_KEY)
 }
-
-// stripe.paymentIntents.retrieve('pi_3OkM95A0mJCmFu491IGKosjN').then(console.log)

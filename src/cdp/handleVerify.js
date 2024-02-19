@@ -10,7 +10,6 @@ export default async function handleVerify(cdp, callback) {
 
     const compnay = await dbCompanies.get(cdpEntry._id)
     const publicData = getPublicData(cdpEntry, compnay || {})
-    console.log({ cdpEntry })
     callback(null, publicData)
 }
 handleVerify.description = 'Verify CDP and fetch company public information'
