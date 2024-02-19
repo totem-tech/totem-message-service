@@ -105,8 +105,3 @@ export const verify = (
     signature,
     signerPublicKey,
 )
-
-setTimeout(() =>
-    console.log(decrypt('0x4c3832fb0a7958bb0847ac64ae93b1d4dfd83fd07848b8ebf9b328ded7dac7b23bdab8ffbece3c370ddd4b57')),
-    1000
-)
