@@ -28,13 +28,6 @@ export const decrypt = (encrypted, senderPublicKey, asString = true) => {
     return message
 }
 
-export const getIdentity = () => identity
-
-export const getPublicKeys = () => ({
-    encrypt: pairEncrypt.publicKey,
-    sign: pairSign.publicKey,
-})
-
 export const encrypt = (message, recipientPublicKey, asHex = true) => {
     if (!isStr(message)) message = JSON.stringify(message)
     const [{ target: encrypted }] = object.encrypt(
@@ -46,6 +39,13 @@ export const encrypt = (message, recipientPublicKey, asHex = true) => {
     )
     return encrypted
 }
+
+export const getIdentity = () => identity
+
+export const getPublicKeys = () => ({
+    encrypt: pairEncrypt.publicKey,
+    sign: pairSign.publicKey,
+})
 
 export const setup = () => {
     // keypairs have already been set up
@@ -104,4 +104,9 @@ export const verify = (
     message,
     signature,
     signerPublicKey,
+)
+
+setTimeout(() =>
+    console.log(decrypt('0x4c3832fb0a7958bb0847ac64ae93b1d4dfd83fd07848b8ebf9b328ded7dac7b23bdab8ffbece3c370ddd4b57')),
+    1000
 )

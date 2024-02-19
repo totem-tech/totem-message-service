@@ -2,7 +2,7 @@ import { decrypt, verify } from './nacl'
 
 export default function verifyGeneratedData(companyId, generatedData = {}) {
     const {
-        address,
+        identity,
         uriEncrypted,
         uriEncryptedSigned,
         userPublicKeys: {
@@ -17,7 +17,7 @@ export default function verifyGeneratedData(companyId, generatedData = {}) {
 
     const msg = [
         companyId,
-        address,
+        identity,
         uriEncrypted,
     ].join('__')
     const verified = verify(msg, uriEncryptedSigned, pubSign)

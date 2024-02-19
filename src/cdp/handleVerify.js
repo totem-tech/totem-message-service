@@ -8,8 +8,10 @@ export default async function handleVerify(cdp, callback) {
     const cdpEntry = await dbCdpAccessCodes.find(selector)
     if (!cdpEntry) return callback(messages.invalidCdp)
 
-    const companyEntry = await dbCompanies.get(cdpEntry._id)
-    callback(null, getPublicData(cdpEntry, companyEntry || {}))
+    const compnay = await dbCompanies.get(cdpEntry._id)
+    const publicData = getPublicData(cdpEntry, compnay || {})
+    console.log({ cdpEntry })
+    callback(null, publicData)
 }
 handleVerify.description = 'Verify CDP and fetch company public information'
 handleVerify.params = [

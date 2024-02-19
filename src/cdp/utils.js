@@ -8,6 +8,12 @@ import {
 import { getIdentity } from './nacl'
 import { defs } from './validation'
 
+export const accessCodeHashed = (accessCode, companyId) => generateHash(
+    accessCode + companyId,
+    'blake2',
+    256,
+)
+
 export const generateAccessCode = (identity = getIdentity()) => {
     const identityBytes = ss58Decode(identity)
     const salt = randomBytes(8, false)
@@ -65,9 +71,11 @@ export const getPublicData = (cdpEntry, companyEntry) => isObj(cdpEntry)
         {
             ...companyEntry,
             ...cdpEntry,
-            ...!cdpEntry.accessCode && { // entry from companies database
-                [defs.companyId.name]: cdpEntry._id
-            },
+            // in-case cdpEntry does not exist
+            [defs.companyId.name]: companyEntry?._id ?? cdpEntry.companyId,
+            contactDetails: {
+                url: cdpEntry?.contactDetails?.url,
+            }
         },
         defs
             .publicData

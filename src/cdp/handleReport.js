@@ -1,6 +1,6 @@
 import { TYPES } from '../utils/validator'
 import { dbCdpAccessCodes, dbCdpReports } from './couchdb'
-import { sanitiseAccessCode } from './utils'
+import { accessCodeHashed, sanitiseAccessCode } from './utils'
 import { defs, messages } from './validation'
 
 
@@ -13,7 +13,9 @@ export default async function handleReport(
 ) {
     accessCode = sanitiseAccessCode(accessCode)
     const entry = await dbCdpAccessCodes.find({ registrationNumber })
-    if (!entry || entry.accessCode !== accessCode) return callback(messages.invalidCodeOrReg)
+    const invalid = !entry
+        || entry.accessCode !== accessCodeHashed(accessCode, entry.companyId)
+    if (invalid) return callback(messages.invalidCodeOrReg)
 
     await dbCdpReports.set(null, {
         companyId: entry.companyId,

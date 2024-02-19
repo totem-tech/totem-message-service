@@ -2,35 +2,32 @@ import { generateHash, isHex, isStr } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import { dbCdpAccessCodes, dbCompanies } from './couchdb'
 import { encrypt, getIdentity } from './nacl'
-import { generateAccessCode } from './utils'
+import { accessCodeHashed, generateAccessCode, sanitiseAccessCode } from './utils'
 import { defs, messages } from './validation'
 
-export const setAccessCode = async (companyId, accessCode) => {
-    const company = isHex(companyId)
-        ? await dbCompanies.get(companyId)
-        : await dbCompanies.find({ registrationNumber: companyId })
+export const setAccessCode = async (compIdOrReg, accessCode, save = true) => {
+    const company = isHex(compIdOrReg)
+        ? await dbCompanies.get(compIdOrReg)
+        : await dbCompanies.find({ registrationNumber: compIdOrReg })
     if (!company) return [messages.invalidCompany]
-
-    const cdpEntry = await dbCdpAccessCodes.get(companyId)
-    // access code already generated
-    if (!!cdpEntry) return [null, 0]
 
     const {
         _id,
         registrationNumber
     } = company
-    companyId = _id
+    const companyId = _id
+    const cdpEntry = await dbCdpAccessCodes.get(companyId)
+    // access code already generated
+    if (!!cdpEntry) return [null, 0]
+
     const serverIdentity = getIdentity()
-    const generateCode = !isStr(accessCode) || accessCode.length !== 12
+    const generateCode = !isStr(accessCode) || sanitiseAccessCode(accessCode).length < 12
     accessCode = !generateCode
-        ? accessCode
+        ? sanitiseAccessCode(accessCode)
         : generateAccessCode(serverIdentity)
     let newEntry = {
-        accessCode: generateHash(
-            accessCode + companyId,
-            'blake2',
-            256,
-        ),
+        _id: companyId,
+        accessCode: accessCodeHashed(accessCode, companyId),
         companyId,
         encrypted: {
             accessCode: encrypt(accessCode),
@@ -44,8 +41,8 @@ export const setAccessCode = async (companyId, accessCode) => {
         cdpIssueCount: 0,
         identity: null,
         tsCdpFirstIssued: null, // first time CDP has been issued
-        tsValidFrom,
-        tsValidTo,
+        tsValidFrom: null,
+        tsValidTo: null,
     }
     newEntry = Object
         .keys(newEntry)
@@ -54,24 +51,34 @@ export const setAccessCode = async (companyId, accessCode) => {
             ...obj,
             [key]: newEntry[key],
         }), {})
-    await dbCdpAccessCodes.set(companyId, newEntry)
-    return [null, generateCode ? 1 : 2]
+    save && await dbCdpAccessCodes.set(companyId, newEntry)
+    return [
+        null,
+        generateCode ? 1 : 2,
+        newEntry,
+        accessCode
+    ]
 }
 
 export default async function handleSetAccessCode(
     companyId,
     accessCode,
+    saveEntry,
     callback
 ) {
-    const [err, code] = await setAccessCode(companyId, accessCode)
-    callback(err, code)
+    const [err, ...rest] = await setAccessCode(companyId, accessCode, saveEntry)
+    callback(err, {
+        accessCode: rest[2],
+        status: rest[0],
+        newEntry: rest[1],
+    })
 }
 handleSetAccessCode.description = 'Check and create access code for a company. Ignore if access code already exists.'
 handleSetAccessCode.requireLogin = ['admin']
 handleSetAccessCode.params = [
     {
-        ...defs.companyId,
-        or: defs.regNum,
+        ...defs.regNum,
+        or: defs.companyId,
     },
     {
         accept: [true],
@@ -80,10 +87,16 @@ handleSetAccessCode.params = [
         or: defs.accessCode,
         type: TYPES.boolean,
     },
+    {
+        description: 'If false, will only check/generate access code entry',
+        defaultValue: true,
+        name: 'saveEntry',
+        type: TYPES.boolean,
+    },
     defs.callback
 ]
 handleSetAccessCode.result = {
     descrption: '0: skipped (already exists), 1: generated, 2: save pre-specified access code',
-    name: 'successCode',
+    name: 'status',
     type: TYPES.boolean,
 }

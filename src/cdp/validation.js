@@ -9,7 +9,7 @@ export const messages = {
     invalidCdp: 'invalid CDP reference',
     invalidCode: 'invalid access code',
     invalidCodeOrReg: 'invalid access code or registration number',
-    invalidCompany: 'invalid company ID',
+    invalidCompany: 'invalid company',
     invalidIntent: 'invalid intent ID',
     invalidRegNum: 'invalid registration number',
     invalidSignature: 'invalid signature',
@@ -18,7 +18,7 @@ export const messages = {
 // setTexts(messages)
 const accessCode = {
     customMessages: messages.invalidCode,
-    maxLength: 14, // with "-"
+    maxLength: 12,
     minLength: 12, // without "-"
     name: 'accessCode',
     required: true,
@@ -52,13 +52,19 @@ const companyId = {
     required: true,
     type: TYPES.hash,
 }
+// ToDo: set properties
+const contactDetails = {
+    name: 'contactDetails',
+    properties: [],
+    type: TYPES.object,
+}
 const generatedData = {
     description: 'Generated Blockchain identity and encrypted data in an object.',
     name: 'generatedData',
     properties: [
         {
             description: 'Blockchain identity/address',
-            name: 'address',
+            name: 'identity',
             required: true,
             type: TYPES.identity,
         },
@@ -158,9 +164,21 @@ const regNum = {
     required: true,
     type: TYPES.string,
 }
+// ToDo: set properties
+const relatedCompanies = {
+    maxLegnth: 100,
+    properties: [],
+    type: TYPES.array,
+}
+const signature = {
+    name: 'signature',
+    required: true,
+    type: TYPES.hex,
+}
 const ubo = {
+    maxLength: 4, // maximum 4 array items.
     name: 'ubo',
-    properties: [
+    items: [
         cdp,
         {
             maxLegnth: 2,
@@ -189,12 +207,6 @@ const ubo = {
         },
         regNum,
     ],
-    type: TYPES.object,
-}
-const ubos = {
-    maxLength: 4, // maximum 4 array items.
-    name: 'ubos',
-    items: ubo.properties,
     type: TYPES.array,
 }
 const vatNum = {
@@ -222,6 +234,7 @@ const publicData = {
         },
         cdp,
         companyId,
+        contactDetails,
         {
             name: 'countryCode',
             type: TYPES.string,
@@ -242,6 +255,7 @@ const publicData = {
         },
         regAddress,
         regNum,
+        signature,
         {
             maxLegnth: 24,  // eg: "2001-01-01T01:01:01.001Z"
             name: 'tsCdpFirstIssued',
@@ -256,10 +270,17 @@ const publicData = {
     ],
     type: TYPES.object,
 }
-const cdpData = {
-    name: 'cdpData',
+const cdpEntry = {
+    name: 'cdpEntry',
     properties: [
+        cdp,
+        companyId,
+        contactDetails,
         regAddress,
+        relatedCompanies,
+        regNum,
+        signature,
+        ubo,
         vatNum
     ],
     type: TYPES.object
@@ -268,9 +289,14 @@ export const defs = {
     accessCode,
     callback,
     cdp,
+    cdpEntry,
     companyId,
+    contactDetails,
     generatedData,
     publicData,
     publicKeys,
     regNum,
+    relatedCompanies,
+    signature,
+    ubo,
 }

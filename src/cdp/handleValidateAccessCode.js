@@ -1,7 +1,7 @@
 import { isFn } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import { dbCdpAccessCodes } from './couchdb'
-import { sanitiseAccessCode } from './utils'
+import { accessCodeHashed, sanitiseAccessCode } from './utils'
 import { defs, messages } from './validation'
 
 export default async function handleValidateAccessCode(
@@ -17,7 +17,7 @@ export default async function handleValidateAccessCode(
     if (!entry) return callback(messages.invalidCodeOrReg)
 
     const valid = entry.registrationNumber === registrationNumber
-        && entry.accessCode === accessCode
+        && entry.accessCode === accessCodeHashed(accessCode, companyId)
     if (!valid) return callback(messages.invalidCodeOrReg)
 
     if (valid && !entry.tsFirstAccessed) {

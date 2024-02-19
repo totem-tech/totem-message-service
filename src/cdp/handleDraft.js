@@ -8,6 +8,7 @@ import {
     dbCompanies
 } from './couchdb'
 import { decrypt } from './nacl'
+import { accessCodeHashed } from './utils'
 import { defs, messages } from './validation'
 
 const formSteps = [
@@ -60,6 +61,10 @@ const draftDef = {
     type: TYPES.object,
 }
 
+export const checkCompleted = draft => isObj(draft) && formSteps
+    .slice(0, PAYMENT_INDEX)
+    .every(stepName => !!draft?.[stepName]?.completed)
+
 export async function handleDraft(
     companyId,
     accessCode,
@@ -71,7 +76,7 @@ export async function handleDraft(
     if (!company) return callback(messages.invalidCompany)
 
     const { accessCode: code } = company
-    if (code && code !== accessCode) return callback(messages.invalidCode)
+    if (code && code !== accessCodeHashed(accessCode, companyId)) return callback(messages.invalidCode)
 
     const intentId = draft
         ?.[formSteps[PAYMENT_INDEX]]
@@ -82,9 +87,7 @@ export async function handleDraft(
         || intentLog?.metadata?.companyId === companyId
     if (!validIntentCompany) return callback(`${messages.invalidIntent}: ${intentId}`)
 
-    const allStepsCompleted = draft && formSteps
-        .slice(0, PAYMENT_INDEX)
-        .every(stepName => !!draft?.[stepName]?.completed)
+    const allStepsCompleted = checkCompleted(draft)
     // handle saving drafts for uninvited users.
     // only allow saving after completing all steps and in the payment step
     const isUninvited = !code

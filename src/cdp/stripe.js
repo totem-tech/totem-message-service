@@ -6,16 +6,17 @@ import {
 	isPositiveInteger,
 	objClean,
 } from '../utils/utils'
-import { TYPES, validate, validateObj } from '../utils/validator'
+import { TYPES } from '../utils/validator'
 import {
 	dbCdpAccessCodes,
 	dbCdpStripeIntents,
 	dbCompanies,
 } from './couchdb'
-import { defs, messages } from './validation'
 import handleCalcValidityPeriod from './handleCalcValidityPeriod'
+import { getIdentity } from './nacl'
+import { defs, messages } from './validation'
 import verifyGeneratedData from './verifyGeneratedData'
-import { getIdentity, getPublicKeys } from './nacl'
+import { accessCodeHashed } from './utils'
 
 export const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
 const API_KEY = process.env.CDP_STRIPE_API_KEY
@@ -92,7 +93,7 @@ const stripeBillingDetailsDef = {
 }
 
 export const checkPaid = async (intentId, companyId) => {
-	if (!intentId) return false
+	if (!intentId) return [false]
 	if (!stripe) await setupStripe()
 
 	const intent = await stripe
@@ -105,7 +106,7 @@ export const checkPaid = async (intentId, companyId) => {
 		status,
 	} = intent || {}
 	const paymentSuccess = id == intentId && status === 'succeeded'
-	if (!paymentSuccess) return false
+	if (!paymentSuccess) return [false]
 
 	const intentLog = await dbCdpStripeIntents.get(intentId)
 	const {
@@ -113,21 +114,24 @@ export const checkPaid = async (intentId, companyId) => {
 		metadata: md2 = {},
 	} = intentLog || {}
 
-	if (!intentLog || md2?.companyId !== companyId) return false
+	if (!intentLog || md2?.companyId !== companyId) return [false]
 
 	const paymentValid = amount_received === amount
 		&& Object // check all metatadata matches
 			.keys(md2)
 			.every(key => md1[key] === md2[key])
 
-	return paymentValid
+	return [paymentValid, intentLog]
 }
 
 export const handleStripeCheckPaid = async (
 	intentId,
 	companyId,
 	callback
-) => callback?.(null, await checkPaid(intentId, companyId))
+) => {
+	const [paid] = await checkPaid(intentId, companyId)
+	callback?.(null, paid)
+}
 handleStripeCheckPaid.params = [
 	{
 		description: 'Stripe payment intent ID',
@@ -144,7 +148,7 @@ handleStripeCheckPaid.result = {
 }
 
 export default async function handleStripeCreateIntent(
-	code,
+	accessCode,
 	companyId,
 	regNum,
 	billingDetails = {},
@@ -169,7 +173,7 @@ export default async function handleStripeCreateIntent(
 	if (!company || !cdpEntry) return callback(messages.invalidCompany)
 
 	let {
-		accessCode,
+		accessCode: code,
 		accounts: {
 			accountRefMonth
 		} = {},
@@ -184,7 +188,7 @@ export default async function handleStripeCreateIntent(
 
 	const allowIntent = registrationNumber === regNum
 		// if an access code is available, it must be provided
-		&& (!accessCode || accessCode === code)
+		&& (!code || code === accessCodeHashed(accessCode, companyId))
 		&& !isPositiveInteger(cdpIssueCount)
 	if (!allowIntent) return callback(messages.invalidCodeOrReg)
 
@@ -267,7 +271,7 @@ export default async function handleStripeCreateIntent(
 			name,
 			phone,
 		},
-		createAccessCode: !accessCode,
+		createAccessCode: !code,
 		currency,
 		generatedData,
 		intentId: intent.id,
@@ -283,6 +287,7 @@ export default async function handleStripeCreateIntent(
 		// for reused intent check if payment was previously successful
 		previouslyPaid: !!existingLogEntry
 			&& await checkPaid(intent.id, companyId)
+				.then(([paid]) => paid)
 				.catch(() => false)
 	})
 }
