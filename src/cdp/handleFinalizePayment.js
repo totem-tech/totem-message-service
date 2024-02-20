@@ -24,6 +24,10 @@ import {
 } from './utils'
 import { defs, messages } from './validation'
 
+const CDP_DISCORD_USERNAME = process.env.CDP_DISCORD_USERNAME
+const CDP_DISCORD_WEBHOOK_URL = process.env.CDP_DISCORD_WEBHOOK_URL || undefined
+const CDP_DISCORD_AVATAR_URL = process.env.CDP_DISCORD_AVATAR_URL || undefined
+
 // ToDo: on renew, DO NOT generate new identity or accesscode
 export default async function handleFinalizePayment(
     accessToken,
@@ -222,15 +226,27 @@ export default async function handleFinalizePayment(
     const [client] = this
     const {
         handshake: {
-            headers: { origin = '' } = {},
+            headers: {
+                hostname,
+                host,
+                origin = ''
+            } = {},
         } = {},
     } = client
-    sendMessage([{
-        description: `**CDP Generated:** ${formatCDP(cdp)}`,
-        timestamp: now,
-        title: 'Payment Received! :partying_face:',
-        url: `${origin}/verify/${cdp}`
-    }]).catch(() => console.log('[CDP] [handleFinalizePayment] Failed to send Discord message.'))
+    sendMessage(
+        [{
+            description: `**CDP Generated:** ${formatCDP(cdp)}`,
+            timestamp: now,
+            title: 'Payment Received! :partying_face:',
+            url: `${origin}/verify/${cdp}`
+        }],
+        '[CDP] [Finalization]',
+        false,
+        undefined,
+        CDP_DISCORD_USERNAME || hostname || host || origin,
+        CDP_DISCORD_WEBHOOK_URL,
+        CDP_DISCORD_AVATAR_URL,
+    ).catch(() => console.log(now, '[CDP] [Finalization] Failed to send Discord message.', { cdp }))
 }
 handleFinalizePayment.params = [
     {
