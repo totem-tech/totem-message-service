@@ -75,7 +75,7 @@ export const getPublicData = (cdpEntry, companyEntry) => isObj(cdpEntry)
             [defs.companyId.name]: companyEntry?._id ?? cdpEntry.companyId,
             contactDetails: {
                 url: cdpEntry?.contactDetails?.url,
-            }
+            },
         },
         defs
             .publicData

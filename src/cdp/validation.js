@@ -7,12 +7,13 @@ import { TYPES } from '../utils/validator'
 export const messages = {
     companyName: 'company name',
     invalidCdp: 'invalid CDP reference',
-    invalidCode: 'invalid access code',
-    invalidCodeOrReg: 'invalid access code or registration number',
+    invalidCode: 'invalid credentials',
+    invalidCodeOrReg: 'invalid credentials',
     invalidCompany: 'invalid company',
     invalidIntent: 'invalid intent ID',
     invalidRegNum: 'invalid registration number',
     invalidSignature: 'invalid signature',
+    invalidToken: 'invalid token',
     pubInfo: 'company public information',
 }
 // setTexts(messages)
@@ -55,7 +56,23 @@ const companyId = {
 // ToDo: set properties
 const contactDetails = {
     name: 'contactDetails',
-    properties: [],
+    properties: [
+        {
+            name: 'email',
+            required: true,
+            type: TYPES.string,
+        },
+        {
+            name: 'name',
+            required: true,
+            type: TYPES.string,
+        },
+        {
+            name: 'url',
+            required: false,
+            type: TYPES.string,
+        },
+    ],
     type: TYPES.object,
 }
 const generatedData = {
@@ -165,9 +182,35 @@ const regNum = {
     type: TYPES.string,
 }
 // ToDo: set properties
-const relatedCompanies = {
-    maxLegnth: 100,
-    properties: [],
+const relatedCompany = {
+    name: 'relatedCompany',
+    properties: [
+        {
+            name: 'cdp',
+            type: TYPES.string,
+        },
+        {
+            name: 'country',
+            required: true,
+            type: TYPES.string,
+        },
+        {
+            name: 'name',
+            required: true,
+            type: TYPES.string,
+        },
+        {
+            name: 'registrationNumber',
+            required: true,
+            type: TYPES.string,
+        },
+    ],
+    type: TYPES.object,
+}
+const relatedCompanyArr = {
+    maxLength: 100, // maximum 4 array items.
+    name: 'relatedCompanies',
+    items: relatedCompany,
     type: TYPES.array,
 }
 const signature = {
@@ -176,9 +219,8 @@ const signature = {
     type: TYPES.hex,
 }
 const ubo = {
-    maxLength: 4, // maximum 4 array items.
     name: 'ubo',
-    items: [
+    properties: [
         cdp,
         {
             maxLegnth: 2,
@@ -207,6 +249,12 @@ const ubo = {
         },
         regNum,
     ],
+    type: TYPES.object,
+}
+const uboArr = {
+    maxLength: 4, // maximum 4 array items.
+    name: 'ubos',
+    items: ubo,
     type: TYPES.array,
 }
 const vatNum = {
@@ -244,6 +292,10 @@ const publicData = {
             type: TYPES.string,
         },
         {
+            name: 'fingerprint',
+            type: TYPES.hex,
+        },
+        {
             description: 'Blockchain identity/address',
             name: 'identity',
             type: TYPES.identity,
@@ -277,10 +329,10 @@ const cdpEntry = {
         companyId,
         contactDetails,
         regAddress,
-        relatedCompanies,
+        relatedCompanyArr,
         regNum,
         signature,
-        ubo,
+        uboArr,
         vatNum
     ],
     type: TYPES.object
@@ -296,7 +348,9 @@ export const defs = {
     publicData,
     publicKeys,
     regNum,
-    relatedCompanies,
+    relatedCompany,
+    relatedCompanyArr,
     signature,
     ubo,
+    uboArr,
 }

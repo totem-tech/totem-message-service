@@ -1,4 +1,3 @@
-import { bytesToHex, ss58Decode } from '../utils/convert'
 import {
     encryptionKeypair,
     keyInfoFromKeyData,
@@ -18,6 +17,7 @@ let pairSign = {
 }
 
 export const decrypt = (encrypted, senderPublicKey, asString = true) => {
+    setup()
     const { target: message } = object.decrypt(
         { target: encrypted },
         senderPublicKey,
@@ -29,6 +29,7 @@ export const decrypt = (encrypted, senderPublicKey, asString = true) => {
 }
 
 export const encrypt = (message, recipientPublicKey, asHex = true) => {
+    setup()
     if (!isStr(message)) message = JSON.stringify(message)
     const [{ target: encrypted }] = object.encrypt(
         { target: message },
@@ -82,6 +83,7 @@ export const setup = () => {
  * @returns {String|Uint8Array} signed message
  */
 export const sign = message => {
+    setup()
     if (!isStr(message)) message = JSON.stringify(message)
     return signHelper.signDetached(message, pairSign.secretKey)
 }
@@ -100,8 +102,11 @@ export const verify = (
     message,
     signature,
     signerPublicKey = pairSign.publicKey
-) => signHelper.verifyDetached(
-    message,
-    signature,
-    signerPublicKey,
-)
+) => {
+    setup()
+    return signHelper.verifyDetached(
+        message,
+        signature,
+        signerPublicKey,
+    )
+}

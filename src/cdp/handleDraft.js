@@ -107,8 +107,13 @@ export async function handleDraft(
         && (!!code || allowUninvited)
     if (!save) {
         draft = await dbCdpDrafts.get(companyId)
-        draft && delete draft._id
-        draft && delete draft._rev
+        if (draft) {
+            delete draft._id
+            delete draft._rev
+        }
+        draft = draft?.status === 'completed'
+            ? {} // prevent user from using draft??
+            : draft
         return callback(null, draft)
     }
 

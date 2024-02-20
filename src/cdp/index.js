@@ -16,7 +16,6 @@ import handleStripeCreateIntent, {
     handleStripeClientAPIKey,
     setupStripe
 } from './stripe'
-import { generateAccessCode } from './utils'
 
 export const setup = async (expressApp) => {
     await setupCouchDB()
@@ -44,10 +43,14 @@ const handlers = {
     'cdp-verify': handleVerify,
 }
 
-Object
+const processHandlers = handlers => Object
     .values(handlers)
     .forEach(handler => {
         handler.includeLabel = false // only error message. exclude param label/name
         handler.includeValue = false // exclude value from error message
+        handler.or && processHandlers([handler.or])
+        processHandlers(handler.properties || [])
+        processHandlers(handler.params || [])
     })
+processHandlers(handlers)
 export default handlers

@@ -155,14 +155,6 @@ export default async function handleStripeCreateIntent(
 	generatedData = {},
 	callback
 ) {
-	// remove any unintentional/unwanted properties
-	generatedData = objClean(
-		generatedData,
-		defs
-			.generatedData
-			.properties
-			.map(x => x.name),
-	)
 	if (!stripe) await setupStripe()
 
 	if (!isFn(callback)) return
@@ -170,7 +162,7 @@ export default async function handleStripeCreateIntent(
 
 	const company = await dbCompanies.get(companyId)
 	const cdpEntry = await dbCdpAccessCodes.get(companyId)
-	if (!company || !cdpEntry) return callback(messages.invalidCompany)
+	if (!company || (!!accessCode && !cdpEntry)) return callback(messages.invalidCompany)
 
 	let {
 		accessCode: code,
@@ -196,6 +188,14 @@ export default async function handleStripeCreateIntent(
 	const ok = verifyGeneratedData(companyId, generatedData)
 	if (!ok) return callback(messages.invalidSignature)
 
+	// remove any unintentional/unwanted properties
+	generatedData = objClean(
+		generatedData,
+		defs
+			.generatedData
+			.properties
+			.map(x => x.name),
+	)
 	generatedData.serverIdentity = getIdentity()
 	const amount = AMOUNT_GBP_PENNIES
 	const currency = CURRENCY
@@ -246,7 +246,7 @@ export default async function handleStripeCreateIntent(
 			allow_redirects: 'always' //default
 		},
 		currency: CURRENCY, // pounds sterling
-		description: !cdpEntry.cdp
+		description: !cdpEntry?.cdp
 			? 'CDP: Application'
 			: `CDP: Renewal - ${monthYear}`,
 		metadata,
