@@ -1,4 +1,3 @@
-import { isObj } from '../utils/utils'
 import { dbCdpAccessCodes, dbCompanies } from './couchdb'
 import { getPublicData, sanitiseAccessCode } from './utils'
 import { defs, messages } from './validation'

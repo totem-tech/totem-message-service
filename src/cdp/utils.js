@@ -13,6 +13,19 @@ export const accessCodeHashed = (accessCode, companyId) => generateHash(
     'blake2',
     256,
 )
+const format = (value = '', sanitiseFn) => {
+    value = sanitiseFn?.(value) ?? value
+
+    return new Array(Math.ceil(value.length / 4))
+        .fill(0)
+        .map((_, i) => value.slice(i * 4, i * 4 + 4))
+        .join('-')
+}
+
+export const formatAccessCode = code => format(code, sanitiseAccessCode)
+
+export const formatCDP = cdp => format(cdp, sanitiseCDP)
+    .slice(0, 14) // limit to maximum 12 characters and 2 dashes
 
 export const generateAccessCode = (identity = getIdentity()) => {
     const identityBytes = ss58Decode(identity)

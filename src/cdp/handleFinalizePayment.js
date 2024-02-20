@@ -1,5 +1,5 @@
+import { sendMessage } from '../utils/discordHelper'
 import {
-    arrSort,
     generateHash,
     objClean,
     objSort,
@@ -18,6 +18,7 @@ import { decrypt, sign } from './nacl'
 import { checkPaid } from './stripe'
 import {
     accessCodeHashed,
+    formatCDP,
     generateAccessCode,
     generateCDP
 } from './utils'
@@ -217,6 +218,19 @@ export default async function handleFinalizePayment(
 
         throw new Error(err)
     }
+
+    const [client] = this
+    const {
+        handshake: {
+            headers: { origin = '' } = {},
+        } = {},
+    } = client
+    sendMessage([{
+        description: `**CDP Generated:** ${formatCDP(cdp)}`,
+        timestamp: now,
+        title: 'Payment Received! :partying_face:',
+        url: `${origin}/verify/${cdp}`
+    }]).catch(() => console.log('[CDP] [handleFinalizePayment] Failed to send Discord message.'))
 }
 handleFinalizePayment.params = [
     {
