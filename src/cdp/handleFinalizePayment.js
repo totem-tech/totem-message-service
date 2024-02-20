@@ -1,6 +1,7 @@
 import {
     generateHash,
     objClean,
+    objSort,
     objWithoutKeys,
 } from '../utils/utils'
 import { TYPES } from '../utils/validator'
@@ -14,10 +15,14 @@ import { checkCompleted } from './handleDraft'
 import { setAccessCode } from './handleSetAccessCode'
 import { sign } from './nacl'
 import { checkPaid } from './stripe'
-import { accessCodeHashed, generateAccessCode, generateCDP } from './utils'
+import {
+    accessCodeHashed,
+    generateAccessCode,
+    generateCDP
+} from './utils'
 import { defs, messages } from './validation'
 
-// ToDo: on renew, DO NOT generate new identity
+// ToDo: on renew, DO NOT generate new identity or accesscode
 export default async function handleFinalizePayment(
     accessToken,
     intentId,
@@ -59,6 +64,8 @@ export default async function handleFinalizePayment(
     const draft = await dbCdpDrafts.get(companyId)
     // this should never occur, but still need to check to avoid 
     if (!draft) throw new Error('Unexpected error occured! Draft not found for companyId: ' + companyId)
+
+    // ToDo: validate & clean ALL step values in draft
     if (!checkCompleted(draft)) return callback('Incomplete or unfinished draft')
 
     const acHash = accessCode || accessCodeHashed('', companyId)
@@ -100,7 +107,7 @@ export default async function handleFinalizePayment(
         .map(x => x.name)
     const related2DArr = draft['related-companies']?.items || []
     const relatedCompanies = [...new Map(related2DArr).values()]
-        .map(x => objClean(x, relatedProps))
+        .map(x => objSort(x, relatedProps))
     const uboProps = defs
         .uboArr
         .items
@@ -108,8 +115,8 @@ export default async function handleFinalizePayment(
         .map(x => x.name)
     const ubo2DArr = draft['ubo']?.items || []
     const ubos = [...new Map(ubo2DArr).values()]
-        .map(x => objClean(x, uboProps))
-    const contactDetails = objClean(
+        .map(x => objSort(x, uboProps))
+    const contactDetails = objSort(
         draft['contact-details']?.values || {},
         defs
             .contactDetails
@@ -131,19 +138,13 @@ export default async function handleFinalizePayment(
         contactDetails,
         payment: draft.payment?.values || {},
     }
-    signatureData = objClean(
-        signatureData,
-        Object
-            .keys(signatureData)
-            .sort(),
-    )
     const fingerprint = generateHash(
         JSON.stringify(signatureData),
         'blake2',
         256,
     )
     const signature = sign(fingerprint)
-    const cdpEntryUpdated = {
+    let cdpEntryUpdated = {
         ...cdpEntry,
         cdp,
         cdpIssueCount: (cdpEntry.cdpIssueCount || 0) + 1,
@@ -179,27 +180,13 @@ export default async function handleFinalizePayment(
 
     try {
         // attempt to save both CDP/accessCode entry and company entry
-        await dbCdpAccessCodes.set(
-            companyId,
-            objClean(
-                cdpEntryUpdated,
-                Object
-                    .keys(cdpEntryUpdated)
-                    .sort()
-            )
-        )
-        await dbCompanies.set(
-            companyId,
-            objClean(companyUpdated,
-                Object
-                    .keys(companyUpdated)
-                    .sort(),
-            )
-        )
+        await dbCdpAccessCodes.set(companyId, cdpEntryUpdated)
         await dbCdpStripeIntents.set(intentLog._id, {
             ...intentLog,
+            tsCompleted: now,
             status: 'completed',
         })
+        await dbCompanies.set(companyId, companyUpdated)
         await dbCdpDrafts.set(companyId, {
             ...draft,
             status: 'completed',
@@ -208,6 +195,7 @@ export default async function handleFinalizePayment(
         // if any of them fails to save, revert both of them
         await dbCdpAccessCodes.set(companyId, cdpEntry)
         await dbCompanies.set(companyId, company)
+        await dbCdpStripeIntents.set(intentLog._id, intentLog)
         throw new Error(err)
     }
     const result = {
