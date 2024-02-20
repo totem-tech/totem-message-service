@@ -1,11 +1,20 @@
-import { generateHash, isHex, isStr } from '../utils/utils'
+import { isHex, isStr } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import { dbCdpAccessCodes, dbCompanies } from './couchdb'
 import { encrypt, getIdentity } from './nacl'
-import { accessCodeHashed, generateAccessCode, sanitiseAccessCode } from './utils'
+import {
+    accessCodeHashed,
+    generateAccessCode,
+    sanitiseAccessCode
+} from './utils'
 import { defs, messages } from './validation'
 
-export const setAccessCode = async (compIdOrReg, accessCode, save = true) => {
+export const setAccessCode = async (
+    compIdOrReg,
+    accessCode,
+    save = true,
+    codeGeneratedBy
+) => {
     const company = isHex(compIdOrReg)
         ? await dbCompanies.get(compIdOrReg)
         : await dbCompanies.find({ registrationNumber: compIdOrReg })
@@ -31,6 +40,7 @@ export const setAccessCode = async (compIdOrReg, accessCode, save = true) => {
         companyId,
         encrypted: {
             accessCode: encrypt(accessCode),
+            accessCodeGeneratedBy: codeGeneratedBy,
             serverIdentity, // store the identity to easily associate the encryption keypair with
         },
         registrationNumber,
@@ -51,7 +61,9 @@ export const setAccessCode = async (compIdOrReg, accessCode, save = true) => {
             ...obj,
             [key]: newEntry[key],
         }), {})
-    save && await dbCdpAccessCodes.set(companyId, newEntry)
+
+    if (save) await dbCdpAccessCodes.set(companyId, newEntry)
+
     return [
         null,
         generateCode ? 1 : 2,
@@ -66,7 +78,13 @@ export default async function handleSetAccessCode(
     saveEntry,
     callback
 ) {
-    const [err, ...rest] = await setAccessCode(companyId, accessCode, saveEntry)
+    const [client, user] = this
+    const [err, ...rest] = await setAccessCode(
+        companyId,
+        accessCode,
+        saveEntry,
+        user._id,
+    )
     callback(err, {
         accessCode: rest[2],
         status: rest[0],

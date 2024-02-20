@@ -70,6 +70,7 @@ export const USER_CAPTCHA = 'captcha'
 export const SYSTEM_IDS = Object.freeze([
     // captcha verifier
     'captcha',
+    'cdp',
     // catch-all type support user ID
     'support',
     // Troll bolx user IDs
