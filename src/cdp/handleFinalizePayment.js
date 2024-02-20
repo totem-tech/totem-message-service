@@ -239,10 +239,7 @@ handleFinalizePayment.result = {
     properties: [
         defs.cdp,
         defs.cdpEntry,
-        {
-            ...defs.accessCode,
-            description: 'Access code will ONLY be provided for uninvited companies where access codes are generated.'
-        }
+        defs.accessCode,
     ],
     type: TYPES.object,
 }

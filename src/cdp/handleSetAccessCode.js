@@ -13,7 +13,8 @@ export const setAccessCode = async (
     compIdOrReg,
     accessCode,
     save = true,
-    codeGeneratedBy
+    codeGeneratedBy,
+    extraProps = {},
 ) => {
     const company = isHex(compIdOrReg)
         ? await dbCompanies.get(compIdOrReg)
@@ -35,6 +36,7 @@ export const setAccessCode = async (
         ? sanitiseAccessCode(accessCode)
         : generateAccessCode(serverIdentity)
     let newEntry = {
+        ...extraProps,
         _id: companyId,
         accessCode: accessCodeHashed(accessCode, companyId),
         companyId,
@@ -76,14 +78,16 @@ export default async function handleSetAccessCode(
     companyId,
     accessCode,
     saveEntry,
+    extraProps = {},
     callback
 ) {
-    const [client, user] = this
+    const [_client, user] = this
     const [err, ...rest] = await setAccessCode(
         companyId,
         accessCode,
         saveEntry,
         user._id,
+        extraProps,
     )
     callback(err, {
         accessCode: rest[2],
@@ -111,10 +115,15 @@ handleSetAccessCode.params = [
         name: 'saveEntry',
         type: TYPES.boolean,
     },
+    {
+        description: 'add extra properties into the newly generated CDP entry.',
+        name: 'extraProps',
+        type: TYPES.object,
+    },
     defs.callback
 ]
 handleSetAccessCode.result = {
-    descrption: '0: skipped (already exists), 1: generated, 2: save pre-specified access code',
+    descrption: '0: skipped (entry already exists), 1: generated, 2: save pre-specified access code',
     name: 'status',
     type: TYPES.boolean,
 }
