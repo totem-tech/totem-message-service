@@ -165,6 +165,7 @@ export default async function handleFinalizePayment(
         identity,
         name: company.name,
         signature,
+        status: 'active',
         tsCdpFirstIssued: now, // first time CDP has been issued
         tsValidFrom: now,
         tsValidTo,
