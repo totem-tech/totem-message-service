@@ -1,4 +1,5 @@
 import {
+    arrSort,
     generateHash,
     objClean,
     objSort,
@@ -13,7 +14,7 @@ import {
 } from './couchdb'
 import { checkCompleted } from './handleDraft'
 import { setAccessCode } from './handleSetAccessCode'
-import { sign } from './nacl'
+import { decrypt, sign } from './nacl'
 import { checkPaid } from './stripe'
 import {
     accessCodeHashed,
@@ -78,107 +79,102 @@ export default async function handleFinalizePayment(
         ? []
         : await setAccessCode(companyId, generateAccessCode(identity))
     if (err) return callback(err)
-
-    cdpEntry ??= newCdpEntry
     const codeGenerated = status === 1 // for uninvited users. include it with response
-    const now = new Date().toISOString()
-    let companyUpdated = {
-        identityOld: company.identity, // previous identity
-        ...company,
-        cdp,
-        identity, // user generated identity
-
-        // user submitted data
-        regAddress: {
-            ...company.regAddress,
-            ...draft.address?.values
-        },
-        vatNumber: draft.hmrc?.values?.vatNumber || '',
-    }
-    cdp = cdp || generateCDP(
-        identity,
-        company.countryCode,
-        company.accounts.accountRefMonth
-    )
-    const relatedProps = defs
-        .relatedCompanyArr
-        .items
-        .properties
-        .map(x => x.name)
-    const related2DArr = draft['related-companies']?.items || []
-    const relatedCompanies = [...new Map(related2DArr).values()]
-        .map(x => objSort(x, relatedProps))
-    const uboProps = defs
-        .uboArr
-        .items
-        .properties
-        .map(x => x.name)
-    const ubo2DArr = draft['ubo']?.items || []
-    const ubos = [...new Map(ubo2DArr).values()]
-        .map(x => objSort(x, uboProps))
-    const contactDetails = objSort(
-        draft['contact-details']?.values || {},
-        defs
-            .contactDetails
-            .properties
-            .map(x => x.name)
-    )
-    let signatureData = {
-        ...objWithoutKeys(companyUpdated, ['tsUpdated']),
-        cdp,
-        identity, // user generated identity
-        // user submitted data
-        regAddress: {
-            ...company.regAddress,
-            ...draft.address?.values
-        },
-        vatNumber: draft.hmrc?.values?.vatNumber || '',
-        ubos,
-        relatedCompanies,
-        contactDetails,
-        payment: draft.payment?.values || {},
-    }
-    const fingerprint = generateHash(
-        JSON.stringify(signatureData),
-        'blake2',
-        256,
-    )
-    const signature = sign(fingerprint)
-    let cdpEntryUpdated = {
-        ...cdpEntry,
-        cdp,
-        cdpIssueCount: (cdpEntry.cdpIssueCount || 0) + 1,
-        encrypted: {
-            ...cdpEntry.encrypted,
-            userGeneratedData: objClean(
-                generatedData,
-                defs
-                    .generatedData
-                    .properties
-                    .map(x => x.name)
-            ),
-        },
-        fingerprint,
-        identity,
-        name: company.name,
-        signature,
-        tsCdpFirstIssued: now, // first time CDP has been issued
-        tsValidFrom: now,
-        tsValidTo,
-
-        // user submitted data
-        regAddress: {
-            ...company.regAddress,
-            ...draft.address?.values
-        },
-        vatNumber: draft.hmrc?.values?.vatNumber || '',
-        ubos,
-        relatedCompanies,
-        contactDetails,
-        payment: draft.payment?.values || {},
-    }
 
     try {
+        cdpEntry ??= newCdpEntry
+        const now = new Date().toISOString()
+        cdp = cdp || generateCDP(
+            identity,
+            company.countryCode,
+            company.accounts.accountRefMonth
+        )
+        const relatedProps = defs
+            .relatedCompanyArr
+            .items
+            .properties
+            .map(x => x.name)
+        const related2DArr = draft['related-companies']?.items || []
+        const relatedCompanies = [...new Map(related2DArr).values()]
+            .map(x => objSort(x, relatedProps))
+        const uboProps = defs
+            .uboArr
+            .items
+            .properties
+            .map(x => x.name)
+        const ubo2DArr = draft['ubo']?.items || []
+        const ubos = [...new Map(ubo2DArr).values()]
+            .map(x => objSort(x, uboProps))
+        const contactDetails = objSort(
+            draft['contact-details']?.values || {},
+            defs
+                .contactDetails
+                .properties
+                .map(x => x.name)
+        )
+        const regAddress = arrSort({
+            ...company.regAddress,
+            ...draft.address?.values
+        })
+        let companyUpdated = {
+            identityOld: company.identity, // previous identity
+            ...company,
+            cdp,
+            identity, // user generated identity
+
+            // user submitted data
+            regAddress,
+            vatNumber: draft.hmrc?.values?.vatNumber || '',
+        }
+        let signatureData = {
+            ...objWithoutKeys(companyUpdated, ['tsUpdated']),
+            cdp,
+            identity, // user generated identity
+            // user submitted data
+            regAddress,
+            vatNumber: draft.hmrc?.values?.vatNumber || '',
+            ubos,
+            relatedCompanies,
+            contactDetails,
+            payment: draft.payment?.values || {},
+        }
+        const fingerprint = generateHash(
+            JSON.stringify(signatureData),
+            'blake2',
+            256,
+        )
+        const signature = sign(fingerprint)
+        let cdpEntryUpdated = {
+            ...cdpEntry,
+            cdp,
+            cdpIssueCount: (cdpEntry.cdpIssueCount || 0) + 1,
+            encrypted: {
+                ...cdpEntry.encrypted,
+                userGeneratedData: objClean(
+                    generatedData,
+                    defs
+                        .generatedData
+                        .properties
+                        .map(x => x.name)
+                ),
+            },
+            fingerprint,
+            identity,
+            name: company.name,
+            signature,
+            tsCdpFirstIssued: now, // first time CDP has been issued
+            tsValidFrom: now,
+            tsValidTo,
+
+            // user submitted data
+            regAddress,
+            vatNumber: draft.hmrc?.values?.vatNumber || '',
+            ubos,
+            relatedCompanies,
+            contactDetails,
+            // ToDo: validate
+            payment: objSort(draft.payment?.values || {}),
+        }
         // attempt to save both CDP/accessCode entry and company entry
         await dbCdpAccessCodes.set(companyId, cdpEntryUpdated)
         await dbCdpStripeIntents.set(intentLog._id, {
@@ -191,19 +187,27 @@ export default async function handleFinalizePayment(
             ...draft,
             status: 'completed',
         })
+        const result = {
+            cdp,
+            cdpEntry: objWithoutKeys(cdpEntryUpdated, ['encrypted']),
+            ...codeGenerated && {
+                accessCode: decrypt(
+                    cdpEntry
+                        ?.encrypted
+                        ?.accessCode
+                )
+            },
+        }
+        callback(null, result)
     } catch (err) {
         // if any of them fails to save, revert both of them
-        await dbCdpAccessCodes.set(companyId, cdpEntry)
+        codeGenerated
+            ? await dbCdpAccessCodes.delete(companyId)
+            : await dbCdpAccessCodes.set(companyId, cdpEntry)
         await dbCompanies.set(companyId, company)
         await dbCdpStripeIntents.set(intentLog._id, intentLog)
         throw new Error(err)
     }
-    const result = {
-        cdp,
-        cdpEntry: objWithoutKeys(cdpEntryUpdated, ['encrypted']),
-        ...codeGenerated && { accessCode: accessToken },
-    }
-    callback(null, result)
 }
 handleFinalizePayment.params = [
     {
