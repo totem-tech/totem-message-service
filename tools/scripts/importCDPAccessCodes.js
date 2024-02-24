@@ -10,13 +10,17 @@ export default async function importCDPAccessCodes(
     ignoreIfExists = (process.env.IGNORE_IF_EXISTS || '').toLowerCase() === 'true',
     couchDBUrl = process.env.CouchDB_URL,
     cdpKeyData = process.env.CDP_KEY_DATA,
-    createdByUsername = process.env.CDP_CREATED_BY_USERNAME || 'script'
+    createdByUsername = process.env.CDP_CREATED_BY_USERNAME || 'script',
+    printPostCodes = (process.env.CDP_PRINT_POSTCODES || '') === 'true'
 ) {
+
+    const csvEntries = await csv().fromFile(csvFilePath)
+    if (printPostCodes) return console.log(JSON.stringify(csvEntries.map(x => x.regaddress_postcode), null, 4))
+
     if (!csvFilePath || !couchDBUrl || !cdpKeyData) throw new Error('Missing environment variable(s)')
 
     await setup()
 
-    const csvEntries = await csv().fromFile(csvFilePath)
     const regNums = arrUnique(
         csvEntries
             .map(x => x.companynumber.trim())
