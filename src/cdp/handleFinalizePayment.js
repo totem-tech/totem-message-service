@@ -133,6 +133,10 @@ export default async function handleFinalizePayment(
         // user submitted data
         regAddress,
         vatNumber: draft.hmrc?.values?.vatNumber || '',
+        tsCreated: company.tsCreated
+            // first batch of companies entries were stored without timestamps
+            // set a timestamp before the start of the 2nd batch
+            || '2019-11-01T00:00'
     }
     let signatureData = {
         ...objWithoutKeys(companyUpdated, ['tsUpdated']),
