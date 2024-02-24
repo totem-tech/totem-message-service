@@ -9,7 +9,7 @@ import { defs } from './validation'
  * @param {Function}   callback 
  */
 export default async function handleCheckCreate(companyId, callback) {
-    const entry = await dbCdpAccessCodes.find({ companyId })
+    const entry = await dbCdpAccessCodes.get(companyId)
 
     callback(null, !entry?.accessCode)
 }

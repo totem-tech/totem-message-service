@@ -10,7 +10,7 @@ export default async function handleCDPCompanySearch(regNum, callback) {
     const company = await dbCompanies.find(selector)
     if (!company || !!company.addedBy) return callback(messages.invalidRegNum)
 
-    const cdpEntry = await dbCdpAccessCodes.find(selector)
+    const cdpEntry = await dbCdpAccessCodes.get(company._id)
     const publicData = getPublicData(cdpEntry || {}, company)
     callback(null, publicData)
 }

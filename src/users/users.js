@@ -88,6 +88,7 @@ export const SYSTEM_IDS = Object.freeze([
     'robot',
     'system',
     'totem',
+    'script',
 ])
 // User IDs reserved for Totem
 export const RESERVED_IDS = Object.freeze([

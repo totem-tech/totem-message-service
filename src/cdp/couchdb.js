@@ -10,37 +10,37 @@ const accessCodesMiddleware = (docs = [], save) => {
 }
 export const dbCdpAccessCodes = new CouchDBStorage(
     null,
-    'cdp_access-codes',
+    'cdp_access_codes',
     [],
     accessCodesMiddleware,
 )
 export const dbCdpDrafts = new CouchDBStorage(null, 'cdp_drafts')
 export const dbCdpLog = new CouchDBStorage(null, 'cdp_log')
 export const dbCdpReports = new CouchDBStorage(null, 'cdp_reports')
-export const dbCdpStripeIntents = new CouchDBStorage(null, 'cdp_stripe-intents')
+export const dbCdpStripeIntents = new CouchDBStorage(null, 'cdp_stripe_intents')
 export const dbCompanies = new CouchDBStorage(null, 'companies')
 
 export const setup = async () => {
     // create indexes. Ignore if already exists
     await dbCdpAccessCodes.createIndexes([
-        {
-            index: {
-                fields: [
-                    'accessCode',
-                    'companyId',
-                    'registrationNumber',
-                ]
-            },
-            name: 'accessCode-companyId-registrationNumber-index',
-        },
+        // { // expensive query, use registrationNumber index instead
+        //     index: {
+        //         fields: [
+        //             'accessCode',
+        //             'companyId',
+        //             'registrationNumber',
+        //         ]
+        //     },
+        //     name: 'accessCode-companyId-registrationNumber-index',
+        // },
         {
             index: { fields: ['cdp'] },
             name: 'cdp-index',
         },
-        {
-            index: { fields: ['companyId'] },
-            name: 'companyId-index',
-        },
+        // { // redundant. companyId is the document _id
+        //     index: { fields: ['companyId'] },
+        //     name: 'companyId-index',
+        // },
         {
             index: { fields: ['registrationNumber'] },
             name: 'registrationNumber-index',
