@@ -14,7 +14,7 @@ import {
 } from './couchdb'
 import { checkCompleted } from './handleDraft'
 import { setAccessCode } from './handleSetAccessCode'
-import { decrypt, sign } from './nacl'
+import { decrypt, sign, verify } from './nacl'
 import { checkPaid } from './stripe'
 import {
     accessCodeHashed,
@@ -156,6 +156,19 @@ export default async function handleFinalizePayment(
         256,
     )
     const signature = sign(fingerprint)
+    
+    // ToDo Verify signatire is good, and and extract public key to return to the front end for display in the 
+    
+    // const publicKey = sign.keypairFromSecretKey(
+    //     sign.keypair().secretKey
+    // ).publicKey
+    // const verified = verify(
+    //     fingerprint,
+    //     signature,
+    //     pairSign.publicKey
+    // )
+    // if (!verified) throw new Error('CDP: signing keypair setup failed')    
+
     let cdpEntryUpdated = {
         ...cdpEntry,
         cdp,
@@ -170,7 +183,9 @@ export default async function handleFinalizePayment(
                     .map(x => x.name)
             ),
         },
-        fingerprint,
+        // ToDo add public key to cdpEntry
+        // publicKey,
+        fingerprint, // seems to be broken for front-end
         identity,
         name: company.name,
         signature,
