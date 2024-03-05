@@ -2,7 +2,7 @@ import { strFill } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import { defs } from './validation'
 
-export default async function handleCalcValidityPeriod(accountRefMonth, companyId, callback) {
+export const calcValidityPeriod = async (accountRefMonth, companyId) => {
     let year = 2025 // ToDo: will have to rework this for renewals
     let month = accountRefMonth + 1
     const isDecember = month === 13
@@ -16,6 +16,11 @@ export default async function handleCalcValidityPeriod(accountRefMonth, companyI
     const dateStr = `${year}-${strFill(`${month}`, 2, '0')}`
     // set validity to the end of the month and 23:59:59 hours.
     const tsValidTo = new Date(new Date(dateStr) - 1).toISOString()
+    return tsValidTo
+}
+
+export default async function handleCalcValidityPeriod(accountRefMonth, companyId, callback) {
+    const tsValidTo = await calcValidityPeriod(accountRefMonth, companyId)
 
     callback(null, tsValidTo)
 }

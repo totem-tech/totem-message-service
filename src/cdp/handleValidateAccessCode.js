@@ -14,13 +14,11 @@ export default async function handleValidateAccessCode(
 
     accessCode = sanitiseAccessCode(accessCode)
     const entry = await dbCdpAccessCodes.get(companyId)
-    console.log({ entry, accessCode, companyId })
     if (!entry) return callback(messages.invalidCodeOrReg)
 
     const valid = entry.registrationNumber === registrationNumber
         && entry.accessCode === accessCodeHashed(accessCode, companyId)
 
-    console.log({ valid })
     if (!valid) return callback(messages.invalidCodeOrReg)
 
     if (valid && !entry.tsFirstAccessed) {

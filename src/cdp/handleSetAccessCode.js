@@ -56,13 +56,8 @@ export const setAccessCode = async (
         tsValidFrom: null,
         tsValidTo: null,
     }
-    newEntry = Object
-        .keys(newEntry)
-        .sort()
-        .reduce((obj, key) => ({
-            ...obj,
-            [key]: newEntry[key],
-        }), {})
+
+    console.log('CDP', { newEntry })
 
     if (save) await dbCdpAccessCodes.set(companyId, newEntry)
 

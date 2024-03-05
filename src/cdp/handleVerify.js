@@ -7,8 +7,8 @@ export default async function handleVerify(cdp, callback) {
     const cdpEntry = await dbCdpAccessCodes.find(selector)
     if (!cdpEntry) return callback(messages.invalidCdp)
 
-    const compnay = await dbCompanies.get(cdpEntry._id)
-    const publicData = getPublicData(cdpEntry, compnay || {})
+    const company = await dbCompanies.get(cdpEntry._id)
+    const publicData = getPublicData(cdpEntry, company || {})
     callback(null, publicData)
 }
 handleVerify.description = 'Verify CDP and fetch company public information'

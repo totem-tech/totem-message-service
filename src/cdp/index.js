@@ -11,9 +11,10 @@ import handleReport from './handleReport'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
 import { setup as setupNacl } from './nacl'
-import handleStripeCreateIntent, {
+import {
     handleStripeCheckPaid,
     handleStripeClientAPIKey,
+    handleStripeCreateIntent,
     setupStripe
 } from './stripe'
 

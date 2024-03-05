@@ -79,24 +79,24 @@ export const generateCDP = (identity, countryCode, accountRefMonth) => {
     return cdp
 }
 
-export const getPublicData = (cdpEntry, companyEntry) => isObj(cdpEntry)
-    && objClean(
-        {
-            ...companyEntry,
-            ...cdpEntry,
-            // in-case cdpEntry does not exist
-            [defs.companyId.name]: companyEntry?._id ?? cdpEntry.companyId,
-            contactDetails: {
-                url: cdpEntry?.contactDetails?.url,
-            },
+export const generateInvoiceNumber = (countryCode, cdp, cdpIssueCount) => `IN${countryCode}${cdp}-${cdpIssueCount}`
+
+export const getPublicData = (cdpEntry, companyEntry) => objClean(
+    {
+        ...isObj(companyEntry) && companyEntry,
+        ...isObj(cdpEntry) && cdpEntry,
+        // in-case cdpEntry does not exist
+        [defs.companyId.name]: companyEntry?._id || cdpEntry?.companyId,
+        contactDetails: {
+            url: cdpEntry?.contactDetails?.url,
         },
-        defs
-            .publicData
-            .properties
-            .map(x => x.name)
-            .filter(Boolean)
-    )
-    || undefined
+    },
+    defs
+        .publicData
+        .properties
+        .map(x => x.name)
+        .filter(Boolean)
+)
 
 /**
  * @name    randomCase

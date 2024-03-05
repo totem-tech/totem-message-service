@@ -2,6 +2,7 @@
  * All validation type definitions.
  * These are also used as event parameter metadata.
  */
+import { arrSort } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 
 export const messages = {
@@ -47,13 +48,17 @@ const cdp = {
     required: true,
     type: TYPES.string,
 }
+const cdpIssueCount = {
+    description: 'Number of time CDP has been issued/renewed',
+    name: 'cdpIssueCount',
+    type: TYPES.integer,
+}
 const companyId = {
     customMessages: messages.invalidCompany,
     name: 'companyId',
     required: true,
     type: TYPES.hash,
 }
-// ToDo: set properties
 const contactDetails = {
     name: 'contactDetails',
     properties: [
@@ -74,6 +79,10 @@ const contactDetails = {
         },
     ],
     type: TYPES.object,
+}
+const fingerprint = {
+    name: 'fingerprint',
+    type: TYPES.hash,
 }
 const generatedData = {
     description: 'Generated Blockchain identity and encrypted data in an object.',
@@ -169,6 +178,11 @@ const regAddress = {
         {
             maxLegnth: 16,
             name: 'postCode',
+            type: TYPES.string,
+        },
+        {
+            maxLegnth: 32,
+            name: 'registeredCountry',
             type: TYPES.string,
         },
     ],
@@ -281,6 +295,7 @@ const publicData = {
             type: TYPES.object,
         },
         cdp,
+        cdpIssueCount,
         companyId,
         contactDetails,
         {
@@ -291,10 +306,7 @@ const publicData = {
             name: 'countryOfOrigin',
             type: TYPES.string,
         },
-        {
-            name: 'fingerprint',
-            type: TYPES.hex,
-        },
+        fingerprint,
         {
             description: 'Blockchain identity/address',
             name: 'identity',
@@ -309,8 +321,15 @@ const publicData = {
         regNum,
         signature,
         {
-            maxLegnth: 24,  // eg: "2001-01-01T01:01:01.001Z"
             name: 'tsCdpFirstIssued',
+            type: TYPES.date,
+        },
+        {
+            name: 'tsValidFrom',
+            type: TYPES.date,
+        },
+        {
+            name: 'tsValidTo',
             type: TYPES.date,
         },
         {
@@ -324,17 +343,21 @@ const publicData = {
 }
 const cdpEntry = {
     name: 'cdpEntry',
-    properties: [
-        cdp,
-        companyId,
-        contactDetails,
-        regAddress,
+    properties: arrSort([
+        ...publicData.properties,
+        {
+            description: 'Number of time CDP has been updated since last issued/renewed or ',
+            name: 'cdpRemainingUpdateCount',
+            type: TYPES.integer,
+        },
+        {
+            description: 'Most recent CDP issuance payment references and billing details.',
+            name: 'payment',
+            type: TYPES.object,
+        },
         relatedCompanyArr,
-        regNum,
-        signature,
         uboArr,
-        vatNum
-    ],
+    ], 'name'),
     type: TYPES.object
 }
 export const defs = {

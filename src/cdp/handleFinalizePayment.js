@@ -1,4 +1,5 @@
 import { sendMessage } from '../utils/discordHelper'
+import { setTexts } from '../utils/languageHelper'
 import {
     generateHash,
     objClean,
@@ -14,19 +15,51 @@ import {
 } from './couchdb'
 import { checkCompleted } from './handleDraft'
 import { setAccessCode } from './handleSetAccessCode'
-import { decrypt, sign } from './nacl'
-import { checkPaid } from './stripe'
+import { decrypt, getPublicKeys, sign } from './nacl'
+import { stripeCheckPaid } from './stripe'
 import {
     accessCodeHashed,
     formatCDP,
     generateAccessCode,
-    generateCDP
+    generateCDP,
+    generateInvoiceNumber
 } from './utils'
 import { defs, messages } from './validation'
 
 const CDP_DISCORD_USERNAME = process.env.CDP_DISCORD_USERNAME
 const CDP_DISCORD_WEBHOOK_URL = process.env.CDP_DISCORD_WEBHOOK_URL || undefined
 const CDP_DISCORD_AVATAR_URL = process.env.CDP_DISCORD_AVATAR_URL || undefined
+const NUM_FREE_UPDATES = 5
+
+const texts = {
+    draft404: 'Unexpected error occured! Draft not found for companyId',
+    draftIncomplete: 'incomplete or unfinished draft',
+    paymentIncomplete: 'payment not completed',
+}
+setTexts(texts)
+
+const SIGNATURE_KEYS = [
+    '_id',
+    'accounts',
+    'cdp',
+    'companyCategory',
+    'companyStatus',
+    'contactDetails',
+    'countryCode',
+    'countryOfOrigin',
+    'dissolutionDate',
+    'identity',
+    'identityOld',
+    'incorporationDate',
+    'limitedPartnerships',
+    'name',
+    'payment',
+    'regAddress',
+    'registrationNumber',
+    'relatedCompanies',
+    'ubos',
+    'vatNumber',
+]
 
 // ToDo: on renew, DO NOT generate new identity or accesscode
 export default async function handleFinalizePayment(
@@ -35,8 +68,8 @@ export default async function handleFinalizePayment(
     companyId,
     callback
 ) {
-    const [paid, intentLog] = await checkPaid(intentId, companyId)
-    if (!paid) return callback('Payment not completed')
+    const [paid, intentLog] = await stripeCheckPaid(intentId, companyId)
+    if (!paid) return callback(texts.paymentIncomplete)
     const {
         metadata: {
             companyId: companyIdMeta,
@@ -53,7 +86,7 @@ export default async function handleFinalizePayment(
     let cdpEntry = await dbCdpAccessCodes.get(companyId)
     let {
         accessCode = null,
-        cdp
+        cdp,
     } = cdpEntry || {}
     const completed = cdp
         && accessCode
@@ -69,11 +102,12 @@ export default async function handleFinalizePayment(
 
     const draft = await dbCdpDrafts.get(companyId)
     // this should never occur, but still need to check to avoid 
-    if (!draft) throw new Error('Unexpected error occured! Draft not found for companyId: ' + companyId)
+    if (!draft) throw new Error(`${texts.draft404}: ${companyId}`)
 
     // ToDo: validate & clean ALL step values in draft
-    if (!checkCompleted(draft)) return callback('Incomplete or unfinished draft')
+    if (!checkCompleted(draft)) return callback(texts.draftIncomplete)
 
+    // for uninvited users use empty string instead of salted access code
     const acHash = accessCode || accessCodeHashed('', companyId)
     const tokenValid = accessCodeHashed(acHash, intentId) === accessToken
     if (!tokenValid) return callback(messages.invalidToken)
@@ -90,7 +124,7 @@ export default async function handleFinalizePayment(
         )
     if (err) return callback(err)
     const codeGenerated = status === 1 // for uninvited users. include it with response
-    cdpEntry ??= newCdpEntry
+    cdpEntry = newCdpEntry || cdpEntry
     const now = new Date().toISOString()
     cdp = cdp || generateCDP(
         identity,
@@ -124,6 +158,7 @@ export default async function handleFinalizePayment(
         ...company.regAddress,
         ...draft.address?.values
     })
+    const vatNumber = draft.hmrc?.values?.vatNumber || ''
     let companyUpdated = {
         identityOld: company.identity, // previous identity
         ...company,
@@ -132,34 +167,37 @@ export default async function handleFinalizePayment(
 
         // user submitted data
         regAddress,
-        vatNumber: draft.hmrc?.values?.vatNumber || '',
+        vatNumber,
         tsCreated: company.tsCreated
             // first batch of companies entries were stored without timestamps
             // set a timestamp before the start of the 2nd batch
             || '2019-11-01T00:00'
     }
-    let signatureData = {
+    let signatureData = objSort({
         ...objWithoutKeys(companyUpdated, ['tsUpdated']),
         cdp,
         identity, // user generated identity
         // user submitted data
         regAddress,
-        vatNumber: draft.hmrc?.values?.vatNumber || '',
+        vatNumber,
         ubos,
         relatedCompanies,
         contactDetails,
         payment: draft.payment?.values || {},
-    }
+    }, SIGNATURE_KEYS)
     const fingerprint = generateHash(
         JSON.stringify(signatureData),
         'blake2',
         256,
     )
     const signature = sign(fingerprint)
+
+    const cdpIssueCount = (cdpEntry?.cdpIssueCount || 0) + 1
     let cdpEntryUpdated = {
         ...cdpEntry,
         cdp,
-        cdpIssueCount: (cdpEntry.cdpIssueCount || 0) + 1,
+        cdpIssueCount,
+        cdpRemainingUpdateCount: NUM_FREE_UPDATES,
         encrypted: {
             ...cdpEntry.encrypted,
             userGeneratedData: objClean(
@@ -175,19 +213,55 @@ export default async function handleFinalizePayment(
         name: company.name,
         signature,
         status: 'active',
-        tsCdpFirstIssued: now, // first time CDP has been issued
+        tsCdpFirstIssued: cdpEntry.tsCdpFirstIssued || now, // first time CDP has been issued
         tsValidFrom: now,
         tsValidTo,
 
         // user submitted data
         regAddress,
-        vatNumber: draft.hmrc?.values?.vatNumber || '',
+        vatNumber,
         ubos,
         relatedCompanies,
         contactDetails,
         // ToDo: validate
-        payment: objSort(draft.payment?.values || {}),
+        payment: objClean({
+            ...draft.payment?.values || {},
+            amount: intentLog.amount,
+            currency: intentLog.currency,
+            invoiceNumber: generateInvoiceNumber(
+                company.countryCode,
+                cdp,
+                cdpIssueCount
+            ),
+            status: 'paid',
+            vat: 0 // in pennies
+        }, [
+            'amount',
+            'addressLine1',
+            'addressLine2',
+            'addressLine3',
+            'countryCode',
+            'county',
+            'currency',
+            'email',
+            'invoiceNumber',
+            'nameOnCard',
+            'paymentIntentId',
+            'postCode',
+            'postTown',
+            'standardCountry',
+            'status',
+            'town',
+            'vat',
+        ]),
     }
+
+    console.log('CDP Signature keys:', Object.keys(signatureData))
+    console.log({
+        company: objSort(company),
+        cdpEntry: objSort(cdpEntry || {}),
+        cdpEntryUpdated: objSort(cdpEntryUpdated || {}),
+    })
     try {
         // attempt to save both CDP/accessCode entry and company entry and update intent & draft
         await dbCdpAccessCodes.set(companyId, cdpEntryUpdated)
@@ -209,7 +283,7 @@ export default async function handleFinalizePayment(
             ?.accessCode
         const result = {
             ...!!encryptedCode && {
-                accessCode: decrypt(encryptedCode)
+                accessCode: decrypt(encryptedCode),
             },
             cdp,
             cdpEntry: objWithoutKeys(cdpEntryUpdated, ['encrypted']),

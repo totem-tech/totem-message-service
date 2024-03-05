@@ -31,25 +31,25 @@ export default async function handleLogProgress(
         registrationNumber
     } = !isObj(selector)
             ? { registrationNumber: selector }
-            : selector || {}
+            : selector
     const findOrGet = (db, cid = companyId) => cid
         ? db.get(cid)
         : db.find({ registrationNumber })
     const company = await findOrGet(dbCompanies)
     if (!company) return callback(messages.invalidCompany, false)
 
-    const entry = await findOrGet(dbCdpAccessCodes, company._id)
-    const { accessCode: code } = entry || {}
+    const cdpEntry = await findOrGet(dbCdpAccessCodes, company._id)
+    const { accessCode: code } = cdpEntry || {}
     const codeValid = !code // uninivted user
         || accessCodeHashed(accessCode, companyId) === code
     codeValid && await dbCdpLog.set(null, {
-        create: !entry.accessCode, // create a new access code
-        registrationNumber: entry.registrationNumber,
+        create: !cdpEntry?.accessCode, // create a new access code
+        registrationNumber: company.registrationNumber,
         stepIndex,
         stepName,
         type: 'cdp-form-step',
     })
-    callback(null, !!entry)
+    callback(null, !!cdpEntry)
 }
 handleLogProgress.params = [
     {
