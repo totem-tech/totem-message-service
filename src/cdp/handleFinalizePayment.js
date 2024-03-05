@@ -15,9 +15,8 @@ import {
 } from './couchdb'
 import { checkCompleted } from './handleDraft'
 import { setAccessCode } from './handleSetAccessCode'
-import { decrypt, getPublicKeys, sign } from './nacl'
+import { decrypt, getPublicKeys, sign, verify } from './nacl'
 import { stripeCheckPaid } from './stripe'
-import { decrypt, sign, verify } from './nacl'
 import {
     accessCodeHashed,
     formatCDP,
