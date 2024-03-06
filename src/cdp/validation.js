@@ -222,7 +222,7 @@ const relatedCompany = {
     type: TYPES.object,
 }
 const relatedCompanyArr = {
-    maxLength: 100, // maximum 4 array items.
+    maxLength: 10, // maximum 10 array items.
     name: 'relatedCompanies',
     items: relatedCompany,
     type: TYPES.array,
