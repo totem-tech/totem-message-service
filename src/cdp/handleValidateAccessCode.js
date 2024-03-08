@@ -1,4 +1,4 @@
-import { isFn } from '../utils/utils'
+import { isFn, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
 import { dbCdpAccessCodes } from './couchdb'
 import { accessCodeHashed, sanitiseAccessCode } from './utils'
@@ -28,7 +28,13 @@ export default async function handleValidateAccessCode(
     }
     const result = !entry?.cdp
         ? valid
-        : entry
+        : objClean(
+            entry,
+            defs
+                .cdpEntry
+                .properties
+                .map(x => x.name),
+        )
     callback(null, result)
 }
 handleValidateAccessCode.description = 'Authenticate user & allow access to read & update public and private company information.'

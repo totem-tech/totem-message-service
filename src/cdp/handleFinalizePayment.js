@@ -174,7 +174,7 @@ export default async function handleFinalizePayment(
             || '2019-11-01T00:00'
     }
     let signatureData = objSort({
-        ...objWithoutKeys(companyUpdated, ['tsUpdated']),
+        ...companyUpdated,
         cdp,
         identity, // user generated identity
         // user submitted data
@@ -184,7 +184,7 @@ export default async function handleFinalizePayment(
         relatedCompanies,
         contactDetails,
         payment: draft.payment?.values || {},
-    }, SIGNATURE_KEYS)
+    }, SIGNATURE_KEYS) // removes any unwanted properties
     const fingerprint = generateHash(
         JSON.stringify(signatureData),
         'blake2',
