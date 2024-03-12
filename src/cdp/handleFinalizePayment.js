@@ -160,7 +160,9 @@ export default async function handleFinalizePayment(
     })
     const vatNumber = draft.hmrc?.values?.vatNumber || ''
     let companyUpdated = {
-        identityOld: company.identity, // previous identity
+        // does not override if already exists.
+        // will place these props at the bottom after sorting
+        zz_original_company: company, // preserve original company entry including original identity
         ...company,
         cdp,
         identity, // user generated identity
