@@ -303,6 +303,18 @@ export default async function handleFinalizePayment(
             redirect: false,
         }
         callback(null, result)
+
+        await dbCdpLog
+            .set(null, {
+                create: isCreate, // create a new access code
+                registrationNumber: company.registrationNumber,
+                stepIndex: 99, // last step
+                stepName: 'payment-finalization',
+                type: 'cdp-form-step',
+            })
+            .catch(err =>
+                console.log(new Date(), `[CDP] [Finalization] Failed to add log entry for succeccful CDP payment finalization of company number ${company.registrationNumber}.`, err)
+            )
     } catch (err) {
         // if any of them fails to save, revert both of them
         codeGenerated
@@ -313,18 +325,6 @@ export default async function handleFinalizePayment(
 
         throw new Error(err)
     }
-
-    await dbCdpLog
-        .set(null, {
-            create: isCreate, // create a new access code
-            registrationNumber: company.registrationNumber,
-            stepIndex: 99, // last step
-            stepName: 'payment-finalization',
-            type: 'cdp-form-step',
-        })
-        .catch(err =>
-            console.log(new Date(), `[CDP] [Finalization] Failed to add log entry for succeccful CDP payment finalization of company number ${company.registrationNumber}.`, err)
-        )
 
     const [client] = this
     const {
