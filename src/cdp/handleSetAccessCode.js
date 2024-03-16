@@ -57,8 +57,6 @@ export const setAccessCode = async (
         tsValidTo: null,
     }
 
-    console.log('CDP', { newEntry })
-
     if (save) await dbCdpAccessCodes.set(companyId, newEntry)
 
     return [

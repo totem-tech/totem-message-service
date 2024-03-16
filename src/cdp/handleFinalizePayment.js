@@ -10,6 +10,7 @@ import { TYPES } from '../utils/validator'
 import {
     dbCdpAccessCodes,
     dbCdpDrafts,
+    dbCdpLog,
     dbCdpStripeIntents,
     dbCompanies
 } from './couchdb'
@@ -88,6 +89,7 @@ export default async function handleFinalizePayment(
         accessCode = null,
         cdp,
     } = cdpEntry || {}
+    const isCreate = !accessCode
     const completed = cdp
         && accessCode
         && intentLog.status === 'completed'
@@ -273,12 +275,6 @@ export default async function handleFinalizePayment(
         ]),
     }
 
-    console.log('CDP Signature keys:', Object.keys(signatureData))
-    console.log({
-        company: objSort(company),
-        cdpEntry: objSort(cdpEntry || {}),
-        cdpEntryUpdated: objSort(cdpEntryUpdated || {}),
-    })
     try {
         // attempt to save both CDP/accessCode entry and company entry and update intent & draft
         await dbCdpAccessCodes.set(companyId, cdpEntryUpdated)
@@ -318,6 +314,18 @@ export default async function handleFinalizePayment(
         throw new Error(err)
     }
 
+    await dbCdpLog
+        .set(null, {
+            create: isCreate, // create a new access code
+            registrationNumber: company.registrationNumber,
+            stepIndex: 99, // last step
+            stepName: 'payment-finalization',
+            type: 'cdp-form-step',
+        })
+        .catch(err =>
+            console.log(new Date(), `[CDP] [Finalization] Failed to add log entry for succeccful CDP payment finalization of company number ${company.registrationNumber}.`, err)
+        )
+
     const [client] = this
     const {
         handshake: {
@@ -327,7 +335,7 @@ export default async function handleFinalizePayment(
                 origin = ''
             } = {},
         } = {},
-    } = client
+    } = client || {}
     sendMessage(
         [{
             description: `**CDP Generated:** ${formatCDP(cdp)}`,
@@ -341,7 +349,7 @@ export default async function handleFinalizePayment(
         CDP_DISCORD_USERNAME || hostname || host || origin,
         CDP_DISCORD_WEBHOOK_URL,
         CDP_DISCORD_AVATAR_URL,
-    ).catch(() => console.log(now, '[CDP] [Finalization] Failed to send Discord message.', { cdp }))
+    ).catch(() => console.log(new Date(), '[CDP] [Finalization] Failed to send Discord message.', { cdp }))
 }
 handleFinalizePayment.params = [
     {
