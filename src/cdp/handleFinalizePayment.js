@@ -69,6 +69,7 @@ export default async function handleFinalizePayment(
     companyId,
     callback
 ) {
+    console.log('finalize')
     const [paid, intentLog] = await stripeCheckPaid(intentId, companyId)
     if (!paid) return callback(texts.paymentIncomplete)
     const {
@@ -242,37 +243,18 @@ export default async function handleFinalizePayment(
         ubos,
         relatedCompanies,
         contactDetails,
-        // ToDo: validate
-        payment: objClean({
-            ...draft.payment?.values || {},
-            amount: intentLog.amount,
-            currency: intentLog.currency,
+        payment: {
+            amountDetails: intentLog?.amountDetails || {},
+            billingDetails: intentLog?.stipping,
             invoiceNumber: generateInvoiceNumber(
                 company.countryCode,
                 cdp,
                 cdpIssueCount
             ),
+            paymentId: intentLog._id,
+            paymentProvider: 'stripe',
             status: 'paid',
-            vat: 0 // in pennies
-        }, [
-            'amount',
-            'addressLine1',
-            'addressLine2',
-            'addressLine3',
-            'countryCode',
-            'county',
-            'currency',
-            'email',
-            'invoiceNumber',
-            'nameOnCard',
-            'paymentIntentId',
-            'postCode',
-            'postTown',
-            'standardCountry',
-            'status',
-            'town',
-            'vat',
-        ]),
+        }
     }
 
     try {

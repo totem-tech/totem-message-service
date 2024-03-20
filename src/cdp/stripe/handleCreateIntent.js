@@ -17,6 +17,8 @@ import { defs, messages } from '../validation'
 import verifyGeneratedData from '../verifyGeneratedData'
 import { accessCodeHashed } from '../utils'
 import getStripe from './getStripe'
+import { calcCDPPaymentAmount } from '../handleCalcCDPPaymentAmount'
+import { checkPaid } from './handleCheckPaid'
 
 export const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
 const CURRENCY = 'gbp'
@@ -31,8 +33,8 @@ const stripeAddressDef = {
         },
         {
             description: 'Two-letter country code (ISO 3166-1 alpha-2). Mode details: https://stripe.com/docs/api/payment_methods/object#payment_method_object-billing_details-address-country',
-            maxLength: 2,
-            minLength: 2,
+            // maxLength: 2,
+            // minLength: 2,
             name: 'country',
             required: true,
             type: TYPES.string,
@@ -138,8 +140,11 @@ export default async function handleCreateIntent(
             .map(x => x.name),
     )
     generatedData.serverIdentity = getIdentity()
-    const amount = AMOUNT_GBP_PENNIES
-    const currency = CURRENCY
+    const amountDetails = await calcCDPPaymentAmount(company)
+    const {
+        amountTotal,
+        currency,
+    } = amountDetails
     // remove any unintentional/unwanted properties
     const address = objClean(
         billingDetails.address || {},
@@ -163,30 +168,30 @@ export default async function handleCreateIntent(
         name,
         email,
         phone,
+        JSON.stringify(amountDetails),
     ].join('__'))
+
     const metadata = {
         cdpIssueCount: `${cdpIssueCount}`,
         companyId,
         registrationNumber,
         tsValidTo,
     }
+    // values to be supplied to stripe.js
     const intentParams = {
-        amount,
+        amount: amountTotal,
         // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
         automatic_payment_methods: {
             enabled: true,
             allow_redirects: 'always' //default
         },
-        currency: CURRENCY, // pounds sterling
+        currency,
         description: !cdpEntry?.cdp
             ? 'CDP: Application'
             : `CDP: Renewal - ${monthYear}`,
         metadata,
-        shipping: {
-            address,
-            name,
-        },
-        receipt_email: email
+        receipt_email: email,
+        shipping: { address, name },
     }
     const intent = await stripe
         .paymentIntents
@@ -194,9 +199,10 @@ export default async function handleCreateIntent(
         .catch(err => new Error(err))
     // stripe threw an error
     if (isError(intent)) return callback(intent.message)
-    const existingLogEntry = await dbCdpStripeIntents.get(intent.id)
+    const existingLogEntry = await dbCdpStripeIntents
+        .get(intent.id)
     const intentLogEntry = {
-        amount,
+        amountDetails,
         billingDetails: {
             address,
             email,
@@ -204,10 +210,10 @@ export default async function handleCreateIntent(
             phone,
         },
         createAccessCode: !code,
-        currency,
         generatedData,
         intentId: intent.id,
         metadata,
+        provider: 'stripe',
         status: 'created', // to be updated after payment is completed
     }
     await dbCdpStripeIntents.set(intent.id, intentLogEntry, true)

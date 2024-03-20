@@ -1,13 +1,14 @@
 import { setup as setupCouchDB } from './couchdb'
+import handleCalcCDPPaymentAmount from './handleCalcCDPPaymentAmount'
 import handleCalcValidityPeriod from './handleCalcValidityPeriod'
 import handleCheckCreate from './handleCheckCreate'
 import handleCompanySearch from './handleCompanySearch'
-import handleSetAccessCode from './handleSetAccessCode'
 import { handleDraft } from './handleDraft'
 import handleFinalizePayment from './handleFinalizePayment'
 import handleGetPublicKeys from './handleGetPublicKeys'
 import handleLogProgress from './handleLogProgress'
 import handleReport from './handleReport'
+import handleSetAccessCode from './handleSetAccessCode'
 import handleValidateAccessCode from './handleValidateAccessCode'
 import handleVerify from './handleVerify'
 import { setup as setupNacl } from './nacl'
@@ -27,6 +28,7 @@ export const setup = async (expressApp) => {
 }
 
 const handlers = {
+    'cdp-calc-cdp-payment-amount': handleCalcCDPPaymentAmount,
     'cdp-calc-validity-period': handleCalcValidityPeriod,
     'cdp-check-create': handleCheckCreate,
     'cdp-company-search': handleCompanySearch,

@@ -21,13 +21,15 @@ export const checkPaid = async (intentId, companyId) => {
 
 	const intentLog = await dbCdpStripeIntents.get(intentId)
 	const {
-		amount,
+		amountDetails: {
+			amountTotal
+		} = {},
 		metadata: md2 = {},
 	} = intentLog || {}
 
 	if (!intentLog || md2?.companyId !== companyId) return [false]
 
-	const paymentValid = amount_received === amount
+	const paymentValid = amount_received === amountTotal
 		&& Object // check all metatadata matches
 			.keys(md2)
 			.every(key => md1[key] === md2[key])
