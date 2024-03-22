@@ -16,7 +16,6 @@ export const messages = {
     invalidSignature: 'invalid signature',
     invalidToken: 'invalid token',
     pubInfo: 'company public information',
-    reservedInfo: 'company reserved information',
 }
 // setTexts(messages)
 const accessCode = {
