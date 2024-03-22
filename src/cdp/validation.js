@@ -12,10 +12,11 @@ export const messages = {
     invalidCodeOrReg: 'invalid credentials',
     invalidCompany: 'invalid company',
     invalidIntent: 'invalid intent ID',
-    invalidRegNum: 'invalid registration number',
+    invalidRegNum: 'company registration number not known or invalid. For recent companies, try in again in a few days.',
     invalidSignature: 'invalid signature',
     invalidToken: 'invalid token',
     pubInfo: 'company public information',
+    reservedInfo: 'company reserved information',
 }
 // setTexts(messages)
 const accessCode = {
@@ -49,7 +50,7 @@ const cdp = {
     type: TYPES.string,
 }
 const cdpIssueCount = {
-    description: 'Number of time CDP has been issued/renewed',
+    description: 'Number of times a CDP has been issued or renewed',
     name: 'cdpIssueCount',
     type: TYPES.integer,
 }
@@ -118,13 +119,13 @@ const publicKeys = {
     name: 'publicKeys',
     properties: [
         {
-            description: 'Encryption public key to encrypt data to.',
+            description: 'Encryption public key used to encrypt messages to.',
             name: 'encrypt',
             required: true,
             type: TYPES.hex,
         },
         {
-            description: 'Signature public key to verify signatures.',
+            description: 'Signature public key used to verify digital signatures.',
             name: 'sign',
             required: true,
             type: TYPES.hex,
@@ -253,13 +254,14 @@ const ubo = {
             required: true,
         },
         {
-            description: 'Percentage of share (25 - 100) by a single UBO. Maximum 7 decimal places.',
+            // Max decimals = 7 decimal places 
+            description: 'Percentage of shares (25% - 100%) owned by a single UBO.',
             max: 100,
             maxLength: 10,
             min: 25,
             name: 'sharePercentage',
             required: true,
-            type: 'number',
+            type: TYPES.number,
         },
         regNum,
     ],
@@ -346,7 +348,7 @@ const cdpEntry = {
     properties: arrSort([
         ...publicData.properties,
         {
-            description: 'Number of time CDP has been updated since last issued/renewed or ',
+            description: 'Number of times CDP has been updated since last issued/renewed or signed.',
             name: 'cdpRemainingUpdateCount',
             type: TYPES.integer,
         },
