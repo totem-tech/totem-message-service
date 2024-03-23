@@ -69,9 +69,9 @@ export default async function handleFinalizePayment(
     companyId,
     callback
 ) {
-    console.log('finalize')
     const [paid, intentLog] = await stripeCheckPaid(intentId, companyId)
     if (!paid) return callback(texts.paymentIncomplete)
+
     const {
         metadata: {
             companyId: companyIdMeta,
@@ -244,8 +244,8 @@ export default async function handleFinalizePayment(
         relatedCompanies,
         contactDetails,
         payment: {
-            amountDetails: intentLog?.amountDetails || {},
-            billingDetails: intentLog?.stipping,
+            amountDetails: intentLog.amountDetails || {},
+            billingDetails: intentLog.billingDetails || {},
             invoiceNumber: generateInvoiceNumber(
                 company.countryCode,
                 cdp,
@@ -300,9 +300,13 @@ export default async function handleFinalizePayment(
     } catch (err) {
         // if any of them fails to save, revert both of them
         codeGenerated
+            // delete the newly created entry
             ? await dbCdpAccessCodes.delete(companyId)
+            // revert existing entry
             : await dbCdpAccessCodes.set(companyId, cdpEntry)
+        // revert the company entry
         await dbCompanies.set(companyId, company)
+        // revert the intent log entry
         await dbCdpStripeIntents.set(intentLog._id, intentLog)
 
         throw new Error(err)
