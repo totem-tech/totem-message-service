@@ -141,47 +141,47 @@ const regAddress = {
     name: 'regAddress',
     properties: [
         {
-            maxLegnth: 128,
+            maxLength: 128,
             name: 'careOf',
             type: TYPES.string,
         },
         {
-            maxLegnth: 32,
+            maxLength: 32,
             name: 'POBox',
             type: TYPES.string,
         },
         {
-            maxLegnth: 128,
+            maxLength: 128,
             name: 'addressLine1',
             type: TYPES.string,
         },
         {
-            maxLegnth: 128,
+            maxLength: 128,
             name: 'addressLine2',
             type: TYPES.string,
         },
         {
-            maxLegnth: 128,
+            maxLength: 128,
             name: 'postTown',
             type: TYPES.string,
         },
         {
-            maxLegnth: 64,
+            maxLength: 64,
             name: 'county',
             type: TYPES.string,
         },
         {
-            maxLegnth: 64,
+            maxLength: 64,
             name: 'country',
             type: TYPES.string,
         },
         {
-            maxLegnth: 16,
+            maxLength: 16,
             name: 'postCode',
             type: TYPES.string,
         },
         {
-            maxLegnth: 32,
+            maxLength: 32,
             name: 'registeredCountry',
             type: TYPES.string,
         },
@@ -237,7 +237,7 @@ const ubo = {
     properties: [
         cdp,
         {
-            maxLegnth: 2,
+            maxLength: 2,
             name: 'country',
             required: false,
             type: TYPES.string,
@@ -247,7 +247,7 @@ const ubo = {
             type: TYPES.boolean,
         },
         {
-            maxLegnth: 128,
+            maxLength: 128,
             description: 'Name of the company or person.',
             name: 'name',
             required: true,
@@ -273,7 +273,7 @@ const uboArr = {
     type: TYPES.array,
 }
 const vatNum = {
-    maxLegnth: 32,
+    maxLength: 32,
     name: 'vatNumber',
     type: TYPES.string,
 }
@@ -334,7 +334,7 @@ const publicData = {
             type: TYPES.date,
         },
         {
-            maxLegnth: 256,
+            maxLength: 256,
             name: 'url',
             type: TYPES.string,
         },
