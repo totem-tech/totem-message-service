@@ -95,6 +95,7 @@ export const sign = message => {
  * @param   {String|Uint8Array} message 
  * @param   {String|Uint8Array} signature 
  * @param   {String|Uint8Array} signerPublicKey (optional)
+ *                                              Default: current signing keypair public key
  * 
  * @returns {Boolean} verified
  */

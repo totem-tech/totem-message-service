@@ -1,6 +1,6 @@
 import { isFn, objClean } from '../utils/utils'
 import { TYPES } from '../utils/validator'
-import { dbCdpAccessCodes } from './couchdb'
+import { dbCdpAccessCodes, dbCompanies } from './couchdb'
 import { accessCodeHashed, sanitiseAccessCode } from './utils'
 import { defs, messages } from './validation'
 
@@ -29,7 +29,7 @@ export default async function handleValidateAccessCode(
     const result = !entry?.cdp
         ? valid
         : objClean(
-            entry,
+            { ...await dbCompanies.get(companyId), ...entry },
             defs
                 .cdpEntry
                 .properties
