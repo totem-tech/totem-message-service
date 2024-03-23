@@ -12,7 +12,7 @@ export const messages = {
     invalidCodeOrReg: 'invalid credentials',
     invalidCompany: 'invalid company',
     invalidIntent: 'invalid intent ID',
-    invalidRegNum: 'company registration number not known or invalid. For recent companies, try in again in a few days.',
+    invalidRegNum: 'company registration number not known or invalid. For recent companies, try again in a few days.',
     invalidSignature: 'invalid signature',
     invalidToken: 'invalid token',
     pubInfo: 'company public information',
