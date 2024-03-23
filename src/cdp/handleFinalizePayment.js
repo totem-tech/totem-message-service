@@ -237,7 +237,6 @@ export default async function handleFinalizePayment(
             amountDetails: intentLog.amountDetails || {},
             billingDetails: intentLog.billingDetails || {},
             invoiceNumber: generateInvoiceNumber(
-                company.countryCode,
                 cdp,
                 cdpIssueCount
             ),
