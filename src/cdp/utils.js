@@ -79,7 +79,7 @@ export const generateCDP = (identity, countryCode, accountRefMonth) => {
     return cdp
 }
 
-export const generateInvoiceNumber = (countryCode, cdp, cdpIssueCount) => `IN${countryCode}${cdp}-${cdpIssueCount}`
+export const generateInvoiceNumber = (cdp, cdpIssueCount) => `IN${cdp}-${cdpIssueCount}`
 
 export const getPublicData = (cdpEntry, companyEntry) => objClean(
     {
