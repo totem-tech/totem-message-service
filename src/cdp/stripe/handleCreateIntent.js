@@ -181,10 +181,10 @@ export default async function handleCreateIntent(
     const intentParams = {
         amount: amountTotal,
         // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
-        automatic_payment_methods: {
-            enabled: true,
-            allow_redirects: 'always' //default
-        },
+        // automatic_payment_methods: {
+        //     enabled: true,
+        //     allow_redirects: 'always' //default
+        // },
         currency,
         description: !cdpEntry?.cdp
             ? 'CDP: Application'
@@ -192,6 +192,27 @@ export default async function handleCreateIntent(
         metadata,
         receipt_email: email,
         shipping: { address, name },
+
+        // testing payment method atls
+        automatic_payment_methods: {
+            enabled: false,
+        },
+        // payment_method: null,
+        payment_method_options: {
+            card: {
+                // installments: {
+                //     enabled: false,
+                // },
+                // 'mandate_options': null,
+                // 'network': null,
+                'request_three_d_secure': 'automatic'
+            },
+
+        },
+        payment_method_types: [
+            'card',
+        ],
+        //test end
     }
     const intent = await stripe
         .paymentIntents
@@ -262,3 +283,8 @@ handleCreateIntent.result = {
     ],
     type: TYPES.object,
 }
+
+// getStripe()
+// 	.paymentIntents
+// 	.retrieve("pi_3OyESXA0mJCmFu490MfaB9Z2")
+// 	.then(console.log)
