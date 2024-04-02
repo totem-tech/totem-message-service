@@ -15,8 +15,13 @@ export default async function importCDPAccessCodes(
 ) {
 
     const csvEntries = await csv().fromFile(csvFilePath)
-    return console.log(decrypt('0xfb4bcfdc178045c3f83624bc1c08bf4e8bf8e8a26480fe1ac3b50d5f48ed03f4674a359974fa6b08e64437910dd5c1d61329ec12'))
-    if (printPostCodes) return console.log(JSON.stringify(csvEntries.map(x => x.regaddress_postcode), null, 4))
+    if (printPostCodes) return console.log(
+        JSON.stringify(
+            csvEntries.map(x => x.regaddress_postcode),
+            null,
+            4,
+        )
+    )
 
     if (!csvFilePath || !couchDBUrl || !cdpKeyData) throw new Error('Missing environment variable(s)')
 
