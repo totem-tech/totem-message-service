@@ -16,7 +16,11 @@ import {
 } from './couchdb'
 import { checkCompleted } from './handleDraft'
 import { setAccessCode } from './handleSetAccessCode'
-import { decrypt, getPublicKeys, sign, verify } from './nacl'
+import {
+    decrypt,
+    sign,
+    verify
+} from './nacl'
 import { stripeCheckPaid } from './stripe'
 import {
     accessCodeHashed,
@@ -242,6 +246,7 @@ export default async function handleFinalizePayment(
             ),
             paymentId: intentLog._id,
             paymentProvider: 'stripe',
+            shippingAddress: intentLog.shippingAddress,
             status: 'paid',
         }
     }

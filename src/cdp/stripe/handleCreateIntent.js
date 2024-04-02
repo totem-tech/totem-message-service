@@ -8,6 +8,7 @@ import {
 import { TYPES } from '../../utils/validator'
 import {
     dbCdpAccessCodes,
+    dbCdpDrafts,
     dbCdpStripeIntents,
     dbCompanies,
 } from '../couchdb'
@@ -15,13 +16,11 @@ import { calcValidityPeriod } from '../handleCalcValidityPeriod'
 import { getIdentity } from '../nacl'
 import { defs, messages } from '../validation'
 import verifyGeneratedData from '../verifyGeneratedData'
-import { accessCodeHashed } from '../utils'
+import { accessCodeHashed, draftToStripeAddress } from '../utils'
 import getStripe from './getStripe'
 import { calcCDPPaymentAmount } from '../handleCalcCDPPaymentAmount'
 import { checkPaid } from './handleCheckPaid'
 
-export const AMOUNT_GBP_PENNIES = 9900 // 99 Pounds Sterling in Pennies
-const CURRENCY = 'gbp'
 const stripeAddressDef = {
     name: 'address',
     properties: [
@@ -146,10 +145,11 @@ export default async function handleCreateIntent(
         currency,
     } = amountDetails
     // remove any unintentional/unwanted properties
-    const address = objClean(
+    const billingAddress = objClean(
         billingDetails.address || {},
         stripeAddressDef.properties.map(x => x.name)
     )
+    const shippingAddress = await draftToStripeAddress(company._id)
     const {
         email = '',
         name = '',
@@ -164,7 +164,8 @@ export default async function handleCreateIntent(
         companyId,
         monthYear,
         cdpIssueCount,
-        JSON.stringify(address),
+        JSON.stringify(billingAddress),
+        JSON.stringify(shippingAddress),
         name,
         email,
         phone,
@@ -191,7 +192,10 @@ export default async function handleCreateIntent(
             : `CDP: Renewal - ${monthYear}`,
         metadata,
         receipt_email: email,
-        shipping: { address, name },
+        shipping: {
+            address: shippingAddress,
+            name,
+        },
 
         // testing payment method atls
         automatic_payment_methods: {
@@ -203,11 +207,10 @@ export default async function handleCreateIntent(
                 // installments: {
                 //     enabled: false,
                 // },
-                // 'mandate_options': null,
-                // 'network': null,
+                // // 'mandate_options': null,
+                // // 'network': null,
                 'request_three_d_secure': 'automatic'
             },
-
         },
         payment_method_types: [
             'card',
@@ -225,11 +228,12 @@ export default async function handleCreateIntent(
     const intentLogEntry = {
         amountDetails,
         billingDetails: {
-            address,
+            address: billingAddress,
             email,
             name,
             phone,
         },
+        shippingAddress,
         createAccessCode: !code,
         generatedData,
         intentId: intent.id,
@@ -283,8 +287,3 @@ handleCreateIntent.result = {
     ],
     type: TYPES.object,
 }
-
-// getStripe()
-// 	.paymentIntents
-// 	.retrieve("pi_3OyESXA0mJCmFu490MfaB9Z2")
-// 	.then(console.log)

@@ -1,3 +1,4 @@
+import { isHex } from 'web3-utils'
 import { ss58Decode } from '../utils/convert'
 import { randomBytes } from '../utils/naclHelper/utils'
 import {
@@ -7,6 +8,7 @@ import {
 } from '../utils/utils'
 import { getIdentity } from './nacl'
 import { defs } from './validation'
+import { dbCdpDrafts, dbCompanies } from './couchdb'
 
 export const accessCodeHashed = (accessCode, companyId) => generateHash(
     accessCode + companyId,
@@ -111,6 +113,35 @@ export const randomCase = (str = '') => {
     return !upperCase
         ? str.toLowerCase()
         : str.toUpperCase()
+}
+
+/**
+ * @name    draftToStripeAddress
+ * @param   {String|Object} companyIdOrDraft   
+ * @returns 
+ */
+export const draftToStripeAddress = async companyIdOrDraft => {
+    const gotId = isHex(companyIdOrDraft)
+    if (gotId) companyIdOrDraft = await dbCdpDrafts.get(companyIdOrDraft) // company Id supplied
+
+    const address = companyIdOrDraft?.address?.values
+        || gotId && await dbCompanies.get(companyIdOrDraft)?.regAddress
+        || null
+
+    return {
+        city: address?.postTown || '',
+        country: address?.countryCode || '',
+        line1: address?.addressLine1 || '',
+        line2: [
+            address?.addressLine2 || '',
+            address?.addressLine3 || '',
+        ]
+            .filter(Boolean)
+            .join(', ')
+            .trim(),
+        postal_code: address?.postCode || '',
+        state: address?.county || '',
+    }
 }
 
 /**
