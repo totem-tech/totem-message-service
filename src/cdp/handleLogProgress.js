@@ -49,7 +49,7 @@ export default async function handleLogProgress(
         stepName,
         type: 'cdp-form-step',
     })
-    callback(null, !!cdpEntry)
+    callback(null, !!cdpEntry && codeValid)
 }
 handleLogProgress.params = [
     {
@@ -73,3 +73,8 @@ handleLogProgress.params = [
     },
     defs.callback,
 ]
+handleLogProgress.result = {
+    description: 'Indicates whether log was saved',
+    name: 'saved',
+    type: TYPES.boolean,
+}
