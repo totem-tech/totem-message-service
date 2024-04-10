@@ -19,7 +19,7 @@ export async function calcCDPPaymentAmount(company = {}) {
         vatRegion
     switch (`${countryCode || ''}`.toLowerCase()) {
         case 'gb':
-            amount = 825//0
+            amount = 833 // 0
             currency = 'gbp'
             vatPercentage = 20 // 20%
             vatRegion = [countryCode] // for state/county based vat use [countryCode, state]
