@@ -161,6 +161,7 @@ export default async function handleCreateIntent(
     const monthYear = `${month}/${year}`
     // this allows stripe to re-use payment intent and also not clog up the database
     const idempotencyKey = generateHash([
+        amountTotal,
         companyId,
         monthYear,
         cdpIssueCount,
