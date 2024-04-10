@@ -292,7 +292,7 @@ const interceptHandler = (eventName, handler) => async function (...args) {
                 includeValue,
             )
         if (err) {
-            console.log('Event pre-validation failed:', { eventName, args, err })
+            isDebug && console.log('Event pre-validation failed:', { eventName, err })
             return gotCb && callback(err)
         }
 
