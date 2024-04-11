@@ -224,7 +224,7 @@ function allowRequest(request, callback) {
         unapprovedOrigins = unapprovedOrigins.slice(-100)
         console.log('Websocket request rejected from unapproved origin:', origin)
     }
-    isDebug && console.log(new Date().toISOString(), { origin, allow, remoteAddress: request?.client?.remoteAddress })
+    isDebug && console.log(new Date().toISOString(), { origin, allow, remoteAddress: request?.connection?.remoteAddress })
     callback(null, allow)
 }
 
