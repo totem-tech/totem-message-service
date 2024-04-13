@@ -77,7 +77,7 @@ const stripeBillingDetailsDef = {
         {
             description: 'Full name.',
             name: 'name',
-            required: true,
+            required: false,
             type: TYPES.string,
         },
         {
