@@ -152,7 +152,7 @@ export default async function handleCreateIntent(
     const shippingAddress = await draftToStripeAddress(company._id)
     const {
         email = '',
-        name = '',
+        name = company.name,
         phone = ''
     } = billingDetails
     const tsValidTo = await calcValidityPeriod(accountRefMonth, companyId)
