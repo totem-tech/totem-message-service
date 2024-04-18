@@ -236,7 +236,7 @@ export async function handleMaintenanceMode(active = false, callback) {
         const status = active
             ? 'activated'
             : 'deactivated'
-        console.log(`${tag}${status} by @${_id}`)
+        console.log(`${tag} ${status} by @${_id}`)
         rxMaintenanceMode.next(active)
         // broadcast to all clients
         setTimeout(() => broadcast(handleMaintenanceMode.eventName, [active]))
