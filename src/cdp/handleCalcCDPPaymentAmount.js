@@ -2,13 +2,46 @@ import { TYPES } from '../utils/validator'
 import { dbCompanies } from './couchdb'
 import { defs, messages } from './validation'
 
+// prices for UK based companies by company accountCategory
+const categoryPrices = {
+    // tier 0: free tier?
+
+    // tier 1: amount + vat =>  833 + 166 = 9.99 GBP
+    unknown: 833,
+    'ACCOUNTS TYPE NOT AVAILABLE': 833,
+    'DORMANT': 833,
+    'NO ACCOUNTS FILED': 833,
+    'PARTIAL EXEMPTION': 833,
+    'UNAUDITED ABRIDGED': 833,
+
+    // tier 2: amount + vat => 2250 + 450 = 27.00 GBP
+    'AUDITED ABRIDGED': 2250,
+    'FULL': 2250,
+    'INITIAL': 2250,
+    'MEDIUM': 2250,
+    'MICRO ENTITY': 2250,
+    'SMALL': 2250,
+    'TOTAL EXEMPTION FULL': 2250,
+    'TOTAL EXEMPTION SMALL': 2250,
+
+    // tier 3: amount + vat => 8250 + 1650 = 99.00 GBP
+    'FILING EXEMPTION SUBSIDIARY': 8250,
+    'AUDIT EXEMPTION SUBSIDIARY': 8250,
+    'GROUP': 8250,
+}
+Object
+    .keys(categoryPrices)
+    .forEach(category =>
+        categoryPrices[category.toLowerCase()] = categoryPrices[category]
+    )
 export async function calcCDPPaymentAmount(company = {}) {
     const {
+        accounts: { accountCategory = '' } = {},
         countryCode = '',
-        regAddress: {
-            county,
-            country,
-        } = {}
+        // regAddress: {
+        //     county,
+        //     country,
+        // } = {}
     } = company
 
     let amount,
@@ -19,7 +52,7 @@ export async function calcCDPPaymentAmount(company = {}) {
         vatRegion
     switch (`${countryCode || ''}`.toLowerCase()) {
         case 'gb':
-            amount = 833 // 833 for 9.99, 8250 for 99.00
+            amount = categoryPrices[accountCategory?.toLowerCase?.()] || categoryPrices.unknown
             currency = 'gbp'
             vatPercentage = 20 // 20%
             vatRegion = [countryCode] // for state/county based vat use [countryCode, state]
