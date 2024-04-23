@@ -6,15 +6,14 @@ import { defs, messages } from './validation'
 const categoryPrices = {
     // tier 0: free tier?
 
-    // tier 1: amount + vat =>  833 + 166 = 9.99 GBP
-    unknown: 833,
-    'ACCOUNTS TYPE NOT AVAILABLE': 833,
-    'DORMANT': 833,
-    'NO ACCOUNTS FILED': 833,
-    'PARTIAL EXEMPTION': 833,
-    'UNAUDITED ABRIDGED': 833,
+    // tier 1: amount + vat => 2250 + 450 = 27.00 GBP
+    unknown: 2250,
+    'ACCOUNTS TYPE NOT AVAILABLE': 2250,
+    'DORMANT': 2250,
+    'NO ACCOUNTS FILED': 2250,
+    'PARTIAL EXEMPTION': 2250,
+    'UNAUDITED ABRIDGED': 2250,
 
-    // tier 2: amount + vat => 2250 + 450 = 27.00 GBP
     'AUDITED ABRIDGED': 2250,
     'FULL': 2250,
     'INITIAL': 2250,
@@ -24,7 +23,7 @@ const categoryPrices = {
     'TOTAL EXEMPTION FULL': 2250,
     'TOTAL EXEMPTION SMALL': 2250,
 
-    // tier 3: amount + vat => 8250 + 1650 = 99.00 GBP
+    // tier 2: amount + vat => 8250 + 1650 = 99.00 GBP
     'FILING EXEMPTION SUBSIDIARY': 8250,
     'AUDIT EXEMPTION SUBSIDIARY': 8250,
     'GROUP': 8250,
