@@ -4,6 +4,7 @@ import { dbCompanies } from '../../src/cdp/couchdb'
 export default async function importCDPAccessCodes(
     csvFilePath = process.env.CSV_FILE_PATH,
     couchDBUrl = process.env.CouchDB_URL,
+    skip = parseInt(process.env.SKIP)
 ) {
     if (!csvFilePath || !couchDBUrl) throw new Error('Missing environment variable(s)')
 
@@ -20,6 +21,8 @@ export default async function importCDPAccessCodes(
     const failed = new Map()
     const skipped = new Map()
     for (let i = 0;i < csvEntries.length;i++) {
+        if (skip && i <= skip) continue
+
         const {
             accountCategory,
             registrationNumber,
@@ -38,13 +41,17 @@ export default async function importCDPAccessCodes(
         }
 
         await dbCompanies
-            .set(company._id, {
-                ...company,
-                accounts: {
-                    accountCategory,
-                    ...company.accounts,
+            .set(
+                company._id,
+                {
+                    ...company,
+                    accounts: {
+                        accountCategory,
+                        ...company.accounts,
+                    },
                 },
-            })
+                false
+            )
             .then(
                 () => console.log(i, registrationNumber, ': saved'),
                 err => {
