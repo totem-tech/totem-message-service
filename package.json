@@ -54,7 +54,7 @@
     "nano": "^9.0.3",
     "pbkdf2": "^3.0.17",
     "request": "^2.88.2",
-    "socket.io": "^3.0.4",
+    "socket.io": "^4.6.2",
     "socket.io-client": "^3.0.4",
     "stripe": "^14.12.0",
     "tweetnacl": "^1.0.3",
