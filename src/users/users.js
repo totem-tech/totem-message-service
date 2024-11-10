@@ -225,12 +225,12 @@ export const emitToUsers = (
     userIds = arrUnique(userIds || [])
     if (!userIds.length) return
 
-    const userRooms = userIds.map(id => `${userRoomPrefix}${id}`)
-    let socket = broadcast
-        ?.socket
-        ?.in(...userRooms)
-    if (excludeClientIds.length) socket = socket?.except?.(...excludeClientIds) || socket
-    return socket?.emit?.(eventName, ...toParams(params))
+    // const userRooms = userIds.map(id => `${userRoomPrefix}${id}`)
+    // let socket = broadcast.socket.in(userRooms) // only available in socket.io v4+
+    let { socket } = broadcast
+    userIds.forEach(id => socket = socket.to(`${userRoomPrefix}${id}`))
+    if (excludeClientIds.length) socket = socket.except(...excludeClientIds) || socket
+    return socket.emit(eventName, ...toParams(params))
 }
 
 // returns an array of users with role 'support'
