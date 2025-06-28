@@ -343,6 +343,160 @@ socket.emit('maintenance-mode', true, (error, result) => {
 - **Event Tracking**: All user events are logged with timestamps and client information
 - **Online User Tracking**: Real-time tracking of connected users
 
+## Feature Management
+
+### Temporarily Disabling Features
+
+For lean deployments (such as P2P chat-only usage), you can temporarily disable specific features by commenting out their registration in `src/index.js`. This allows easy re-integration later by uncommenting the same lines.
+
+#### Disabling CDP (Company Data Portal)
+
+**Step 1: Comment out CDP imports**
+```javascript
+// src/index.js (around line 24)
+// import cdpEventHandlers, { setup as setupCDP } from './cdp'
+```
+
+**Step 2: Comment out CDP event handlers**
+```javascript
+// src/index.js (around line 134)
+const allEventHandlers = {
+    // CDP
+    // ...cdpEventHandlers,
+    
+    // ... rest of handlers
+}
+```
+
+**Step 3: Comment out CDP setup**
+```javascript
+// src/index.js (around line 489)
+// [setupCDP, [expressApp], 'Failed to setup CDP', true],
+```
+
+#### Disabling Rewards System
+
+**Step 1: Comment out rewards imports**
+```javascript
+// src/index.js (around line 44)
+// import rewardsHandlers from './rewards'
+```
+
+**Step 2: Comment out rewards event handlers**
+```javascript
+// src/index.js (around line 175)
+const allEventHandlers = {
+    // rewards related handlers
+    // ...rewardsHandlers,
+    
+    // ... rest of handlers
+}
+```
+
+#### Disabling Faucet Integration
+
+**Step 1: Comment out faucet imports**
+```javascript
+// src/index.js (around line 30)
+// import { handleFaucetRequest, handleFaucetStatus } from './faucetRequests'
+```
+
+**Step 2: Comment out faucet event handlers**
+```javascript
+// src/index.js (around line 148)
+const allEventHandlers = {
+    // Faucet request
+    // 'faucet-request': handleFaucetRequest,
+    // 'faucet-status': handleFaucetStatus,
+    
+    // ... rest of handlers
+}
+```
+
+#### Disabling Task Management
+
+**Step 1: Comment out task imports**
+```javascript
+// src/index.js (around line 47)
+// import {
+//     handleTask,
+//     handleTaskGetById,
+//     handleTaskGetByParentId,
+//     handleTaskMarketApply,
+//     handleTaskMarketApplyResponse,
+//     handleTaskMarketSearch,
+// } from './task'
+```
+
+**Step 2: Comment out task event handlers**
+```javascript
+// src/index.js (around line 180)
+const allEventHandlers = {
+    // Task 
+    // 'task': handleTask,
+    // 'task-get-by-id': handleTaskGetById,
+    // 'task-get-by-parent-id': handleTaskGetByParentId,
+    // 'task-market-apply': handleTaskMarketApply,
+    // 'task-market-apply-response': handleTaskMarketApplyResponse,
+    // 'task-market-search': handleTaskMarketSearch,
+    
+    // ... rest of handlers
+}
+```
+
+#### Minimal Chat-Only Configuration
+
+For a minimal P2P chat service, keep only these essential features:
+- **User Management** (`userEventHandlers`)
+- **Messaging** (`handleMessage`, `handleMessageGetRecent`, `handleMessageGroupName`)
+- **Notifications** (`handleNotification*`)
+- **System** (`systemEventHandlers`)
+- **Language** (`languageHandlers`)
+
+Example minimal `allEventHandlers` object:
+```javascript
+const allEventHandlers = {
+    // Language
+    ...languageHandlers,
+
+    // Chat/Messages
+    'message': handleMessage,
+    'message-get-recent': handleMessageGetRecent,
+    'message-group-name': handleMessageGroupName,
+
+    // Notification
+    'notification': handleNotification,
+    'notification-get-recent': handleNotificationGetRecent,
+    'notification-set-status': handleNotificationSetStatus,
+
+    // system & status endpoints
+    ...systemEventHandlers,
+
+    // User & connection
+    ...userEventHandlers,
+}
+```
+
+### Re-enabling Features
+
+To re-enable any disabled feature:
+
+1. **Uncomment the import statements**
+2. **Uncomment the event handler registrations**
+3. **Uncomment any setup function calls**
+4. **Restart the service**
+
+The modular design ensures that features can be enabled/disabled independently without affecting core functionality.
+
+### Feature Dependencies
+
+Before disabling features, note these dependencies:
+
+- **Rewards System** depends on **Faucet Integration** for token distribution
+- **CDP** is standalone and can be safely disabled
+- **Task Management** is standalone and can be safely disabled
+- **Notifications** are used by other features but can be disabled if not needed
+
 ## Development Tools
 
 The service includes several development and administrative tools:
