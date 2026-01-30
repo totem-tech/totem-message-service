@@ -40,10 +40,10 @@
     "nodemon": "^3.0.1"
   },
   "dependencies": {
-    "@polkadot/api": "^0.100.1",
-    "@polkadot/keyring": "^1.8.1",
+    "@polkadot/api": "^1.0.1",
+    "@polkadot/keyring": "^2.0.1",
     "@polkadot/util": "^3.2.1",
-    "@polkadot/util-crypto": "^3.2.1",
+    "@polkadot/util-crypto": "^8.1.1",
     "@polkadot/wasm-crypto": "^0.14.1",
     "abort-controller": "^3.0.0",
     "babel-loader": "^9.1.3",
